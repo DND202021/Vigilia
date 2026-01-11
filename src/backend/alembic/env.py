@@ -16,8 +16,8 @@ from app.core.config import settings
 # this is the Alembic Config object
 config = context.config
 
-# Override SQLAlchemy URL from settings
-config.set_main_option("sqlalchemy.url", settings.database_url.replace("+asyncpg", ""))
+# Override SQLAlchemy URL from settings (keep asyncpg for async migrations)
+config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:
