@@ -78,7 +78,7 @@ class Resource(Base, TimestampMixin, SoftDeleteMixin):
     agency: Mapped["Agency"] = relationship("Agency", back_populates="resources")
 
     # Type-specific data stored as JSON
-    extra_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     __mapper_args__ = {
         "polymorphic_on": "resource_type",
