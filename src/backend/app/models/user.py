@@ -46,7 +46,7 @@ class User(Base, TimestampMixin, SoftDeleteMixin):
 
     # Role and permissions
     role: Mapped[UserRole] = mapped_column(
-        SQLEnum(UserRole),
+        SQLEnum(UserRole, values_callable=lambda x: [e.value for e in x]),
         default=UserRole.RESPONDER,
         nullable=False,
     )
