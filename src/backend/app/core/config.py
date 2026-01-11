@@ -49,8 +49,21 @@ class Settings(BaseSettings):
     mqtt_username: str = ""
     mqtt_password: str = ""
 
-    # CORS
+    # CORS - accepts comma-separated string or JSON array
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        """Parse CORS origins from comma-separated string or list."""
+        if isinstance(v, str):
+            # If it looks like JSON, let pydantic handle it
+            if v.startswith("["):
+                import json
+                return json.loads(v)
+            # Otherwise split by comma
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
     # Logging
     log_level: str = "INFO"
