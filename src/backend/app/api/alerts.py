@@ -3,8 +3,15 @@
 from datetime import datetime
 from enum import Enum
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.deps import get_db, get_current_active_user
+from app.models.user import User
+from app.models.alert import Alert as AlertModel
+from app.models.alert import AlertStatus as AlertStatusModel
 
 router = APIRouter()
 
@@ -87,13 +94,87 @@ async def list_alerts(
     source: AlertSource | None = None,
     limit: int = 50,
     offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> list[AlertResponse]:
     """List alerts with optional filters."""
-    # TODO: Implement alert listing
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Alert listing not yet implemented",
-    )
+    query = select(AlertModel)
+
+    if status:
+        query = query.where(AlertModel.status == AlertStatusModel(status.value))
+    if severity:
+        query = query.where(AlertModel.severity == severity.value)
+    if source:
+        query = query.where(AlertModel.source == source.value)
+
+    query = query.offset(offset).limit(limit).order_by(AlertModel.created_at.desc())
+
+    result = await db.execute(query)
+    alerts = result.scalars().all()
+
+    return [
+        AlertResponse(
+            id=str(alert.id),
+            source=AlertSource(alert.source.value),
+            source_id=alert.source_id,
+            severity=AlertSeverity(alert.severity.value),
+            status=AlertStatus(alert.status.value),
+            alert_type=alert.alert_type,
+            title=alert.title,
+            description=alert.description,
+            location=AlertLocation(
+                latitude=alert.latitude,
+                longitude=alert.longitude,
+                address=alert.address,
+                zone=alert.zone,
+            ) if alert.latitude and alert.longitude else None,
+            raw_payload=alert.raw_payload,
+            created_at=alert.created_at,
+            acknowledged_at=alert.acknowledged_at,
+            acknowledged_by=str(alert.acknowledged_by_id) if alert.acknowledged_by_id else None,
+            linked_incident_id=str(alert.incidents[0].id) if alert.incidents else None,
+        )
+        for alert in alerts
+    ]
+
+
+@router.get("/pending", response_model=list[AlertResponse])
+async def get_pending_alerts(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> list[AlertResponse]:
+    """Get all pending alerts that need attention."""
+    query = select(AlertModel).where(
+        AlertModel.status == AlertStatusModel.PENDING
+    ).order_by(AlertModel.severity, AlertModel.created_at.desc())
+
+    result = await db.execute(query)
+    alerts = result.scalars().all()
+
+    return [
+        AlertResponse(
+            id=str(alert.id),
+            source=AlertSource(alert.source.value),
+            source_id=alert.source_id,
+            severity=AlertSeverity(alert.severity.value),
+            status=AlertStatus(alert.status.value),
+            alert_type=alert.alert_type,
+            title=alert.title,
+            description=alert.description,
+            location=AlertLocation(
+                latitude=alert.latitude,
+                longitude=alert.longitude,
+                address=alert.address,
+                zone=alert.zone,
+            ) if alert.latitude and alert.longitude else None,
+            raw_payload=alert.raw_payload,
+            created_at=alert.created_at,
+            acknowledged_at=alert.acknowledged_at,
+            acknowledged_by=str(alert.acknowledged_by_id) if alert.acknowledged_by_id else None,
+            linked_incident_id=str(alert.incidents[0].id) if alert.incidents else None,
+        )
+        for alert in alerts
+    ]
 
 
 @router.get("/{alert_id}", response_model=AlertResponse)
