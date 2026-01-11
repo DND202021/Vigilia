@@ -16,7 +16,7 @@ ENV VITE_WS_URL=$VITE_WS_URL
 
 # Install dependencies
 COPY package.json package-lock.json* ./
-RUN npm ci --only=production=false
+RUN npm install
 
 # Copy source and build
 COPY . .
