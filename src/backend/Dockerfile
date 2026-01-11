@@ -32,7 +32,8 @@ RUN pip install --no-cache-dir pip --upgrade && \
     "httpx>=0.26.0" \
     "paho-mqtt>=1.6.1" \
     "structlog>=24.1.0" \
-    "gunicorn>=21.0.0"
+    "gunicorn>=21.0.0" \
+    "email-validator>=2.0.0"
 
 # Copy application code
 COPY . .
