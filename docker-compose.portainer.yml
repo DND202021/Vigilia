@@ -105,7 +105,7 @@ services:
     restart: unless-stopped
     ports:
       - "83:80"
-      - "443:443"
+      - "8443:443"
     volumes:
       - ./infrastructure/nginx/nginx.portainer.conf:/etc/nginx/nginx.conf:ro
       - ./infrastructure/nginx/ssl:/etc/nginx/ssl:ro
