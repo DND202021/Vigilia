@@ -25,29 +25,34 @@ RUN npm run build
 # Production image
 FROM nginx:alpine
 
+# Install envsubst for template processing
+RUN apk add --no-cache gettext
+
 # Remove default nginx config
 RUN rm -rf /etc/nginx/conf.d/*
 
 # Copy built assets
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy nginx configuration
+# Copy nginx configuration template
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Create non-root user
-RUN adduser -D -u 101 -g nginx nginx-user && \
-    chown -R nginx-user:nginx /var/cache/nginx && \
-    chown -R nginx-user:nginx /var/log/nginx && \
-    chown -R nginx-user:nginx /etc/nginx/conf.d && \
-    touch /var/run/nginx.pid && \
-    chown -R nginx-user:nginx /var/run/nginx.pid
+# Create startup script for Railway PORT handling
+RUN echo '#!/bin/sh' > /docker-entrypoint.sh && \
+    echo 'if [ -n "$PORT" ]; then' >> /docker-entrypoint.sh && \
+    echo '  envsubst "\$PORT" < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf' >> /docker-entrypoint.sh && \
+    echo 'fi' >> /docker-entrypoint.sh && \
+    echo 'exec nginx -g "daemon off;"' >> /docker-entrypoint.sh && \
+    chmod +x /docker-entrypoint.sh
+
+# Set default PORT
+ENV PORT=80
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget -q --spider http://localhost:80/ || exit 1
-
-USER nginx-user
+    CMD wget -q --spider http://localhost:${PORT}/ || exit 1
 
 EXPOSE 80
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["/docker-entrypoint.sh"]

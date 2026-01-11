@@ -1,0 +1,103 @@
+# ERIOP Docker Compose - Local Server Deployment
+# Simple setup for Portainer on local Linux server
+# Access via: http://YOUR_SERVER_IP
+
+version: '3.8'
+
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    container_name: eriop-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: eriop
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-eriop_secure_2025}
+      POSTGRES_DB: eriop
+    volumes:
+      - eriop_postgres:/var/lib/postgresql/data
+    networks:
+      - eriop-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eriop"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: eriop-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-eriop_redis_2025}
+    volumes:
+      - eriop_redis:/data
+    networks:
+      - eriop-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-eriop_redis_2025}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile
+    container_name: eriop-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://eriop:${DB_PASSWORD:-eriop_secure_2025}@postgres:5432/eriop
+      REDIS_URL: redis://:${REDIS_PASSWORD:-eriop_redis_2025}@redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:-change_this_to_64_char_random_string_in_production_environment}
+      ENVIRONMENT: production
+      CORS_ORIGINS: http://localhost,http://localhost:80,http://${SERVER_IP:-192.168.1.100}
+      LOG_LEVEL: info
+      PORT: 8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - eriop-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  frontend:
+    build:
+      context: ./src/frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api/v1
+        VITE_WS_URL: ws://${SERVER_IP:-localhost}/ws
+    container_name: eriop-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - eriop-net
+
+  nginx:
+    image: nginx:alpine
+    container_name: eriop-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./infrastructure/nginx/nginx.local.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - eriop-net
+
+volumes:
+  eriop_postgres:
+  eriop_redis:
+
+networks:
+  eriop-net:
+    driver: bridge

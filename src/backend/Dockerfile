@@ -49,12 +49,15 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 
 EXPOSE 8000
 
+# Railway uses PORT env var, default to 8000
+ENV PORT=8000
+
 # Use gunicorn with uvicorn workers for production
-CMD ["python", "-m", "gunicorn", "app.main:app", \
-     "--bind", "0.0.0.0:8000", \
-     "--workers", "4", \
-     "--worker-class", "uvicorn.workers.UvicornWorker", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-", \
-     "--capture-output", \
-     "--enable-stdio-inheritance"]
+CMD python -m gunicorn app.main:app \
+    --bind "0.0.0.0:$PORT" \
+    --workers 4 \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --access-logfile - \
+    --error-logfile - \
+    --capture-output \
+    --enable-stdio-inheritance

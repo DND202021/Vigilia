@@ -1,0 +1,134 @@
+# ERIOP Docker Compose for Portainer Deployment
+# Deploy this stack in Portainer for local server hosting
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database with TimescaleDB
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    container_name: eriop-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-eriop}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Database password required}
+      POSTGRES_DB: eriop
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - eriop-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-eriop} -d eriop"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: eriop-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:?Redis password required}
+    volumes:
+      - redis_data:/data
+    networks:
+      - eriop-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile
+    container_name: eriop-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-eriop}:${DB_PASSWORD}@postgres:5432/eriop
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:?Secret key required}
+      ENVIRONMENT: production
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://localhost:3000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      PORT: 8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - eriop-internal
+      - eriop-external
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.eriop-api.rule=Host(`${DOMAIN:-eriop.local}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.eriop-api.entrypoints=websecure"
+      - "traefik.http.routers.eriop-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.eriop-api.loadbalancer.server.port=8000"
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./src/frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api/v1}
+        VITE_WS_URL: ${VITE_WS_URL:-wss://${DOMAIN:-eriop.local}}
+    container_name: eriop-frontend
+    restart: unless-stopped
+    environment:
+      PORT: 80
+    depends_on:
+      - backend
+    networks:
+      - eriop-external
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.eriop-frontend.rule=Host(`${DOMAIN:-eriop.local}`)"
+      - "traefik.http.routers.eriop-frontend.entrypoints=websecure"
+      - "traefik.http.routers.eriop-frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.eriop-frontend.loadbalancer.server.port=80"
+
+  # Nginx Reverse Proxy (Alternative to Traefik)
+  nginx:
+    image: nginx:alpine
+    container_name: eriop-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/nginx/nginx.portainer.conf:/etc/nginx/nginx.conf:ro
+      - ./infrastructure/nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - eriop-external
+    profiles:
+      - nginx
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  nginx_logs:
+    driver: local
+
+networks:
+  eriop-internal:
+    driver: bridge
+    internal: true
+  eriop-external:
+    driver: bridge
