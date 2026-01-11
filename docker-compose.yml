@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: eriop-postgres
+    environment:
+      POSTGRES_USER: eriop
+      POSTGRES_PASSWORD: eriop_dev_password
+      POSTGRES_DB: eriop
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/docker/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eriop"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # TimescaleDB for IoT telemetry
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: eriop-timescaledb
+    environment:
+      POSTGRES_USER: eriop
+      POSTGRES_PASSWORD: eriop_dev_password
+      POSTGRES_DB: eriop_telemetry
+    ports:
+      - "5433:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eriop"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and pub/sub
+  redis:
+    image: redis:7-alpine
+    container_name: eriop-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MQTT Broker (for local development - Fundamentum replacement)
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: eriop-mqtt
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./infrastructure/docker/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+
+  # Backend API
+  backend:
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile
+    container_name: eriop-backend
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://eriop:eriop_dev_password@postgres:5432/eriop
+      - REDIS_URL=redis://redis:6379/0
+      - MQTT_BROKER_HOST=mosquitto
+      - MQTT_BROKER_PORT=1883
+      - DEBUG=true
+      - ENVIRONMENT=development
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src/backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Frontend (development)
+  frontend:
+    build:
+      context: ./src/frontend
+      dockerfile: Dockerfile.dev
+    container_name: eriop-frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./src/frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  timescale_data:
+  redis_data:
+  mosquitto_data:
+  mosquitto_log:
