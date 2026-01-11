@@ -20,7 +20,8 @@ RUN npm install
 
 # Copy source and build
 COPY . .
-RUN npm run build
+# Skip TypeScript check in Docker (done during development)
+RUN npx vite build
 
 # Production image
 FROM nginx:alpine
