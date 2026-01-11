@@ -96,6 +96,16 @@ class IncidentUpdate(BaseModel):
     description: str | None = None
 
 
+class PaginatedIncidentResponse(BaseModel):
+    """Paginated incident response."""
+
+    items: list[IncidentResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
 @router.post("/", response_model=IncidentResponse, status_code=status.HTTP_201_CREATED)
 async def create_incident(incident: IncidentCreate) -> IncidentResponse:
     """Create a new incident."""
@@ -106,17 +116,19 @@ async def create_incident(incident: IncidentCreate) -> IncidentResponse:
     )
 
 
-@router.get("/", response_model=list[IncidentResponse])
+@router.get("/", response_model=PaginatedIncidentResponse)
 async def list_incidents(
     status: Annotated[IncidentStatus | None, Query()] = None,
     priority: Annotated[IncidentPriority | None, Query()] = None,
     category: Annotated[IncidentCategory | None, Query()] = None,
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 50,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-) -> list[IncidentResponse]:
-    """List incidents with optional filters."""
+) -> PaginatedIncidentResponse:
+    """List incidents with optional filters and pagination."""
+    from sqlalchemy import func
+
     query = select(IncidentModel)
 
     if status:
@@ -126,12 +138,19 @@ async def list_incidents(
     if category:
         query = query.where(IncidentModel.category == category.value)
 
-    query = query.offset(offset).limit(limit).order_by(IncidentModel.created_at.desc())
+    # Get total count
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    # Apply pagination
+    offset = (page - 1) * page_size
+    query = query.offset(offset).limit(page_size).order_by(IncidentModel.created_at.desc())
 
     result = await db.execute(query)
     incidents = result.scalars().all()
 
-    return [
+    items = [
         IncidentResponse(
             id=str(inc.id),
             incident_number=inc.incident_number,
@@ -152,6 +171,16 @@ async def list_incidents(
         )
         for inc in incidents
     ]
+
+    total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+
+    return PaginatedIncidentResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
 
 
 @router.get("/active", response_model=list[IncidentResponse])

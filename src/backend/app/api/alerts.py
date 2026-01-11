@@ -87,17 +87,29 @@ class AlertDismiss(BaseModel):
     reason: str = Field(..., min_length=10, max_length=500)
 
 
-@router.get("/", response_model=list[AlertResponse])
+class PaginatedAlertResponse(BaseModel):
+    """Paginated alert response."""
+
+    items: list[AlertResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+@router.get("/", response_model=PaginatedAlertResponse)
 async def list_alerts(
     status: AlertStatus | None = None,
     severity: AlertSeverity | None = None,
     source: AlertSource | None = None,
-    limit: int = 50,
-    offset: int = 0,
+    page: int = 1,
+    page_size: int = 50,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-) -> list[AlertResponse]:
-    """List alerts with optional filters."""
+) -> PaginatedAlertResponse:
+    """List alerts with optional filters and pagination."""
+    from sqlalchemy import func
+
     query = select(AlertModel)
 
     if status:
@@ -107,12 +119,19 @@ async def list_alerts(
     if source:
         query = query.where(AlertModel.source == source.value)
 
-    query = query.offset(offset).limit(limit).order_by(AlertModel.created_at.desc())
+    # Get total count
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    # Apply pagination
+    offset = (page - 1) * page_size
+    query = query.offset(offset).limit(page_size).order_by(AlertModel.created_at.desc())
 
     result = await db.execute(query)
     alerts = result.scalars().all()
 
-    return [
+    items = [
         AlertResponse(
             id=str(alert.id),
             source=AlertSource(alert.source.value),
@@ -136,6 +155,16 @@ async def list_alerts(
         )
         for alert in alerts
     ]
+
+    total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+
+    return PaginatedAlertResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
 
 
 @router.get("/pending", response_model=list[AlertResponse])

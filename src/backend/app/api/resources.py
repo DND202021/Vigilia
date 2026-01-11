@@ -102,6 +102,75 @@ class ResourceResponse(BaseModel):
     last_status_update: str
 
 
+class PaginatedResourceResponse(BaseModel):
+    """Paginated resource response."""
+
+    items: list[ResourceResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+@router.get("/", response_model=PaginatedResourceResponse)
+async def list_resources(
+    resource_type: ResourceType | None = None,
+    status: ResourceStatus | None = None,
+    page: int = 1,
+    page_size: int = 50,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> PaginatedResourceResponse:
+    """List all resources with pagination."""
+    from sqlalchemy import func
+
+    query = select(ResourceModel)
+
+    if resource_type:
+        query = query.where(ResourceModel.resource_type == ResourceTypeModel(resource_type.value))
+    if status:
+        query = query.where(ResourceModel.status == ResourceStatusModel(status.value))
+
+    # Get total count
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    # Apply pagination
+    offset = (page - 1) * page_size
+    query = query.offset(offset).limit(page_size)
+
+    result = await db.execute(query)
+    resources = result.scalars().all()
+
+    items = [
+        ResourceResponse(
+            id=str(r.id),
+            resource_type=ResourceType(r.resource_type.value),
+            name=r.name,
+            call_sign=r.call_sign,
+            status=ResourceStatus(r.status.value),
+            latitude=r.current_latitude,
+            longitude=r.current_longitude,
+            capabilities=[],
+            agency_id=str(r.agency_id),
+            current_incident_id=None,
+            last_status_update=r.updated_at.isoformat(),
+        )
+        for r in resources
+    ]
+
+    total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+
+    return PaginatedResourceResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
+
+
 @router.get("/personnel", response_model=list[PersonnelResponse])
 async def list_personnel(
     status: ResourceStatus | None = None,
