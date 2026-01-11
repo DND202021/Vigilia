@@ -125,9 +125,29 @@ docker compose -f docker-compose.portainer.yml down -v
 
 | Service | URL |
 |---------|-----|
-| Application Web | http://10.0.0.13 |
-| API Backend | http://10.0.0.13/api/v1 |
+| Application Web | http://10.0.0.13:83 |
+| API Backend | http://10.0.0.13:83/api/v1 |
 | Portainer | https://10.0.0.13:9443 |
+
+---
+
+## Créer le Premier Utilisateur
+
+Après le déploiement, exécuter les migrations puis créer un utilisateur :
+
+```bash
+# Exécuter les migrations
+docker compose -f docker-compose.portainer.yml exec backend alembic upgrade head
+
+# Créer un utilisateur admin
+curl -X POST http://localhost:83/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@vigilia.com", "password": "Admin123!@#Strong", "full_name": "Admin User"}'
+```
+
+**Identifiants par défaut :**
+- Email: `admin@vigilia.com`
+- Mot de passe: `Admin123!@#Strong`
 
 ---
 
