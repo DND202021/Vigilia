@@ -84,7 +84,7 @@ class Incident(Base, TimestampMixin):
         nullable=False,
     )
     priority: Mapped[IncidentPriority] = mapped_column(
-        SQLEnum(IncidentPriority, values_callable=lambda x: [e.value for e in x]),
+        SQLEnum(IncidentPriority),
         default=IncidentPriority.MEDIUM,
         nullable=False,
     )
