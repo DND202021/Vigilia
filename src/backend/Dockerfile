@@ -1,37 +1,38 @@
 # ERIOP Backend Dockerfile
-# Multi-stage build for production
+# Simplified build for production
 
-# Build stage
-FROM python:3.11-slim as builder
-
-WORKDIR /app
-
-# Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Python dependencies
-COPY pyproject.toml ./
-RUN pip install --no-cache-dir build wheel && \
-    pip wheel --no-cache-dir --wheel-dir=/app/wheels -e .
-
-# Production stage
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install runtime dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 \
+    build-essential \
+    libpq-dev \
     curl \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Copy wheels from builder
-COPY --from=builder /app/wheels /wheels
-RUN pip install --no-cache-dir /wheels/*
+# Copy requirements and install Python dependencies
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir pip --upgrade && \
+    pip install --no-cache-dir hatchling && \
+    pip install --no-cache-dir \
+    "fastapi>=0.109.0" \
+    "uvicorn[standard]>=0.27.0" \
+    "pydantic>=2.5.0" \
+    "pydantic-settings>=2.1.0" \
+    "sqlalchemy>=2.0.25" \
+    "asyncpg>=0.29.0" \
+    "alembic>=1.13.0" \
+    "redis>=5.0.0" \
+    "python-jose[cryptography]>=3.3.0" \
+    "passlib[bcrypt]>=1.7.4" \
+    "python-multipart>=0.0.6" \
+    "httpx>=0.26.0" \
+    "paho-mqtt>=1.6.1" \
+    "structlog>=24.1.0" \
+    "gunicorn>=21.0.0"
 
 # Copy application code
 COPY . .
