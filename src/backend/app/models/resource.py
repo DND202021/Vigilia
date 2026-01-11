@@ -46,12 +46,12 @@ class Resource(Base, TimestampMixin, SoftDeleteMixin):
     )
 
     resource_type: Mapped[ResourceType] = mapped_column(
-        SQLEnum(ResourceType),
+        SQLEnum(ResourceType, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         index=True,
     )
     status: Mapped[ResourceStatus] = mapped_column(
-        SQLEnum(ResourceStatus),
+        SQLEnum(ResourceStatus, values_callable=lambda x: [e.value for e in x]),
         default=ResourceStatus.AVAILABLE,
         nullable=False,
         index=True,

@@ -60,7 +60,7 @@ class Alert(Base, TimestampMixin):
 
     # Source information
     source: Mapped[AlertSource] = mapped_column(
-        SQLEnum(AlertSource),
+        SQLEnum(AlertSource, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         index=True,
     )
@@ -73,13 +73,13 @@ class Alert(Base, TimestampMixin):
 
     # Classification
     severity: Mapped[AlertSeverity] = mapped_column(
-        SQLEnum(AlertSeverity),
+        SQLEnum(AlertSeverity, values_callable=lambda x: [e.value for e in x]),
         default=AlertSeverity.MEDIUM,
         nullable=False,
         index=True,
     )
     status: Mapped[AlertStatus] = mapped_column(
-        SQLEnum(AlertStatus),
+        SQLEnum(AlertStatus, values_callable=lambda x: [e.value for e in x]),
         default=AlertStatus.PENDING,
         nullable=False,
         index=True,
