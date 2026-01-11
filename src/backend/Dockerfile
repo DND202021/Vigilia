@@ -33,7 +33,8 @@ RUN pip install --no-cache-dir pip --upgrade && \
     "paho-mqtt>=1.6.1" \
     "structlog>=24.1.0" \
     "gunicorn>=21.0.0" \
-    "email-validator>=2.0.0"
+    "email-validator>=2.0.0" \
+    "psycopg2-binary>=2.9.0"
 
 # Copy application code
 COPY . .
