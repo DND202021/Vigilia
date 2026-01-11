@@ -32,16 +32,25 @@ Vigilia/
 │   │   │   ├── api/      # REST endpoints
 │   │   │   ├── core/     # Config, security, deps
 │   │   │   ├── models/   # SQLAlchemy models
-│   │   │   └── services/ # Business logic
+│   │   │   ├── services/ # Business logic
+│   │   │   └── integrations/  # External systems
 │   │   ├── alembic/      # Database migrations
-│   │   └── tests/        # Pytest tests
-│   ├── frontend/         # React web app
-│   └── mobile/           # React Native (planned)
+│   │   └── tests/        # Pytest tests (176 tests)
+│   └── frontend/         # React web app
+│       ├── src/
+│       │   ├── components/   # UI components
+│       │   ├── pages/        # Route pages
+│       │   ├── stores/       # Zustand state
+│       │   ├── services/     # API & offline
+│       │   └── hooks/        # Custom hooks
+│       └── public/           # Static assets
 ├── docs/
 │   ├── architecture/     # System design
 │   ├── phases/           # Development phases
 │   └── requirements/     # Specs
-└── infrastructure/       # Docker configs
+└── infrastructure/       # Docker + K8s configs
+    ├── nginx/            # Reverse proxy config
+    └── k8s/              # Kubernetes manifests
 ```
 
 ## Development Progress
@@ -54,15 +63,60 @@ Vigilia/
   - Alembic migrations
   - Unit tests (33 tests passing)
 
-### Pending
+- [x] **Phase 2: Core Services**
+  - Incident management service
+  - Resource tracking service
+  - Alert processing service
+  - Unit tests (50+ tests)
 
-- [ ] **Phase 2: Core Services** - Incident, Resource, Alert business logic
-- [ ] **Phase 3: Integrations** - Fundamentum, alarm systems, Axis microphones
-- [ ] **Phase 4: User Interfaces** - React frontend implementation
-- [ ] **Phase 5: Offline Capability** - Local sync, edge computing
-- [ ] **Phase 6: Security Hardening** - Audit, penetration testing
-- [ ] **Phase 7: Testing & Certification**
-- [ ] **Phase 8: Production Deployment**
+- [x] **Phase 3: Integrations**
+  - Circuit breaker pattern for fault tolerance
+  - Alarm system integration (Contact ID protocol)
+  - Axis audio analytics integration
+  - CAD system adapter with sync service
+  - GIS service (geocoding, routing, jurisdictions)
+  - Unit tests (93 tests)
+
+- [x] **Phase 4: User Interfaces**
+  - React + TypeScript frontend
+  - Dashboard with real-time data
+  - Incidents list and detail pages
+  - Alerts management page
+  - Resources tracking page
+  - Tactical map with Leaflet
+  - Authentication flow (login/logout)
+  - Zustand state management
+  - API client with token refresh
+
+- [x] **Phase 5: Offline Capability**
+  - Service Worker for caching
+  - IndexedDB offline storage
+  - Sync service for background sync
+  - Offline status indicator
+  - PWA manifest
+
+- [x] **Phase 6: Security Hardening**
+  - Input validation and sanitization
+  - XSS prevention (HTML escaping)
+  - Rate limiting
+  - Content Security Policy
+  - Secure storage wrapper
+  - Session timeout management
+
+- [x] **Phase 7: Testing & Certification**
+  - Backend: 176 pytest tests
+  - Frontend: Vitest unit tests
+  - Validation tests
+  - Store tests
+
+- [x] **Phase 8: Production Deployment**
+  - Docker multi-stage builds
+  - Docker Compose (dev + prod)
+  - Kubernetes manifests
+  - Nginx reverse proxy config
+  - SSL/TLS configuration
+  - Health checks
+  - Resource limits
 
 ## Key Commands
 
@@ -72,14 +126,33 @@ cd src/backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-pytest tests/ -v                    # Run tests
+pytest tests/ -v                    # Run tests (176 passing)
 uvicorn app.main:app --reload       # Start dev server
+```
+
+### Frontend Development
+```bash
+cd src/frontend
+npm install
+npm run dev                         # Start dev server
+npm run test                        # Run tests
+npm run build                       # Production build
 ```
 
 ### Docker
 ```bash
-docker compose up -d                # Start all services
+docker compose up -d                # Start dev environment
+docker compose -f docker-compose.prod.yml up -d  # Production
 docker compose logs -f backend      # View logs
+```
+
+### Kubernetes
+```bash
+kubectl apply -f infrastructure/k8s/namespace.yaml
+kubectl apply -f infrastructure/k8s/secrets.yaml
+kubectl apply -f infrastructure/k8s/backend-deployment.yaml
+kubectl apply -f infrastructure/k8s/frontend-deployment.yaml
+kubectl apply -f infrastructure/k8s/ingress.yaml
 ```
 
 ### Database Migrations
@@ -87,14 +160,6 @@ docker compose logs -f backend      # View logs
 cd src/backend
 alembic upgrade head                # Apply migrations
 alembic revision --autogenerate -m "description"  # Create migration
-```
-
-## Using Ralph Loop
-
-For autonomous development of complex features:
-
-```bash
-/ralph-loop "Implement Phase 2 ERIOP: Core Services" --max-iterations 20 --completion-promise "PHASE2 COMPLETE"
 ```
 
 ## Critical Requirements
@@ -106,15 +171,40 @@ For autonomous development of complex features:
 5. **Audit Trail** - Full logging for compliance
 6. **Multi-tenancy** - Agency-level data isolation
 
-## API Endpoints (Implemented)
+## API Endpoints
 
 ### Authentication
 - `POST /api/v1/auth/login` - Login
-- `POST /api/v1/auth/register` - Register (public users)
+- `POST /api/v1/auth/register` - Register
 - `POST /api/v1/auth/refresh` - Refresh token
 - `POST /api/v1/auth/logout` - Logout
 - `GET /api/v1/auth/me` - Current user
 - `POST /api/v1/auth/change-password` - Change password
+
+### Incidents
+- `GET /api/v1/incidents` - List incidents
+- `GET /api/v1/incidents/active` - Active incidents
+- `GET /api/v1/incidents/{id}` - Get incident
+- `POST /api/v1/incidents` - Create incident
+- `PATCH /api/v1/incidents/{id}` - Update incident
+- `POST /api/v1/incidents/{id}/status` - Update status
+- `POST /api/v1/incidents/{id}/assign` - Assign unit
+
+### Resources
+- `GET /api/v1/resources` - List resources
+- `GET /api/v1/resources/available` - Available resources
+- `GET /api/v1/resources/{id}` - Get resource
+- `POST /api/v1/resources` - Create resource
+- `PATCH /api/v1/resources/{id}/status` - Update status
+- `PATCH /api/v1/resources/{id}/location` - Update location
+
+### Alerts
+- `GET /api/v1/alerts` - List alerts
+- `GET /api/v1/alerts/pending` - Pending alerts
+- `GET /api/v1/alerts/{id}` - Get alert
+- `POST /api/v1/alerts/{id}/acknowledge` - Acknowledge
+- `POST /api/v1/alerts/{id}/resolve` - Resolve
+- `POST /api/v1/alerts/{id}/create-incident` - Create incident
 
 ### Health
 - `GET /health` - Health check
@@ -127,9 +217,16 @@ For autonomous development of complex features:
 - **Resource** - Personnel, vehicles, equipment
 - **Alert** - Incoming alerts from various sources
 
+## Integration Adapters
+
+- **AlarmReceiverService** - Contact ID protocol decoder
+- **AxisAudioClient** - Axis camera audio analytics
+- **CADSyncService** - Computer-Aided Dispatch sync
+- **GISService** - Geocoding and routing
+
 ## Environment Variables
 
-See `src/backend/.env.example` for all configuration options.
+See `.env.example` for all configuration options.
 
 ## Documentation
 

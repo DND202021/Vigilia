@@ -1,0 +1,169 @@
+version: '3.8'
+
+# Production Docker Compose Configuration for ERIOP
+# Usage: docker compose -f docker-compose.prod.yml up -d
+
+services:
+  # PostgreSQL with TimescaleDB (combined for production)
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: eriop-db
+    environment:
+      POSTGRES_DB: eriop
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./infrastructure/db/timescale.sql:/docker-entrypoint-initdb.d/02-timescale.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - eriop-internal
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  # Redis for caching, sessions, and pub/sub
+  redis:
+    image: redis:7-alpine
+    container_name: eriop-redis
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - eriop-internal
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile
+    container_name: eriop-backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@db:5432/eriop
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      SECRET_KEY: ${SECRET_KEY}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      ENVIRONMENT: production
+      LOG_LEVEL: info
+      WORKERS: ${WORKERS:-4}
+    volumes:
+      - backend_logs:/app/logs
+    expose:
+      - "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - eriop-internal
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
+  # React Frontend (nginx serving static files)
+  frontend:
+    build:
+      context: ./src/frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+        VITE_WS_URL: ${VITE_WS_URL}
+    container_name: eriop-frontend
+    expose:
+      - "80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - eriop-internal
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  # Nginx Reverse Proxy with SSL
+  nginx:
+    image: nginx:alpine
+    container_name: eriop-nginx
+    volumes:
+      - ./infrastructure/nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./infrastructure/nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
+      - frontend
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - eriop-internal
+      - eriop-external
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  backend_logs:
+    driver: local
+  nginx_logs:
+    driver: local
+
+networks:
+  eriop-internal:
+    driver: bridge
+    internal: true
+  eriop-external:
+    driver: bridge

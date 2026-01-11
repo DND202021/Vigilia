@@ -1,9 +1,9 @@
 ---
 active: true
 iteration: 1
-max_iterations: 15
-completion_promise: "PHASE1 COMPLETE"
-started_at: "2026-01-11T13:44:09Z"
+max_iterations: 50
+completion_promise: "ALL PHASES COMPLETE"
+started_at: "2026-01-11T15:02:28Z"
 ---
 
-Implémenter la Phase 1 ERIOP: 1) Modèles SQLAlchemy (User, Agency, Incident, Resource, Alert), 2) Service auth JWT, 3) Migrations Alembic, 4) Tests unitaires. Output <promise>PHASE1 COMPLETE</promise> quand tous les tests passent.
+Implémenter toutes les phases restantes d'ERIOP (4-8): Phase 4 Frontend React, Phase 5 Offline Capability, Phase 6 Security Hardening, Phase 7 Testing & Certification, Phase 8 Production Deployment. Output <promise>ALL PHASES COMPLETE</promise> quand le projet est complet avec tests.

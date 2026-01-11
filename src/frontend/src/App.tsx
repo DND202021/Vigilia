@@ -1,67 +1,122 @@
-import { Routes, Route } from 'react-router-dom';
+/**
+ * ERIOP Main Application
+ */
+
+import { useEffect } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useAuthStore } from './stores/authStore';
+import { useWebSocket } from './hooks/useWebSocket';
+import { Layout, ProtectedRoute } from './components/layout';
+import {
+  DashboardPage,
+  IncidentsPage,
+  IncidentDetailPage,
+  AlertsPage,
+  ResourcesPage,
+  MapPage,
+  LoginPage,
+} from './pages';
+import { Spinner } from './components/ui';
 
 function App() {
-  return (
-    <div className="min-h-screen bg-gray-100">
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/incidents" element={<IncidentsPage />} />
-        <Route path="/incidents/:id" element={<IncidentDetailPage />} />
-        <Route path="/resources" element={<ResourcesPage />} />
-        <Route path="/alerts" element={<AlertsPage />} />
-        <Route path="/map" element={<MapPage />} />
-        <Route path="/login" element={<LoginPage />} />
-      </Routes>
-    </div>
-  );
-}
+  const { checkAuth, isLoading, isAuthenticated } = useAuthStore();
+  const { connect, disconnect } = useWebSocket();
 
-// Placeholder components - to be implemented
-function Dashboard() {
-  return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold text-gray-900">ERIOP Dashboard</h1>
-      <p className="mt-4 text-gray-600">Emergency Response IoT Platform</p>
-      <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h2 className="text-xl font-semibold">Active Incidents</h2>
-          <p className="text-4xl font-bold text-red-600 mt-2">--</p>
-        </div>
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h2 className="text-xl font-semibold">Available Units</h2>
-          <p className="text-4xl font-bold text-green-600 mt-2">--</p>
-        </div>
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h2 className="text-xl font-semibold">Pending Alerts</h2>
-          <p className="text-4xl font-bold text-yellow-600 mt-2">--</p>
+  // Check authentication on mount
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  // Connect WebSocket when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      connect();
+    } else {
+      disconnect();
+    }
+  }, [isAuthenticated, connect, disconnect]);
+
+  // Show loading while checking auth
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="text-center">
+          <Spinner size="lg" />
+          <p className="mt-4 text-gray-600">Loading ERIOP...</p>
         </div>
       </div>
-    </div>
+    );
+  }
+
+  return (
+    <Layout>
+      <Routes>
+        {/* Public routes */}
+        <Route
+          path="/login"
+          element={
+            isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />
+          }
+        />
+
+        {/* Protected routes */}
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/incidents"
+          element={
+            <ProtectedRoute>
+              <IncidentsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/incidents/:id"
+          element={
+            <ProtectedRoute>
+              <IncidentDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/alerts"
+          element={
+            <ProtectedRoute>
+              <AlertsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/resources"
+          element={
+            <ProtectedRoute>
+              <ResourcesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/map"
+          element={
+            <ProtectedRoute>
+              <MapPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Catch all - redirect to dashboard or login */}
+        <Route
+          path="*"
+          element={<Navigate to={isAuthenticated ? '/' : '/login'} replace />}
+        />
+      </Routes>
+    </Layout>
   );
-}
-
-function IncidentsPage() {
-  return <div className="p-8"><h1 className="text-2xl font-bold">Incidents</h1></div>;
-}
-
-function IncidentDetailPage() {
-  return <div className="p-8"><h1 className="text-2xl font-bold">Incident Details</h1></div>;
-}
-
-function ResourcesPage() {
-  return <div className="p-8"><h1 className="text-2xl font-bold">Resources</h1></div>;
-}
-
-function AlertsPage() {
-  return <div className="p-8"><h1 className="text-2xl font-bold">Alerts</h1></div>;
-}
-
-function MapPage() {
-  return <div className="p-8"><h1 className="text-2xl font-bold">Tactical Map</h1></div>;
-}
-
-function LoginPage() {
-  return <div className="p-8"><h1 className="text-2xl font-bold">Login</h1></div>;
 }
 
 export default App;
