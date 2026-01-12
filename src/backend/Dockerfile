@@ -36,7 +36,9 @@ RUN pip install --no-cache-dir pip --upgrade && \
     "email-validator>=2.0.0" \
     "psycopg2-binary>=2.9.0" \
     "bcrypt>=4.0.0" \
-    "python-socketio>=5.10.0"
+    "python-socketio>=5.10.0" \
+    "pyotp>=2.9.0" \
+    "qrcode[pil]>=7.4.0"
 
 # Copy application code
 COPY . .
