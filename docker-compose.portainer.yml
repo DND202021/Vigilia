@@ -82,7 +82,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:-/api/v1}
-        VITE_WS_URL: ${VITE_WS_URL:-wss://${DOMAIN:-eriop.local}}
+        VITE_WS_URL: ${VITE_WS_URL:-}
     container_name: eriop-frontend
     restart: unless-stopped
     environment:
@@ -115,8 +115,6 @@ services:
       - frontend
     networks:
       - eriop-external
-    profiles:
-      - nginx
 
 volumes:
   postgres_data:

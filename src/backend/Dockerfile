@@ -35,7 +35,8 @@ RUN pip install --no-cache-dir pip --upgrade && \
     "gunicorn>=21.0.0" \
     "email-validator>=2.0.0" \
     "psycopg2-binary>=2.9.0" \
-    "bcrypt>=4.0.0"
+    "bcrypt>=4.0.0" \
+    "python-socketio>=5.10.0"
 
 # Copy application code
 COPY . .
