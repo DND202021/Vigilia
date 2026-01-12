@@ -116,7 +116,7 @@ def incident_to_response(inc: IncidentModel) -> IncidentResponse:
         id=str(inc.id),
         incident_number=inc.incident_number,
         category=IncidentCategory(inc.category.value),
-        priority=IncidentPriority(inc.priority.value),
+        priority=IncidentPriority(inc.priority),
         status=IncidentStatus(inc.status.value),
         title=inc.title,
         description=inc.description,
@@ -169,7 +169,7 @@ async def create_incident(
         id=uuid.uuid4(),
         incident_number=incident_number,
         category=IncidentCategoryModel(incident.category.value),
-        priority=IncidentPriorityModel(incident.priority.value),
+        priority=incident.priority.value,
         status=IncidentStatusModel.NEW,
         title=incident.title,
         description=incident.description,
@@ -323,9 +323,9 @@ async def update_incident(
     # Track changes for timeline
     changes = []
 
-    if update.priority is not None and update.priority.value != incident.priority.value:
-        changes.append(f"priority changed from {incident.priority.value} to {update.priority.value}")
-        incident.priority = IncidentPriorityModel(update.priority.value)
+    if update.priority is not None and update.priority.value != incident.priority:
+        changes.append(f"priority changed from {incident.priority} to {update.priority.value}")
+        incident.priority = update.priority.value
 
     if update.status is not None and update.status.value != incident.status.value:
         changes.append(f"status changed from {incident.status.value} to {update.status.value}")

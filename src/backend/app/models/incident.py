@@ -83,9 +83,8 @@ class Incident(Base, TimestampMixin):
         SQLEnum(IncidentCategory, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
     )
-    priority: Mapped[IncidentPriority] = mapped_column(
-        SQLEnum(IncidentPriority, values_callable=lambda x: [e.value for e in x]),
-        default=IncidentPriority.MEDIUM,
+    priority: Mapped[int] = mapped_column(
+        default=IncidentPriority.MEDIUM.value,
         nullable=False,
     )
     status: Mapped[IncidentStatus] = mapped_column(
