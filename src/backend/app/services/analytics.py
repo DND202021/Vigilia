@@ -286,16 +286,16 @@ class AnalyticsService:
 
         # Calculate utilization
         active_count = (
-            status_counts.get(ResourceStatus.DISPATCHED, 0) +
-            status_counts.get(ResourceStatus.ON_SCENE, 0) +
-            status_counts.get(ResourceStatus.BUSY, 0)
+            status_counts.get(ResourceStatus.ASSIGNED, 0) +
+            status_counts.get(ResourceStatus.EN_ROUTE, 0) +
+            status_counts.get(ResourceStatus.ON_SCENE, 0)
         )
         utilization = (active_count / total * 100) if total > 0 else 0
 
         return ResourceStats(
             total=total,
             available=status_counts.get(ResourceStatus.AVAILABLE, 0),
-            dispatched=status_counts.get(ResourceStatus.DISPATCHED, 0),
+            dispatched=status_counts.get(ResourceStatus.ASSIGNED, 0),
             on_scene=status_counts.get(ResourceStatus.ON_SCENE, 0),
             out_of_service=status_counts.get(ResourceStatus.OUT_OF_SERVICE, 0),
             by_type=by_type,
