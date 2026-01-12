@@ -8,8 +8,6 @@ import { useIncidentStore } from '../stores/incidentStore';
 import { usePolling } from '../hooks/useInterval';
 import {
   Card,
-  CardHeader,
-  CardTitle,
   CardContent,
   Badge,
   Button,
@@ -20,7 +18,6 @@ import {
 } from '../components/ui';
 import {
   formatRelativeTime,
-  formatDate,
   getPriorityLabel,
   getPriorityBgColor,
   getPriorityColor,

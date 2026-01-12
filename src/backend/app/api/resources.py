@@ -106,6 +106,18 @@ class PaginatedResourceResponse(BaseModel):
     total_pages: int
 
 
+class AssignmentRecommendationResponse(BaseModel):
+    """Resource assignment recommendation."""
+
+    resource_id: str
+    resource_name: str
+    resource_type: str
+    call_sign: str | None
+    distance_km: float
+    score: float
+    reasons: list[str]
+
+
 def resource_to_response(resource: ResourceModel) -> ResourceResponse:
     """Convert a database resource model to response."""
     return ResourceResponse(
@@ -377,3 +389,132 @@ async def delete_resource(
 
     resource.deleted_at = datetime.utcnow()
     await db.commit()
+
+
+@router.get("/recommendations/{incident_id}", response_model=list[AssignmentRecommendationResponse])
+async def get_assignment_recommendations(
+    incident_id: str,
+    max_results: int = Query(10, ge=1, le=50),
+    max_distance_km: float = Query(50.0, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> list[AssignmentRecommendationResponse]:
+    """Get resource assignment recommendations for an incident.
+
+    Returns a ranked list of available resources based on:
+    - Distance from incident location
+    - Resource capabilities matching incident requirements
+    - Resource availability
+    """
+    from app.models.incident import Incident as IncidentModel
+    from app.services.assignment_engine import AssignmentEngine
+
+    try:
+        incident_uuid = uuid.UUID(incident_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid incident_id format",
+        )
+
+    # Get the incident
+    query = select(IncidentModel).where(IncidentModel.id == incident_uuid)
+    result = await db.execute(query)
+    incident = result.scalar_one_or_none()
+
+    if not incident:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Incident not found",
+        )
+
+    # Get recommendations
+    engine = AssignmentEngine(db)
+    recommendations = await engine.get_recommendations(
+        incident,
+        max_results=max_results,
+        max_distance_km=max_distance_km,
+    )
+
+    return [
+        AssignmentRecommendationResponse(
+            resource_id=r.resource_id,
+            resource_name=r.resource_name,
+            resource_type=r.resource_type,
+            call_sign=r.call_sign,
+            distance_km=r.distance_km,
+            score=r.score,
+            reasons=r.reasons,
+        )
+        for r in recommendations
+    ]
+
+
+@router.post("/{resource_id}/assign/{incident_id}", response_model=ResourceResponse)
+async def assign_resource_to_incident(
+    resource_id: str,
+    incident_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> ResourceResponse:
+    """Assign a resource to an incident."""
+    from app.models.incident import Incident as IncidentModel
+
+    try:
+        resource_uuid = uuid.UUID(resource_id)
+        incident_uuid = uuid.UUID(incident_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid ID format",
+        )
+
+    # Get resource
+    resource_query = select(ResourceModel).where(
+        ResourceModel.id == resource_uuid,
+        ResourceModel.deleted_at.is_(None),
+    )
+    resource_result = await db.execute(resource_query)
+    resource = resource_result.scalar_one_or_none()
+
+    if not resource:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Resource not found",
+        )
+
+    if resource.status != ResourceStatusModel.AVAILABLE:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Resource is not available",
+        )
+
+    # Get incident
+    incident_query = select(IncidentModel).where(IncidentModel.id == incident_uuid)
+    incident_result = await db.execute(incident_query)
+    incident = incident_result.scalar_one_or_none()
+
+    if not incident:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Incident not found",
+        )
+
+    # Assign resource
+    resource.status = ResourceStatusModel.ASSIGNED
+
+    # Add to incident's assigned units
+    if incident.assigned_units is None:
+        incident.assigned_units = []
+    if str(resource_uuid) not in incident.assigned_units:
+        incident.assigned_units = incident.assigned_units + [str(resource_uuid)]
+
+    await db.commit()
+    await db.refresh(resource)
+
+    # Emit Socket.IO event
+    from app.services.socketio import emit_resource_updated
+    import asyncio
+    asyncio.create_task(emit_resource_updated(resource_to_response(resource).model_dump()))
+
+    return resource_to_response(resource)

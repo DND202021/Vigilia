@@ -98,6 +98,21 @@ class IncidentUpdate(BaseModel):
     status: IncidentStatus | None = None
     title: str | None = None
     description: str | None = None
+    resolution_notes: str | None = None
+
+
+class StatusTransitionRequest(BaseModel):
+    """Request to transition incident status."""
+
+    status: IncidentStatus
+    notes: str | None = None
+
+
+class AvailableTransitionsResponse(BaseModel):
+    """Available status transitions for an incident."""
+
+    current_status: IncidentStatus
+    available_transitions: list[IncidentStatus]
 
 
 class PaginatedIncidentResponse(BaseModel):
@@ -372,31 +387,169 @@ async def update_incident(
     return response
 
 
-@router.post("/{incident_id}/assign")
-async def assign_unit(incident_id: str, unit_id: str) -> dict[str, str]:
-    """Assign a unit to an incident."""
-    # TODO: Implement unit assignment
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Unit assignment not yet implemented",
+@router.get("/{incident_id}/transitions", response_model=AvailableTransitionsResponse)
+async def get_available_transitions(
+    incident_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> AvailableTransitionsResponse:
+    """Get available status transitions for an incident."""
+    from app.services.incident_state_machine import IncidentStateMachine
+
+    try:
+        incident_uuid = uuid.UUID(incident_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid incident ID format",
+        )
+
+    query = select(IncidentModel).where(IncidentModel.id == incident_uuid)
+    result = await db.execute(query)
+    incident = result.scalar_one_or_none()
+
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident not found",
+        )
+
+    state_machine = IncidentStateMachine(db)
+    available = state_machine.get_available_transitions(incident)
+
+    return AvailableTransitionsResponse(
+        current_status=IncidentStatus(incident.status.value),
+        available_transitions=[IncidentStatus(s.value) for s in available],
     )
 
 
-@router.post("/{incident_id}/escalate")
-async def escalate_incident(incident_id: str, reason: str) -> dict[str, str]:
-    """Escalate an incident."""
-    # TODO: Implement escalation
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Escalation not yet implemented",
-    )
+@router.post("/{incident_id}/transition", response_model=IncidentResponse)
+async def transition_incident_status(
+    incident_id: str,
+    request: StatusTransitionRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> IncidentResponse:
+    """Transition incident to a new status with validation."""
+    from app.services.incident_state_machine import IncidentStateMachine, TransitionError
+
+    try:
+        incident_uuid = uuid.UUID(incident_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid incident ID format",
+        )
+
+    query = select(IncidentModel).where(IncidentModel.id == incident_uuid)
+    result = await db.execute(query)
+    incident = result.scalar_one_or_none()
+
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident not found",
+        )
+
+    # Store resolution notes if transitioning to resolved
+    if request.notes and request.status == IncidentStatus.RESOLVED:
+        incident.resolution_notes = request.notes
+
+    state_machine = IncidentStateMachine(db)
+
+    try:
+        target_status = IncidentStatusModel(request.status.value)
+        incident = await state_machine.transition(
+            incident,
+            target_status,
+            user=current_user,
+            notes=request.notes,
+        )
+    except TransitionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+    response = incident_to_response(incident)
+    await emit_incident_updated(response.model_dump(mode="json"))
+
+    return response
+
+
+@router.post("/{incident_id}/escalate", response_model=IncidentResponse)
+async def escalate_incident(
+    incident_id: str,
+    reason: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> IncidentResponse:
+    """Escalate an incident by raising its priority."""
+    try:
+        incident_uuid = uuid.UUID(incident_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid incident ID format",
+        )
+
+    query = select(IncidentModel).where(IncidentModel.id == incident_uuid)
+    result = await db.execute(query)
+    incident = result.scalar_one_or_none()
+
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident not found",
+        )
+
+    # Escalate priority (lower number = higher priority)
+    old_priority = incident.priority
+    if incident.priority > 1:
+        incident.priority = incident.priority - 1
+
+    # Add timeline event
+    timeline = incident.timeline_events or []
+    timeline.append({
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "event": "escalated",
+        "user_id": str(current_user.id),
+        "details": f"Escalated from priority {old_priority} to {incident.priority}: {reason}",
+    })
+    incident.timeline_events = timeline
+
+    await db.commit()
+    await db.refresh(incident)
+
+    response = incident_to_response(incident)
+    await emit_incident_updated(response.model_dump(mode="json"))
+
+    return response
 
 
 @router.get("/{incident_id}/timeline")
-async def get_incident_timeline(incident_id: str) -> list[dict]:
+async def get_incident_timeline(
+    incident_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> list[dict]:
     """Get complete timeline of incident events."""
-    # TODO: Implement timeline retrieval
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Timeline retrieval not yet implemented",
-    )
+    try:
+        incident_uuid = uuid.UUID(incident_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid incident ID format",
+        )
+
+    query = select(IncidentModel).where(IncidentModel.id == incident_uuid)
+    result = await db.execute(query)
+    incident = result.scalar_one_or_none()
+
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident not found",
+        )
+
+    return incident.timeline_events or []

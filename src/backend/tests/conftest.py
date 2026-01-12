@@ -10,7 +10,7 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.main import app
+from app.main import fastapi_app as app
 from app.models.base import Base
 # Import all models to ensure they're registered with Base.metadata
 from app.models import (

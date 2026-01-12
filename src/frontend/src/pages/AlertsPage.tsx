@@ -7,8 +7,6 @@ import { useAlertStore } from '../stores/alertStore';
 import { usePolling } from '../hooks/useInterval';
 import {
   Card,
-  CardHeader,
-  CardTitle,
   CardContent,
   Badge,
   Button,
@@ -25,7 +23,7 @@ import {
   getAlertTypeLabel,
   cn,
 } from '../utils';
-import type { Alert, AlertSeverity, AlertType, IncidentType, IncidentPriority } from '../types';
+import type { Alert, AlertSeverity, IncidentType, IncidentPriority } from '../types';
 
 const POLL_INTERVAL = 10000;
 

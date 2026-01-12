@@ -28,7 +28,7 @@ interface IncidentStore {
   handleIncidentUpdate: (incident: Incident) => void;
 }
 
-export const useIncidentStore = create<IncidentStore>((set, get) => ({
+export const useIncidentStore = create<IncidentStore>((set) => ({
   incidents: [],
   activeIncidents: [],
   selectedIncident: null,

@@ -6,6 +6,7 @@ from app.models.agency import Agency
 from app.models.incident import Incident, IncidentStatus, IncidentPriority, IncidentCategory
 from app.models.resource import Resource, ResourceType, ResourceStatus, Personnel, Vehicle, Equipment
 from app.models.alert import Alert, AlertSeverity, AlertStatus, AlertSource
+from app.models.audit import AuditLog, AuditAction
 
 __all__ = [
     "Base",
@@ -27,4 +28,6 @@ __all__ = [
     "AlertSeverity",
     "AlertStatus",
     "AlertSource",
+    "AuditLog",
+    "AuditAction",
 ]

@@ -12,6 +12,7 @@ const navLinks = [
   { to: '/alerts', label: 'Alerts' },
   { to: '/resources', label: 'Resources' },
   { to: '/map', label: 'Map' },
+  { to: '/analytics', label: 'Analytics' },
 ];
 
 export function Navbar() {

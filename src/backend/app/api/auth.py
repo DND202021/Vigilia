@@ -7,6 +7,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 from app.core.deps import DbSession, CurrentUser
 from app.services.auth_service import AuthService, AuthenticationError
+from app.services.mfa_service import MFAService
 from app.models.user import UserRole
 
 router = APIRouter()
@@ -18,6 +19,20 @@ class LoginRequest(BaseModel):
 
     email: EmailStr
     password: str
+    mfa_code: str | None = None
+
+
+class MFASetupRequest(BaseModel):
+    """MFA setup confirmation request."""
+
+    secret: str
+    code: str = Field(..., min_length=6, max_length=6)
+
+
+class MFAVerifyRequest(BaseModel):
+    """MFA verification request."""
+
+    code: str = Field(..., min_length=6, max_length=6)
 
 
 class RefreshTokenRequest(BaseModel):
@@ -72,15 +87,68 @@ class MessageResponse(BaseModel):
     message: str
 
 
-@router.post("/login", response_model=TokenResponse)
-async def login(request: LoginRequest, db: DbSession) -> TokenResponse:
-    """Authenticate user and return tokens."""
+class MFASetupResponse(BaseModel):
+    """MFA setup response with QR code."""
+
+    secret: str
+    qr_code: str
+    manual_entry_key: str
+
+
+class LoginResponse(BaseModel):
+    """Login response that may require MFA."""
+
+    access_token: str | None = None
+    refresh_token: str | None = None
+    token_type: str = "bearer"
+    mfa_required: bool = False
+    mfa_temp_token: str | None = None
+
+
+@router.post("/login", response_model=LoginResponse)
+async def login(request: LoginRequest, db: DbSession) -> LoginResponse:
+    """Authenticate user and return tokens.
+
+    If MFA is enabled, returns mfa_required=True with a temporary token.
+    The client must then call /auth/mfa/complete with the temp token and code.
+    """
+    from app.core.security import create_mfa_temp_token
+
     auth_service = AuthService(db)
+    mfa_service = MFAService(db)
 
     try:
         user = await auth_service.authenticate_user(request.email, request.password)
+
+        # Check if MFA is required
+        if user.mfa_enabled and user.mfa_secret:
+            if request.mfa_code:
+                # Verify MFA code provided with login
+                if not await mfa_service.verify_mfa(user, request.mfa_code):
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Invalid MFA code",
+                    )
+                # MFA verified, return tokens
+                tokens = await auth_service.create_tokens(user)
+                return LoginResponse(
+                    access_token=tokens["access_token"],
+                    refresh_token=tokens["refresh_token"],
+                )
+            else:
+                # MFA required but no code provided
+                temp_token = create_mfa_temp_token(str(user.id))
+                return LoginResponse(
+                    mfa_required=True,
+                    mfa_temp_token=temp_token,
+                )
+
+        # No MFA, return tokens directly
         tokens = await auth_service.create_tokens(user)
-        return TokenResponse(**tokens)
+        return LoginResponse(
+            access_token=tokens["access_token"],
+            refresh_token=tokens["refresh_token"],
+        )
     except AuthenticationError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -181,11 +249,123 @@ async def change_password(
         )
 
 
-@router.post("/mfa/verify", response_model=MessageResponse)
-async def verify_mfa(code: str, current_user: CurrentUser) -> MessageResponse:
-    """Verify MFA code."""
-    # TODO: Implement MFA verification with TOTP
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="MFA verification not yet implemented",
-    )
+@router.post("/mfa/setup", response_model=MFASetupResponse)
+async def setup_mfa(current_user: CurrentUser, db: DbSession) -> MFASetupResponse:
+    """Initialize MFA setup for the current user.
+
+    Returns a secret and QR code for the user to scan with their authenticator app.
+    Call /auth/mfa/confirm with the secret and a valid code to enable MFA.
+    """
+    if current_user.mfa_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="MFA is already enabled",
+        )
+
+    mfa_service = MFAService(db)
+    setup_data = await mfa_service.setup_mfa(current_user)
+
+    return MFASetupResponse(**setup_data)
+
+
+@router.post("/mfa/confirm", response_model=MessageResponse)
+async def confirm_mfa_setup(
+    request: MFASetupRequest,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> MessageResponse:
+    """Confirm MFA setup by verifying a code from the authenticator app.
+
+    This enables MFA on the user's account.
+    """
+    if current_user.mfa_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="MFA is already enabled",
+        )
+
+    mfa_service = MFAService(db)
+    success = await mfa_service.confirm_mfa_setup(current_user, request.secret, request.code)
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid MFA code",
+        )
+
+    return MessageResponse(message="MFA has been enabled successfully")
+
+
+@router.post("/mfa/complete", response_model=TokenResponse)
+async def complete_mfa_login(
+    request: MFAVerifyRequest,
+    mfa_temp_token: str,
+    db: DbSession,
+) -> TokenResponse:
+    """Complete login by verifying MFA code.
+
+    Called after login returns mfa_required=True with a temp token.
+    """
+    from app.core.security import verify_token
+    import uuid
+
+    payload = verify_token(mfa_temp_token, token_type="mfa_pending")
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired MFA token",
+        )
+
+    user_id = payload.get("sub")
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+        )
+
+    auth_service = AuthService(db)
+    mfa_service = MFAService(db)
+
+    user = await auth_service._get_user_by_id(uuid.UUID(user_id))
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    if not await mfa_service.verify_mfa(user, request.code):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid MFA code",
+        )
+
+    tokens = await auth_service.create_tokens(user)
+    return TokenResponse(**tokens)
+
+
+@router.post("/mfa/disable", response_model=MessageResponse)
+async def disable_mfa(
+    request: MFAVerifyRequest,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> MessageResponse:
+    """Disable MFA on the current user's account.
+
+    Requires verification with a valid MFA code.
+    """
+    if not current_user.mfa_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="MFA is not enabled",
+        )
+
+    mfa_service = MFAService(db)
+    success = await mfa_service.disable_mfa(current_user, request.code)
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid MFA code",
+        )
+
+    return MessageResponse(message="MFA has been disabled")

@@ -1,34 +1,57 @@
 """ERIOP FastAPI Application Entry Point."""
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
+import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import router as api_router
 from app.core.config import settings
+from app.core.deps import async_session_factory
 from app.services.socketio import sio, create_combined_app
+from app.services.fundamentum_mqtt import init_mqtt_client, shutdown_mqtt_client
+
+logger = structlog.get_logger()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler for startup/shutdown events."""
     # Startup
-    # TODO: Initialize database connections
-    # TODO: Initialize Redis connection
-    # TODO: Initialize MQTT client for Fundamentum
+    logger.info("Starting ERIOP application", environment=settings.environment)
+
+    # Initialize MQTT client for Fundamentum IoT integration
+    if settings.mqtt_broker_host:
+        try:
+            loop = asyncio.get_event_loop()
+            mqtt_client = init_mqtt_client(
+                db_session_factory=async_session_factory,
+                event_loop=loop,
+            )
+            if mqtt_client:
+                logger.info(
+                    "Fundamentum MQTT client initialized",
+                    broker=settings.mqtt_broker_host,
+                )
+        except Exception as e:
+            logger.warning("Failed to initialize MQTT client", error=str(e))
+
     yield
+
     # Shutdown
-    # TODO: Close connections gracefully
+    logger.info("Shutting down ERIOP application")
+    shutdown_mqtt_client()
 
 
 fastapi_app = FastAPI(
     title="ERIOP API",
     description="Emergency Response IoT Platform - Tactical and Strategic Information System",
     version="0.1.0",
-    docs_url="/api/docs" if settings.debug else None,
-    redoc_url="/api/redoc" if settings.debug else None,
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
     lifespan=lifespan,
 )
 

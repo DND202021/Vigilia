@@ -266,20 +266,136 @@ async def acknowledge_alert(
 
 
 @router.post("/{alert_id}/dismiss", response_model=AlertResponse)
-async def dismiss_alert(alert_id: str, data: AlertDismiss) -> AlertResponse:
+async def dismiss_alert(
+    alert_id: str,
+    data: AlertDismiss,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> AlertResponse:
     """Dismiss an alert with reason."""
-    # TODO: Implement alert dismissal
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Alert dismissal not yet implemented",
-    )
+    try:
+        alert_uuid = uuid.UUID(alert_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid alert ID format",
+        )
+
+    query = select(AlertModel).where(AlertModel.id == alert_uuid)
+    result = await db.execute(query)
+    alert = result.scalar_one_or_none()
+
+    if not alert:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Alert not found",
+        )
+
+    if alert.status == AlertStatusModel.DISMISSED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Alert is already dismissed",
+        )
+
+    alert.status = AlertStatusModel.DISMISSED
+    alert.dismissed_by_id = current_user.id
+    alert.dismissal_reason = data.reason
+
+    await db.commit()
+    await db.refresh(alert)
+
+    response = alert_to_response(alert)
+    await emit_alert_updated(response.model_dump(mode="json"))
+
+    return response
+
+
+class CreateIncidentFromAlertRequest(BaseModel):
+    """Request to create incident from alert."""
+
+    title: str | None = None
+    category: str | None = None
+    priority: int | None = None
 
 
 @router.post("/{alert_id}/create-incident")
-async def create_incident_from_alert(alert_id: str) -> dict[str, str]:
+async def create_incident_from_alert(
+    alert_id: str,
+    request: CreateIncidentFromAlertRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
     """Create an incident from an alert."""
-    # TODO: Implement incident creation from alert
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Incident creation from alert not yet implemented",
+    from app.services.alert_to_incident import AlertToIncidentService
+    from app.models.incident import IncidentCategory, IncidentPriority
+    from app.api.incidents import incident_to_response
+
+    try:
+        alert_uuid = uuid.UUID(alert_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid alert ID format",
+        )
+
+    # Check user has agency
+    if not current_user.agency_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User must belong to an agency to create incidents",
+        )
+
+    query = select(AlertModel).where(AlertModel.id == alert_uuid)
+    result = await db.execute(query)
+    alert = result.scalar_one_or_none()
+
+    if not alert:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Alert not found",
+        )
+
+    # Check if alert already has an incident
+    if alert.incidents:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Alert already has a linked incident",
+        )
+
+    # Parse overrides if provided
+    category_override = None
+    priority_override = None
+
+    if request:
+        if request.category:
+            try:
+                category_override = IncidentCategory(request.category)
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid category: {request.category}",
+                )
+
+        if request.priority:
+            try:
+                priority_override = IncidentPriority(request.priority)
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid priority: {request.priority}",
+                )
+
+    service = AlertToIncidentService(db)
+    incident = await service.convert_to_incident(
+        alert=alert,
+        user=current_user,
+        title_override=request.title if request else None,
+        category_override=category_override,
+        priority_override=priority_override,
     )
+
+    return {
+        "message": "Incident created from alert",
+        "incident_id": str(incident.id),
+        "incident_number": incident.incident_number,
+    }

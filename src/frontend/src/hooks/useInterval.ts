@@ -23,7 +23,7 @@ export function useInterval(callback: () => void, delay: number | null): void {
  * usePolling Hook - Polls data at regular intervals
  */
 export function usePolling(
-  fetchFn: () => Promise<void>,
+  fetchFn: () => void | Promise<void>,
   intervalMs: number,
   enabled: boolean = true
 ): void {

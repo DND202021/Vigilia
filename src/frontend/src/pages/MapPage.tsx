@@ -2,7 +2,7 @@
  * Tactical Map Page
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -10,7 +10,7 @@ import { useIncidentStore } from '../stores/incidentStore';
 import { useResourceStore } from '../stores/resourceStore';
 import { useAlertStore } from '../stores/alertStore';
 import { usePolling } from '../hooks/useInterval';
-import { Card, Badge, Button, Spinner } from '../components/ui';
+import { Badge } from '../components/ui';
 import {
   getPriorityLabel,
   getPriorityBgColor,
@@ -154,7 +154,6 @@ export function MapPage() {
                 {incidentsWithCoords.slice(0, 10).map((incident) => (
                   <ItemListCard
                     key={incident.id}
-                    type="incident"
                     title={incident.incident_number}
                     subtitle={incident.title}
                     badge={
@@ -185,7 +184,6 @@ export function MapPage() {
                 {alertsWithCoords.slice(0, 10).map((alert) => (
                   <ItemListCard
                     key={alert.id}
-                    type="alert"
                     title={alert.title}
                     subtitle={alert.source}
                     badge={
@@ -401,7 +399,6 @@ function LayerToggle({ label, count, color, enabled, onChange }: LayerToggleProp
 }
 
 interface ItemListCardProps {
-  type: string;
   title: string;
   subtitle: string;
   badge: React.ReactNode;
@@ -410,7 +407,6 @@ interface ItemListCardProps {
 }
 
 function ItemListCard({
-  type,
   title,
   subtitle,
   badge,

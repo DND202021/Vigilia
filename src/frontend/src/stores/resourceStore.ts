@@ -27,7 +27,7 @@ interface ResourceStore {
   handleResourceUpdate: (resource: Resource) => void;
 }
 
-export const useResourceStore = create<ResourceStore>((set, get) => ({
+export const useResourceStore = create<ResourceStore>((set) => ({
   resources: [],
   availableResources: [],
   selectedResource: null,

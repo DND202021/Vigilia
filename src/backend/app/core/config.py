@@ -44,10 +44,11 @@ class Settings(BaseSettings):
         return v
 
     # MQTT (Fundamentum)
-    mqtt_broker_host: str = "localhost"
+    mqtt_broker_host: str = ""  # Empty = disabled
     mqtt_broker_port: int = 1883
     mqtt_username: str = ""
     mqtt_password: str = ""
+    mqtt_topic_prefix: str = "fundamentum/alerts"
 
     # CORS - accepts comma-separated string or JSON array
     cors_origins_str: str = "http://localhost:3000,http://localhost:5173"

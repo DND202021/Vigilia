@@ -139,6 +139,26 @@ export const authApi = {
   },
 };
 
+// Helper to transform incident data (flatten location)
+interface ApiIncident extends Omit<Incident, 'latitude' | 'longitude' | 'address'> {
+  location?: {
+    latitude: number;
+    longitude: number;
+    address?: string;
+    building_info?: string;
+  };
+  latitude?: number;
+  longitude?: number;
+  address?: string;
+}
+
+const transformIncident = (data: ApiIncident): Incident => ({
+  ...data,
+  latitude: data.location?.latitude ?? data.latitude,
+  longitude: data.location?.longitude ?? data.longitude,
+  address: data.location?.address ?? data.address,
+});
+
 // Incidents API
 export const incidentsApi = {
   list: async (params?: {
@@ -148,46 +168,49 @@ export const incidentsApi = {
     page?: number;
     page_size?: number;
   }): Promise<PaginatedResponse<Incident>> => {
-    const response = await api.get<PaginatedResponse<Incident>>('/incidents', { params });
-    return response.data;
+    const response = await api.get<PaginatedResponse<ApiIncident>>('/incidents', { params });
+    return {
+      ...response.data,
+      items: response.data.items.map(transformIncident),
+    };
   },
 
   getActive: async (): Promise<Incident[]> => {
-    const response = await api.get<Incident[]>('/incidents/active');
-    return response.data;
+    const response = await api.get<ApiIncident[]>('/incidents/active');
+    return response.data.map(transformIncident);
   },
 
   get: async (id: string): Promise<Incident> => {
-    const response = await api.get<Incident>(`/incidents/${id}`);
-    return response.data;
+    const response = await api.get<ApiIncident>(`/incidents/${id}`);
+    return transformIncident(response.data);
   },
 
   create: async (data: IncidentCreateRequest): Promise<Incident> => {
-    const response = await api.post<Incident>('/incidents', data);
-    return response.data;
+    const response = await api.post<ApiIncident>('/incidents', data);
+    return transformIncident(response.data);
   },
 
   update: async (id: string, data: IncidentUpdateRequest): Promise<Incident> => {
-    const response = await api.patch<Incident>(`/incidents/${id}`, data);
-    return response.data;
+    const response = await api.patch<ApiIncident>(`/incidents/${id}`, data);
+    return transformIncident(response.data);
   },
 
   updateStatus: async (id: string, status: string, notes?: string): Promise<Incident> => {
-    const response = await api.post<Incident>(`/incidents/${id}/status`, { status, notes });
-    return response.data;
+    const response = await api.post<ApiIncident>(`/incidents/${id}/status`, { status, notes });
+    return transformIncident(response.data);
   },
 
   assignUnit: async (id: string, unitId: string): Promise<Incident> => {
-    const response = await api.post<Incident>(`/incidents/${id}/assign`, { unit_id: unitId });
-    return response.data;
+    const response = await api.post<ApiIncident>(`/incidents/${id}/assign`, { unit_id: unitId });
+    return transformIncident(response.data);
   },
 
   addTimeline: async (id: string, eventType: string, description: string): Promise<Incident> => {
-    const response = await api.post<Incident>(`/incidents/${id}/timeline`, {
+    const response = await api.post<ApiIncident>(`/incidents/${id}/timeline`, {
       event_type: eventType,
       description,
     });
-    return response.data;
+    return transformIncident(response.data);
   },
 };
 

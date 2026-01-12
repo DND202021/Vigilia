@@ -19,7 +19,6 @@ import {
 } from '../components/ui';
 import {
   formatDate,
-  formatRelativeTime,
   getPriorityLabel,
   getPriorityBgColor,
   getPriorityColor,

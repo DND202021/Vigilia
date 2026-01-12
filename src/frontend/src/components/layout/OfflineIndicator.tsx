@@ -4,10 +4,9 @@
 
 import { useOffline, useServiceWorker } from '../../hooks/useOffline';
 import { Button } from '../ui';
-import { cn, formatRelativeTime } from '../../utils';
 
 export function OfflineIndicator() {
-  const { isOnline, isSyncing, pendingChanges, lastSyncTime, error, triggerSync } = useOffline();
+  const { isOnline, isSyncing, pendingChanges, error, triggerSync } = useOffline();
   const { updateAvailable, updateServiceWorker } = useServiceWorker();
 
   // Update available banner

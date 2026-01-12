@@ -126,6 +126,9 @@ class Incident(Base, TimestampMixin):
         nullable=True,
     )
 
+    # Resolution information
+    resolution_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # Assigned units (stored as JSON array of resource IDs)
     assigned_units: Mapped[list | None] = mapped_column(JSON, nullable=True)
 

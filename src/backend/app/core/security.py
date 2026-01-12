@@ -74,6 +74,28 @@ def create_refresh_token(
     return jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
 
 
+def create_mfa_temp_token(
+    subject: str,
+    expires_delta: timedelta | None = None,
+) -> str:
+    """Create a temporary token for MFA verification.
+
+    This token is short-lived and only valid for completing MFA.
+    """
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+    to_encode = {
+        "sub": subject,
+        "exp": expire,
+        "type": "mfa_pending",
+    }
+
+    return jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
+
+
 def decode_token(token: str) -> dict[str, Any] | None:
     """Decode and validate a JWT token."""
     try:

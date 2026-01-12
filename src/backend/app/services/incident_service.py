@@ -286,24 +286,26 @@ class IncidentService:
             raise IncidentError(f"Incident {incident_id} not found")
 
         # Increase priority if not specified
-        if new_priority is None:
-            current_value = incident.priority.value
-            if current_value > 1:
-                new_priority = IncidentPriority(current_value - 1)
-            else:
-                new_priority = incident.priority
+        # Note: incident.priority is stored as int in the database
+        current_priority_value = incident.priority
+        old_priority_enum = IncidentPriority(current_priority_value)
 
-        old_priority = incident.priority
-        incident.priority = new_priority
+        if new_priority is None:
+            if current_priority_value > 1:
+                new_priority = IncidentPriority(current_priority_value - 1)
+            else:
+                new_priority = old_priority_enum
+
+        incident.priority = new_priority.value
 
         # Add timeline event
         timeline_events = list(incident.timeline_events or [])
         timeline_events.append(
             self._create_timeline_event(
                 event_type="escalated",
-                description=f"Incident escalated from {old_priority.name} to {new_priority.name}: {reason}",
+                description=f"Incident escalated from {old_priority_enum.name} to {new_priority.name}: {reason}",
                 user=escalated_by,
-                metadata={"reason": reason, "old_priority": old_priority.value, "new_priority": new_priority.value},
+                metadata={"reason": reason, "old_priority": old_priority_enum.value, "new_priority": new_priority.value},
             )
         )
         incident.timeline_events = timeline_events

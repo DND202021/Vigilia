@@ -2,7 +2,6 @@
  * Dashboard Page
  */
 
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useIncidentStore } from '../stores/incidentStore';
 import { useAlertStore } from '../stores/alertStore';
@@ -11,14 +10,12 @@ import { usePolling } from '../hooks/useInterval';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Spinner } from '../components/ui';
 import {
   formatRelativeTime,
-  getPriorityLabel,
   getPriorityBgColor,
   getPriorityColor,
   getSeverityLabel,
   getSeverityBgColor,
   getIncidentTypeLabel,
   getAlertTypeLabel,
-  getResourceStatusLabel,
   cn,
 } from '../utils';
 import type { Incident, Alert, Resource } from '../types';
@@ -26,30 +23,14 @@ import type { Incident, Alert, Resource } from '../types';
 const POLL_INTERVAL = 30000; // 30 seconds
 
 export function DashboardPage() {
-  const {
-    activeIncidents,
-    fetchActiveIncidents,
-    isLoading: incidentsLoading,
-  } = useIncidentStore();
-
-  const {
-    pendingAlerts,
-    fetchPendingAlerts,
-    isLoading: alertsLoading,
-  } = useAlertStore();
-
-  const {
-    availableResources,
-    fetchAvailableResources,
-    isLoading: resourcesLoading,
-  } = useResourceStore();
+  const { activeIncidents, fetchActiveIncidents, isLoading: incidentsLoading } = useIncidentStore();
+  const { pendingAlerts, fetchPendingAlerts, isLoading: alertsLoading } = useAlertStore();
+  const { availableResources, fetchAvailableResources, isLoading: resourcesLoading } = useResourceStore();
 
   // Initial fetch and polling
   usePolling(fetchActiveIncidents, POLL_INTERVAL);
   usePolling(fetchPendingAlerts, POLL_INTERVAL);
   usePolling(fetchAvailableResources, POLL_INTERVAL);
-
-  const isLoading = incidentsLoading || alertsLoading || resourcesLoading;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
