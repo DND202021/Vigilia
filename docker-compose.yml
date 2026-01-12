@@ -79,7 +79,7 @@ services:
       - DEBUG=true
       - ENVIRONMENT=development
     ports:
-      - "8000:8000"
+      - "8001:8000"
     volumes:
       - ./src/backend:/app
     depends_on:
@@ -96,12 +96,12 @@ services:
       dockerfile: Dockerfile.dev
     container_name: eriop-frontend
     ports:
-      - "3000:3000"
+      - "3002:3000"
     volumes:
       - ./src/frontend:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_URL=http://localhost:8001
     depends_on:
       - backend
 
