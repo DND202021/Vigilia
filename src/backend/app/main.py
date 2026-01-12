@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import router as api_router
 from app.core.config import settings
-from app.services.socketio import socket_app
+from app.services.socketio import sio, create_combined_app
 
 
 @asynccontextmanager
@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # TODO: Close connections gracefully
 
 
-app = FastAPI(
+fastapi_app = FastAPI(
     title="ERIOP API",
     description="Emergency Response IoT Platform - Tactical and Strategic Information System",
     version="0.1.0",
@@ -33,7 +33,7 @@ app = FastAPI(
 )
 
 # CORS middleware
-app.add_middleware(
+fastapi_app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
@@ -42,13 +42,15 @@ app.add_middleware(
 )
 
 # Include API routes
-app.include_router(api_router, prefix="/api/v1")
-
-# Mount Socket.IO app
-app.mount("/socket.io", socket_app)
+fastapi_app.include_router(api_router, prefix="/api/v1")
 
 
-@app.get("/health")
+@fastapi_app.get("/health")
 async def health_check() -> dict[str, str]:
     """Health check endpoint for Kubernetes probes."""
     return {"status": "healthy", "version": "0.1.0"}
+
+
+# Create combined ASGI app with Socket.IO wrapping FastAPI
+# This is what gunicorn/uvicorn should serve
+app = create_combined_app(fastapi_app)

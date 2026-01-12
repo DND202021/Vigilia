@@ -6,7 +6,7 @@ from app.services.resource_service import ResourceService, ResourceError
 from app.services.alert_service import AlertService, AlertError
 from app.services.socketio import (
     sio,
-    socket_app,
+    create_combined_app,
     emit_incident_created,
     emit_incident_updated,
     emit_alert_created,
@@ -24,7 +24,7 @@ __all__ = [
     "AlertService",
     "AlertError",
     "sio",
-    "socket_app",
+    "create_combined_app",
     "emit_incident_created",
     "emit_incident_updated",
     "emit_alert_created",

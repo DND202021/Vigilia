@@ -11,13 +11,18 @@ logger = structlog.get_logger()
 # Create Socket.IO server with ASGI support
 sio = socketio.AsyncServer(
     async_mode="asgi",
-    cors_allowed_origins=settings.cors_origins,
-    logger=False,
-    engineio_logger=False,
+    cors_allowed_origins="*",  # Allow all origins for Socket.IO
+    logger=True,
+    engineio_logger=True,
 )
 
-# Create ASGI app to mount in FastAPI
-socket_app = socketio.ASGIApp(sio, socketio_path="socket.io")
+# socket_app will be set after FastAPI app is created
+socket_app = None
+
+
+def create_combined_app(fastapi_app: Any) -> Any:
+    """Wrap FastAPI app with Socket.IO ASGI app."""
+    return socketio.ASGIApp(sio, other_asgi_app=fastapi_app)
 
 # Store connected clients with their user info
 connected_clients: dict[str, dict[str, Any]] = {}
