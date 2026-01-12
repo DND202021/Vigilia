@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # PostgreSQL Database
   postgres:
-    image: postgres:15-alpine
+    image: timescale/timescaledb:latest-pg15
     container_name: eriop-postgres
     environment:
       POSTGRES_USER: eriop
