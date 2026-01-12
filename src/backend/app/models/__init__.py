@@ -7,6 +7,14 @@ from app.models.incident import Incident, IncidentStatus, IncidentPriority, Inci
 from app.models.resource import Resource, ResourceType, ResourceStatus, Personnel, Vehicle, Equipment
 from app.models.alert import Alert, AlertSeverity, AlertStatus, AlertSource
 from app.models.audit import AuditLog, AuditAction
+from app.models.building import (
+    Building,
+    BuildingType,
+    OccupancyType,
+    ConstructionType,
+    HazardLevel,
+    FloorPlan,
+)
 
 __all__ = [
     "Base",
@@ -30,4 +38,10 @@ __all__ = [
     "AlertSource",
     "AuditLog",
     "AuditAction",
+    "Building",
+    "BuildingType",
+    "OccupancyType",
+    "ConstructionType",
+    "HazardLevel",
+    "FloorPlan",
 ]

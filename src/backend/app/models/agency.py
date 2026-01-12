@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.models.user import User
     from app.models.incident import Incident
     from app.models.resource import Resource
+    from app.models.building import Building
 
 
 class Agency(Base, TimestampMixin, SoftDeleteMixin):
@@ -42,6 +43,7 @@ class Agency(Base, TimestampMixin, SoftDeleteMixin):
     users: Mapped[list["User"]] = relationship("User", back_populates="agency")
     incidents: Mapped[list["Incident"]] = relationship("Incident", back_populates="agency")
     resources: Mapped[list["Resource"]] = relationship("Resource", back_populates="agency")
+    buildings: Mapped[list["Building"]] = relationship("Building", back_populates="agency")
 
     def __repr__(self) -> str:
         return f"<Agency(id={self.id}, code={self.code}, name={self.name})>"

@@ -18,6 +18,7 @@ from app.models import (
     AlertSeverity, AlertStatus, AlertSource,
     IncidentStatus, IncidentPriority, IncidentCategory,
     ResourceType, ResourceStatus,
+    Building, BuildingType, FloorPlan,
 )
 from app.core.deps import get_db
 from app.core.security import get_password_hash

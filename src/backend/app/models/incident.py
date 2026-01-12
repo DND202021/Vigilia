@@ -15,6 +15,7 @@ from app.models.base import Base, TimestampMixin
 if TYPE_CHECKING:
     from app.models.agency import Agency
     from app.models.alert import Alert
+    from app.models.building import Building
 
 
 class IncidentStatus(str, Enum):
@@ -154,6 +155,14 @@ class Incident(Base, TimestampMixin):
         nullable=True,
     )
     source_alert: Mapped["Alert | None"] = relationship("Alert", back_populates="incidents")
+
+    # Associated building (for building-specific incidents)
+    building_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("buildings.id"),
+        nullable=True,
+    )
+    building: Mapped["Building | None"] = relationship("Building", backref="incidents")
 
     # Audit trail stored as JSON
     timeline_events: Mapped[list | None] = mapped_column(JSON, nullable=True)

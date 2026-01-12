@@ -204,3 +204,193 @@ export interface WebSocketEvent {
   payload: unknown;
   timestamp: string;
 }
+
+// Building Types
+export interface Building {
+  id: string;
+  name: string;
+  civic_number?: string;
+  street_name: string;
+  street_type?: string;
+  unit_number?: string;
+  city: string;
+  province_state: string;
+  postal_code?: string;
+  country: string;
+  full_address: string;
+  latitude: number;
+  longitude: number;
+  building_type: BuildingType;
+  occupancy_type?: OccupancyType;
+  construction_type: ConstructionType;
+  year_built?: number;
+  year_renovated?: number;
+  total_floors: number;
+  basement_levels: number;
+  total_area_sqm?: number;
+  building_height_m?: number;
+  max_occupancy?: number;
+  hazard_level: HazardLevel;
+  has_sprinkler_system: boolean;
+  has_fire_alarm: boolean;
+  has_standpipe: boolean;
+  has_elevator: boolean;
+  elevator_count?: number;
+  has_generator: boolean;
+  primary_entrance?: string;
+  secondary_entrances?: string[];
+  roof_access?: string;
+  staging_area?: string;
+  key_box_location?: string;
+  knox_box: boolean;
+  has_hazmat: boolean;
+  hazmat_details?: HazmatDetail[];
+  utilities_info?: Record<string, string>;
+  owner_name?: string;
+  owner_phone?: string;
+  owner_email?: string;
+  manager_name?: string;
+  manager_phone?: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  special_needs_occupants: boolean;
+  special_needs_details?: string;
+  animals_present: boolean;
+  animals_details?: string;
+  security_features?: string[];
+  pre_incident_plan?: string;
+  tactical_notes?: string;
+  bim_file_url?: string;
+  has_bim_data: boolean;
+  external_id?: string;
+  data_source?: string;
+  is_verified: boolean;
+  verified_at?: string;
+  agency_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type BuildingType =
+  | 'residential_single'
+  | 'residential_multi'
+  | 'commercial'
+  | 'industrial'
+  | 'institutional'
+  | 'healthcare'
+  | 'educational'
+  | 'government'
+  | 'religious'
+  | 'mixed_use'
+  | 'parking'
+  | 'warehouse'
+  | 'high_rise'
+  | 'other';
+
+export type OccupancyType =
+  | 'assembly'
+  | 'business'
+  | 'educational'
+  | 'factory'
+  | 'high_hazard'
+  | 'institutional'
+  | 'mercantile'
+  | 'residential'
+  | 'storage'
+  | 'utility';
+
+export type ConstructionType =
+  | 'type_i'
+  | 'type_ii'
+  | 'type_iii'
+  | 'type_iv'
+  | 'type_v'
+  | 'unknown';
+
+export type HazardLevel = 'low' | 'moderate' | 'high' | 'extreme';
+
+export interface HazmatDetail {
+  material: string;
+  location: string;
+  quantity?: string;
+}
+
+export interface FloorPlan {
+  id: string;
+  building_id: string;
+  floor_number: number;
+  floor_name?: string;
+  plan_file_url?: string;
+  plan_thumbnail_url?: string;
+  file_type?: string;
+  floor_area_sqm?: number;
+  ceiling_height_m?: number;
+  key_locations?: FloorKeyLocation[];
+  emergency_exits?: FloorKeyLocation[];
+  fire_equipment?: FloorKeyLocation[];
+  hazards?: FloorKeyLocation[];
+  notes?: string;
+  has_bim_data: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FloorKeyLocation {
+  type: string;
+  name: string;
+  x?: number;
+  y?: number;
+  description?: string;
+}
+
+export interface BuildingCreateRequest {
+  name: string;
+  civic_number?: string;
+  street_name: string;
+  street_type?: string;
+  unit_number?: string;
+  city: string;
+  province_state: string;
+  postal_code?: string;
+  country?: string;
+  latitude: number;
+  longitude: number;
+  building_type?: BuildingType;
+  occupancy_type?: OccupancyType;
+  construction_type?: ConstructionType;
+  year_built?: number;
+  total_floors?: number;
+  basement_levels?: number;
+  hazard_level?: HazardLevel;
+  has_sprinkler_system?: boolean;
+  has_fire_alarm?: boolean;
+  has_elevator?: boolean;
+  has_hazmat?: boolean;
+  tactical_notes?: string;
+}
+
+export interface BuildingUpdateRequest {
+  name?: string;
+  building_type?: BuildingType;
+  hazard_level?: HazardLevel;
+  has_sprinkler_system?: boolean;
+  has_fire_alarm?: boolean;
+  has_standpipe?: boolean;
+  has_elevator?: boolean;
+  has_generator?: boolean;
+  has_hazmat?: boolean;
+  primary_entrance?: string;
+  staging_area?: string;
+  tactical_notes?: string;
+}
+
+export interface BuildingStats {
+  total: number;
+  verified: number;
+  unverified: number;
+  by_type: Record<string, number>;
+  by_hazard_level: Record<string, number>;
+  with_hazmat: number;
+  with_sprinkler: number;
+  high_rise: number;
+}

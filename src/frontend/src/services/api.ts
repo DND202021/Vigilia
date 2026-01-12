@@ -19,6 +19,11 @@ import type {
   AlertCreateIncidentRequest,
   PaginatedResponse,
   DashboardStats,
+  Building,
+  BuildingCreateRequest,
+  BuildingUpdateRequest,
+  BuildingStats,
+  FloorPlan,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
@@ -310,6 +315,89 @@ export const dashboardApi = {
 export const healthApi = {
   check: async (): Promise<{ status: string; timestamp: string }> => {
     const response = await api.get('/health');
+    return response.data;
+  },
+};
+
+// Buildings API
+export const buildingsApi = {
+  list: async (params?: {
+    building_type?: string;
+    city?: string;
+    search?: string;
+    near_lat?: number;
+    near_lng?: number;
+    radius_km?: number;
+    page?: number;
+    page_size?: number;
+  }): Promise<PaginatedResponse<Building>> => {
+    const response = await api.get<PaginatedResponse<Building>>('/buildings', { params });
+    return response.data;
+  },
+
+  search: async (query: string, limit?: number): Promise<Building[]> => {
+    const response = await api.get<Building[]>('/buildings/search', {
+      params: { q: query, limit },
+    });
+    return response.data;
+  },
+
+  getStats: async (): Promise<BuildingStats> => {
+    const response = await api.get<BuildingStats>('/buildings/stats');
+    return response.data;
+  },
+
+  getNearLocation: async (latitude: number, longitude: number, radiusKm?: number): Promise<Building[]> => {
+    const response = await api.get<Building[]>(`/buildings/near/${latitude}/${longitude}`, {
+      params: radiusKm ? { radius_km: radiusKm } : undefined,
+    });
+    return response.data;
+  },
+
+  get: async (id: string): Promise<Building> => {
+    const response = await api.get<Building>(`/buildings/${id}`);
+    return response.data;
+  },
+
+  create: async (data: BuildingCreateRequest): Promise<Building> => {
+    const response = await api.post<Building>('/buildings', data);
+    return response.data;
+  },
+
+  update: async (id: string, data: BuildingUpdateRequest): Promise<Building> => {
+    const response = await api.patch<Building>(`/buildings/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/buildings/${id}`);
+  },
+
+  verify: async (id: string): Promise<Building> => {
+    const response = await api.post<Building>(`/buildings/${id}/verify`);
+    return response.data;
+  },
+
+  getFloorPlans: async (buildingId: string): Promise<FloorPlan[]> => {
+    const response = await api.get<FloorPlan[]>(`/buildings/${buildingId}/floors`);
+    return response.data;
+  },
+
+  addFloorPlan: async (buildingId: string, data: {
+    floor_number: number;
+    floor_name?: string;
+    plan_file_url?: string;
+    notes?: string;
+  }): Promise<FloorPlan> => {
+    const response = await api.post<FloorPlan>(`/buildings/${buildingId}/floors`, data);
+    return response.data;
+  },
+
+  importBIM: async (buildingId: string, bimData: Record<string, unknown>, bimFileUrl?: string): Promise<Building> => {
+    const response = await api.post<Building>(`/buildings/${buildingId}/bim`, {
+      bim_data: bimData,
+      bim_file_url: bimFileUrl,
+    });
     return response.data;
   },
 };

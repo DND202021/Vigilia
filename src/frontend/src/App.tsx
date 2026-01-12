@@ -16,6 +16,7 @@ const IncidentsPage = lazy(() => import('./pages/IncidentsPage').then(m => ({ de
 const IncidentDetailPage = lazy(() => import('./pages/IncidentDetailPage').then(m => ({ default: m.IncidentDetailPage })));
 const AlertsPage = lazy(() => import('./pages/AlertsPage').then(m => ({ default: m.AlertsPage })));
 const ResourcesPage = lazy(() => import('./pages/ResourcesPage').then(m => ({ default: m.ResourcesPage })));
+const BuildingsPage = lazy(() => import('./pages/BuildingsPage').then(m => ({ default: m.BuildingsPage })));
 const MapPage = lazy(() => import('./pages/MapPage').then(m => ({ default: m.MapPage })));
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
@@ -109,6 +110,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ResourcesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/buildings"
+            element={
+              <ProtectedRoute>
+                <BuildingsPage />
               </ProtectedRoute>
             }
           />

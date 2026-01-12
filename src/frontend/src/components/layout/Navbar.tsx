@@ -11,6 +11,7 @@ const navLinks = [
   { to: '/incidents', label: 'Incidents' },
   { to: '/alerts', label: 'Alerts' },
   { to: '/resources', label: 'Resources' },
+  { to: '/buildings', label: 'Buildings' },
   { to: '/map', label: 'Map' },
   { to: '/analytics', label: 'Analytics' },
 ];
