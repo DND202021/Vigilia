@@ -1,6 +1,7 @@
 """Incident Management API endpoints."""
 
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Annotated
 
@@ -13,6 +14,9 @@ from app.core.deps import get_db, get_current_active_user
 from app.models.user import User
 from app.models.incident import Incident as IncidentModel
 from app.models.incident import IncidentStatus as IncidentStatusModel
+from app.models.incident import IncidentCategory as IncidentCategoryModel
+from app.models.incident import IncidentPriority as IncidentPriorityModel
+from app.services.socketio import emit_incident_created, emit_incident_updated
 
 router = APIRouter()
 
@@ -128,14 +132,73 @@ def incident_to_response(inc: IncidentModel) -> IncidentResponse:
     )
 
 
-@router.post("/", response_model=IncidentResponse, status_code=status.HTTP_201_CREATED)
-async def create_incident(incident: IncidentCreate) -> IncidentResponse:
-    """Create a new incident."""
-    # TODO: Implement incident creation
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Incident creation not yet implemented",
+async def generate_incident_number(db: AsyncSession) -> str:
+    """Generate a unique incident number."""
+    today = datetime.now(timezone.utc)
+    prefix = today.strftime("%Y%m%d")
+
+    # Count incidents created today
+    start_of_day = today.replace(hour=0, minute=0, second=0, microsecond=0)
+    count_query = select(func.count()).select_from(IncidentModel).where(
+        IncidentModel.created_at >= start_of_day
     )
+    result = await db.execute(count_query)
+    count = (result.scalar() or 0) + 1
+
+    return f"INC-{prefix}-{count:04d}"
+
+
+@router.post("", response_model=IncidentResponse, status_code=status.HTTP_201_CREATED)
+async def create_incident(
+    incident: IncidentCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> IncidentResponse:
+    """Create a new incident."""
+    if not current_user.agency_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User must belong to an agency to create incidents",
+        )
+
+    # Generate incident number
+    incident_number = await generate_incident_number(db)
+
+    # Create new incident
+    new_incident = IncidentModel(
+        id=uuid.uuid4(),
+        incident_number=incident_number,
+        category=IncidentCategoryModel(incident.category.value),
+        priority=IncidentPriorityModel(incident.priority.value),
+        status=IncidentStatusModel.NEW,
+        title=incident.title,
+        description=incident.description,
+        latitude=incident.location.latitude,
+        longitude=incident.location.longitude,
+        address=incident.location.address,
+        building_info=incident.location.building_info,
+        reported_at=datetime.now(timezone.utc),
+        agency_id=current_user.agency_id,
+        source_alert_id=uuid.UUID(incident.source_alert_id) if incident.source_alert_id else None,
+        assigned_units=[],
+        timeline_events=[{
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "event": "created",
+            "user_id": str(current_user.id),
+            "details": f"Incident created by {current_user.full_name or current_user.email}",
+        }],
+    )
+
+    db.add(new_incident)
+    await db.commit()
+    await db.refresh(new_incident)
+
+    response = incident_to_response(new_incident)
+
+    # Emit real-time event
+    await emit_incident_created(response.model_dump(mode="json"))
+
+    return response
 
 
 @router.get("", response_model=PaginatedIncidentResponse)
@@ -204,23 +267,109 @@ async def get_active_incidents(
 
 
 @router.get("/{incident_id}", response_model=IncidentResponse)
-async def get_incident(incident_id: str) -> IncidentResponse:
+async def get_incident(
+    incident_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> IncidentResponse:
     """Get incident by ID."""
-    # TODO: Implement incident retrieval
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Incident retrieval not yet implemented",
-    )
+    try:
+        incident_uuid = uuid.UUID(incident_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid incident ID format",
+        )
+
+    query = select(IncidentModel).where(IncidentModel.id == incident_uuid)
+    result = await db.execute(query)
+    incident = result.scalar_one_or_none()
+
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident not found",
+        )
+
+    return incident_to_response(incident)
 
 
 @router.patch("/{incident_id}", response_model=IncidentResponse)
-async def update_incident(incident_id: str, update: IncidentUpdate) -> IncidentResponse:
+async def update_incident(
+    incident_id: str,
+    update: IncidentUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> IncidentResponse:
     """Update an incident."""
-    # TODO: Implement incident update
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Incident update not yet implemented",
-    )
+    try:
+        incident_uuid = uuid.UUID(incident_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid incident ID format",
+        )
+
+    query = select(IncidentModel).where(IncidentModel.id == incident_uuid)
+    result = await db.execute(query)
+    incident = result.scalar_one_or_none()
+
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident not found",
+        )
+
+    # Track changes for timeline
+    changes = []
+
+    if update.priority is not None and update.priority.value != incident.priority.value:
+        changes.append(f"priority changed from {incident.priority.value} to {update.priority.value}")
+        incident.priority = IncidentPriorityModel(update.priority.value)
+
+    if update.status is not None and update.status.value != incident.status.value:
+        changes.append(f"status changed from {incident.status.value} to {update.status.value}")
+        incident.status = IncidentStatusModel(update.status.value)
+
+        # Update timeline timestamps
+        now = datetime.now(timezone.utc)
+        if update.status == IncidentStatus.ASSIGNED and not incident.dispatched_at:
+            incident.dispatched_at = now
+        elif update.status == IncidentStatus.ON_SCENE and not incident.arrived_at:
+            incident.arrived_at = now
+        elif update.status == IncidentStatus.RESOLVED and not incident.resolved_at:
+            incident.resolved_at = now
+        elif update.status == IncidentStatus.CLOSED and not incident.closed_at:
+            incident.closed_at = now
+
+    if update.title is not None and update.title != incident.title:
+        changes.append(f"title updated")
+        incident.title = update.title
+
+    if update.description is not None and update.description != incident.description:
+        changes.append(f"description updated")
+        incident.description = update.description
+
+    # Add timeline event if changes were made
+    if changes:
+        timeline = incident.timeline_events or []
+        timeline.append({
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "event": "updated",
+            "user_id": str(current_user.id),
+            "details": "; ".join(changes),
+        })
+        incident.timeline_events = timeline
+
+    await db.commit()
+    await db.refresh(incident)
+
+    response = incident_to_response(incident)
+
+    # Emit real-time event
+    await emit_incident_updated(response.model_dump(mode="json"))
+
+    return response
 
 
 @router.post("/{incident_id}/assign")
