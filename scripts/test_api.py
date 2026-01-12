@@ -6,7 +6,7 @@ Run: python scripts/test_api.py [base_url]
 
 import sys
 import json
-import requests
+import httpx
 from dataclasses import dataclass
 from typing import Any
 
@@ -26,6 +26,7 @@ class APITester:
         self.token: str | None = None
         self.results: list[TestResult] = []
         self.created_incident_id: str | None = None
+        self.client = httpx.Client(timeout=30.0)
 
     def _request(
         self,
@@ -42,18 +43,17 @@ class APITester:
 
         url = f"{self.api_url}{endpoint}"
         try:
-            resp = requests.request(
+            resp = self.client.request(
                 method,
                 url,
                 json=data,
                 headers=headers,
-                timeout=30,
             )
             try:
                 return resp.status_code, resp.json()
             except json.JSONDecodeError:
                 return resp.status_code, resp.text
-        except requests.RequestException as e:
+        except httpx.RequestError as e:
             return 0, str(e)
 
     def test(
@@ -94,7 +94,7 @@ class APITester:
 
         # Health check
         print("\n[Health Check]")
-        resp = requests.get(f"{self.base_url}/health", timeout=10)
+        resp = self.client.get(f"{self.base_url}/health")
         if resp.status_code == 200:
             print(f"  ✓ Health check passed")
             self.results.append(TestResult("Health", True, 200))
