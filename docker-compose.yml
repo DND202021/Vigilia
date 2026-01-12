@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # PostgreSQL Database
   postgres:
-    image: postgres:16-alpine
+    image: postgres:15-alpine
     container_name: eriop-postgres
     environment:
       POSTGRES_USER: eriop
@@ -22,7 +22,7 @@ services:
 
   # TimescaleDB for IoT telemetry
   timescaledb:
-    image: timescale/timescaledb:latest-pg16
+    image: timescale/timescaledb:latest-pg15
     container_name: eriop-timescaledb
     environment:
       POSTGRES_USER: eriop
