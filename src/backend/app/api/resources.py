@@ -2,10 +2,13 @@
 
 from datetime import datetime
 from enum import Enum
+from typing import Any
+import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query
+from starlette import status as http_status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db, get_current_active_user
@@ -49,43 +52,6 @@ class Location(BaseModel):
     timestamp: datetime
 
 
-class PersonnelResponse(BaseModel):
-    """Personnel resource response."""
-
-    id: str
-    badge_number: str
-    full_name: str
-    role: str
-    status: ResourceStatus
-    current_location: Location | None
-    assigned_vehicle_id: str | None
-    agency_id: str
-
-
-class VehicleResponse(BaseModel):
-    """Vehicle resource response."""
-
-    id: str
-    call_sign: str
-    vehicle_type: str
-    status: ResourceStatus
-    current_location: Location | None
-    assigned_personnel: list[str] = []
-    agency_id: str
-
-
-class EquipmentResponse(BaseModel):
-    """Equipment resource response."""
-
-    id: str
-    name: str
-    equipment_type: str
-    serial_number: str | None
-    status: ResourceStatus
-    assigned_to: str | None
-    agency_id: str
-
-
 class ResourceResponse(BaseModel):
     """Generic resource response matching frontend Resource type."""
 
@@ -101,6 +67,34 @@ class ResourceResponse(BaseModel):
     current_incident_id: str | None = None
     last_status_update: str
 
+    model_config = {"from_attributes": True}
+
+
+class ResourceCreateRequest(BaseModel):
+    """Request to create a new resource."""
+
+    resource_type: ResourceType
+    name: str
+    call_sign: str | None = None
+    status: ResourceStatus = ResourceStatus.AVAILABLE
+    latitude: float | None = None
+    longitude: float | None = None
+    agency_id: str
+
+
+class ResourceStatusUpdate(BaseModel):
+    """Request to update resource status."""
+
+    status: ResourceStatus
+    incident_id: str | None = None
+
+
+class ResourceLocationUpdate(BaseModel):
+    """Request to update resource location."""
+
+    latitude: float = Field(..., ge=-90, le=90)
+    longitude: float = Field(..., ge=-180, le=180)
+
 
 class PaginatedResourceResponse(BaseModel):
     """Paginated resource response."""
@@ -112,115 +106,70 @@ class PaginatedResourceResponse(BaseModel):
     total_pages: int
 
 
-@router.get("/", response_model=PaginatedResourceResponse)
+def resource_to_response(resource: ResourceModel) -> ResourceResponse:
+    """Convert a database resource model to response."""
+    return ResourceResponse(
+        id=str(resource.id),
+        resource_type=ResourceType(resource.resource_type.value),
+        name=resource.name,
+        call_sign=resource.call_sign,
+        status=ResourceStatus(resource.status.value),
+        latitude=resource.current_latitude,
+        longitude=resource.current_longitude,
+        capabilities=[],
+        agency_id=str(resource.agency_id),
+        current_incident_id=None,
+        last_status_update=resource.updated_at.isoformat() if resource.updated_at else datetime.utcnow().isoformat(),
+    )
+
+
+@router.get("", response_model=PaginatedResourceResponse)
 async def list_resources(
     resource_type: ResourceType | None = None,
     status: ResourceStatus | None = None,
-    page: int = 1,
-    page_size: int = 50,
+    agency_id: str | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> PaginatedResourceResponse:
-    """List all resources with pagination."""
-    from sqlalchemy import func
-
-    query = select(ResourceModel)
+    """List all resources with optional filtering and pagination."""
+    query = select(ResourceModel).where(ResourceModel.deleted_at.is_(None))
 
     if resource_type:
         query = query.where(ResourceModel.resource_type == ResourceTypeModel(resource_type.value))
     if status:
         query = query.where(ResourceModel.status == ResourceStatusModel(status.value))
+    if agency_id:
+        try:
+            agency_uuid = uuid.UUID(agency_id)
+            query = query.where(ResourceModel.agency_id == agency_uuid)
+        except ValueError:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail="Invalid agency_id format",
+            )
 
-    # Get total count
+    # Count total
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
     # Apply pagination
-    offset = (page - 1) * page_size
-    query = query.offset(offset).limit(page_size)
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    query = query.order_by(ResourceModel.created_at.desc())
 
     result = await db.execute(query)
     resources = result.scalars().all()
 
-    items = [
-        ResourceResponse(
-            id=str(r.id),
-            resource_type=ResourceType(r.resource_type.value),
-            name=r.name,
-            call_sign=r.call_sign,
-            status=ResourceStatus(r.status.value),
-            latitude=r.current_latitude,
-            longitude=r.current_longitude,
-            capabilities=[],
-            agency_id=str(r.agency_id),
-            current_incident_id=None,
-            last_status_update=r.updated_at.isoformat(),
-        )
-        for r in resources
-    ]
-
     total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
 
     return PaginatedResourceResponse(
-        items=items,
+        items=[resource_to_response(r) for r in resources],
         total=total,
         page=page,
         page_size=page_size,
         total_pages=total_pages,
-    )
-
-
-@router.get("/personnel", response_model=list[PersonnelResponse])
-async def list_personnel(
-    status: ResourceStatus | None = None,
-    agency_id: str | None = None,
-) -> list[PersonnelResponse]:
-    """List personnel resources."""
-    # TODO: Implement personnel listing
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Personnel listing not yet implemented",
-    )
-
-
-@router.get("/vehicles", response_model=list[VehicleResponse])
-async def list_vehicles(
-    status: ResourceStatus | None = None,
-    agency_id: str | None = None,
-) -> list[VehicleResponse]:
-    """List vehicle resources."""
-    # TODO: Implement vehicle listing
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Vehicle listing not yet implemented",
-    )
-
-
-@router.get("/equipment", response_model=list[EquipmentResponse])
-async def list_equipment(
-    status: ResourceStatus | None = None,
-    agency_id: str | None = None,
-) -> list[EquipmentResponse]:
-    """List equipment resources."""
-    # TODO: Implement equipment listing
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Equipment listing not yet implemented",
-    )
-
-
-@router.patch("/{resource_type}/{resource_id}/status")
-async def update_resource_status(
-    resource_type: ResourceType,
-    resource_id: str,
-    status: ResourceStatus,
-) -> dict[str, str]:
-    """Update resource status."""
-    # TODO: Implement status update
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Status update not yet implemented",
     )
 
 
@@ -231,9 +180,9 @@ async def get_available_resources(
     current_user: User = Depends(get_current_active_user),
 ) -> list[ResourceResponse]:
     """Get available resources as a flat list."""
-    # Query available resources
     query = select(ResourceModel).where(
-        ResourceModel.status == ResourceStatusModel.AVAILABLE
+        ResourceModel.status == ResourceStatusModel.AVAILABLE,
+        ResourceModel.deleted_at.is_(None),
     )
 
     if resource_type:
@@ -242,22 +191,189 @@ async def get_available_resources(
     db_result = await db.execute(query)
     resources = db_result.scalars().all()
 
-    result = []
-    for resource in resources:
-        result.append(
-            ResourceResponse(
-                id=str(resource.id),
-                resource_type=ResourceType(resource.resource_type.value),
-                name=resource.name,
-                call_sign=resource.call_sign,
-                status=ResourceStatus(resource.status.value),
-                latitude=resource.current_latitude,
-                longitude=resource.current_longitude,
-                capabilities=[],
-                agency_id=str(resource.agency_id),
-                current_incident_id=None,
-                last_status_update=resource.updated_at.isoformat(),
-            )
+    return [resource_to_response(r) for r in resources]
+
+
+@router.get("/{resource_id}", response_model=ResourceResponse)
+async def get_resource(
+    resource_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> ResourceResponse:
+    """Get a single resource by ID."""
+    try:
+        resource_uuid = uuid.UUID(resource_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid resource_id format",
         )
 
-    return result
+    query = select(ResourceModel).where(
+        ResourceModel.id == resource_uuid,
+        ResourceModel.deleted_at.is_(None),
+    )
+    result = await db.execute(query)
+    resource = result.scalar_one_or_none()
+
+    if not resource:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Resource not found",
+        )
+
+    return resource_to_response(resource)
+
+
+@router.post("", response_model=ResourceResponse, status_code=http_status.HTTP_201_CREATED)
+async def create_resource(
+    data: ResourceCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> ResourceResponse:
+    """Create a new resource."""
+    try:
+        agency_uuid = uuid.UUID(data.agency_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid agency_id format",
+        )
+
+    resource = ResourceModel(
+        resource_type=ResourceTypeModel(data.resource_type.value),
+        name=data.name,
+        call_sign=data.call_sign,
+        status=ResourceStatusModel(data.status.value),
+        current_latitude=data.latitude,
+        current_longitude=data.longitude,
+        agency_id=agency_uuid,
+        location_updated_at=datetime.utcnow() if data.latitude and data.longitude else None,
+    )
+
+    db.add(resource)
+    await db.commit()
+    await db.refresh(resource)
+
+    # Emit Socket.IO event for real-time updates
+    from app.services.socketio import emit_resource_updated
+    import asyncio
+    asyncio.create_task(emit_resource_updated(resource_to_response(resource).model_dump()))
+
+    return resource_to_response(resource)
+
+
+@router.patch("/{resource_id}/status", response_model=ResourceResponse)
+async def update_resource_status(
+    resource_id: str,
+    data: ResourceStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> ResourceResponse:
+    """Update resource status."""
+    try:
+        resource_uuid = uuid.UUID(resource_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid resource_id format",
+        )
+
+    query = select(ResourceModel).where(
+        ResourceModel.id == resource_uuid,
+        ResourceModel.deleted_at.is_(None),
+    )
+    result = await db.execute(query)
+    resource = result.scalar_one_or_none()
+
+    if not resource:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Resource not found",
+        )
+
+    resource.status = ResourceStatusModel(data.status.value)
+    await db.commit()
+    await db.refresh(resource)
+
+    # Emit Socket.IO event for real-time updates
+    from app.services.socketio import emit_resource_updated
+    import asyncio
+    asyncio.create_task(emit_resource_updated(resource_to_response(resource).model_dump()))
+
+    return resource_to_response(resource)
+
+
+@router.patch("/{resource_id}/location", response_model=ResourceResponse)
+async def update_resource_location(
+    resource_id: str,
+    data: ResourceLocationUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> ResourceResponse:
+    """Update resource location."""
+    try:
+        resource_uuid = uuid.UUID(resource_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid resource_id format",
+        )
+
+    query = select(ResourceModel).where(
+        ResourceModel.id == resource_uuid,
+        ResourceModel.deleted_at.is_(None),
+    )
+    result = await db.execute(query)
+    resource = result.scalar_one_or_none()
+
+    if not resource:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Resource not found",
+        )
+
+    resource.current_latitude = data.latitude
+    resource.current_longitude = data.longitude
+    resource.location_updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(resource)
+
+    # Emit Socket.IO event for real-time updates
+    from app.services.socketio import emit_resource_updated
+    import asyncio
+    asyncio.create_task(emit_resource_updated(resource_to_response(resource).model_dump()))
+
+    return resource_to_response(resource)
+
+
+@router.delete("/{resource_id}", status_code=http_status.HTTP_204_NO_CONTENT)
+async def delete_resource(
+    resource_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> None:
+    """Soft delete a resource."""
+    try:
+        resource_uuid = uuid.UUID(resource_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid resource_id format",
+        )
+
+    query = select(ResourceModel).where(
+        ResourceModel.id == resource_uuid,
+        ResourceModel.deleted_at.is_(None),
+    )
+    result = await db.execute(query)
+    resource = result.scalar_one_or_none()
+
+    if not resource:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Resource not found",
+        )
+
+    resource.deleted_at = datetime.utcnow()
+    await db.commit()

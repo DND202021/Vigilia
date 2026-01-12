@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import router as api_router
 from app.core.config import settings
+from app.services.socketio import socket_app
 
 
 @asynccontextmanager
@@ -42,6 +43,9 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")
+
+# Mount Socket.IO app
+app.mount("/socket.io", socket_app)
 
 
 @app.get("/health")

@@ -3,9 +3,9 @@
 from datetime import datetime
 from enum import Enum
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db, get_current_active_user
@@ -97,27 +97,50 @@ class PaginatedAlertResponse(BaseModel):
     total_pages: int
 
 
-@router.get("/", response_model=PaginatedAlertResponse)
+def alert_to_response(alert: AlertModel) -> AlertResponse:
+    """Convert an alert model to response."""
+    return AlertResponse(
+        id=str(alert.id),
+        source=AlertSource(alert.source.value),
+        source_id=alert.source_id,
+        severity=AlertSeverity(alert.severity.value),
+        status=AlertStatus(alert.status.value),
+        alert_type=alert.alert_type,
+        title=alert.title,
+        description=alert.description,
+        location=AlertLocation(
+            latitude=alert.latitude,
+            longitude=alert.longitude,
+            address=alert.address,
+            zone=alert.zone,
+        ) if alert.latitude and alert.longitude else None,
+        raw_payload=alert.raw_payload,
+        created_at=alert.created_at,
+        acknowledged_at=alert.acknowledged_at,
+        acknowledged_by=str(alert.acknowledged_by_id) if alert.acknowledged_by_id else None,
+        linked_incident_id=str(alert.incidents[0].id) if alert.incidents else None,
+    )
+
+
+@router.get("", response_model=PaginatedAlertResponse)
 async def list_alerts(
     status: AlertStatus | None = None,
     severity: AlertSeverity | None = None,
-    source: AlertSource | None = None,
-    page: int = 1,
-    page_size: int = 50,
+    alert_type: str | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> PaginatedAlertResponse:
     """List alerts with optional filters and pagination."""
-    from sqlalchemy import func
-
     query = select(AlertModel)
 
     if status:
         query = query.where(AlertModel.status == AlertStatusModel(status.value))
     if severity:
         query = query.where(AlertModel.severity == severity.value)
-    if source:
-        query = query.where(AlertModel.source == source.value)
+    if alert_type:
+        query = query.where(AlertModel.alert_type == alert_type)
 
     # Get total count
     count_query = select(func.count()).select_from(query.subquery())
@@ -125,41 +148,15 @@ async def list_alerts(
     total = total_result.scalar() or 0
 
     # Apply pagination
-    offset = (page - 1) * page_size
-    query = query.offset(offset).limit(page_size).order_by(AlertModel.created_at.desc())
+    query = query.offset((page - 1) * page_size).limit(page_size).order_by(AlertModel.created_at.desc())
 
     result = await db.execute(query)
     alerts = result.scalars().all()
 
-    items = [
-        AlertResponse(
-            id=str(alert.id),
-            source=AlertSource(alert.source.value),
-            source_id=alert.source_id,
-            severity=AlertSeverity(alert.severity.value),
-            status=AlertStatus(alert.status.value),
-            alert_type=alert.alert_type,
-            title=alert.title,
-            description=alert.description,
-            location=AlertLocation(
-                latitude=alert.latitude,
-                longitude=alert.longitude,
-                address=alert.address,
-                zone=alert.zone,
-            ) if alert.latitude and alert.longitude else None,
-            raw_payload=alert.raw_payload,
-            created_at=alert.created_at,
-            acknowledged_at=alert.acknowledged_at,
-            acknowledged_by=str(alert.acknowledged_by_id) if alert.acknowledged_by_id else None,
-            linked_incident_id=str(alert.incidents[0].id) if alert.incidents else None,
-        )
-        for alert in alerts
-    ]
-
     total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
 
     return PaginatedAlertResponse(
-        items=items,
+        items=[alert_to_response(alert) for alert in alerts],
         total=total,
         page=page,
         page_size=page_size,
@@ -180,30 +177,7 @@ async def get_pending_alerts(
     result = await db.execute(query)
     alerts = result.scalars().all()
 
-    return [
-        AlertResponse(
-            id=str(alert.id),
-            source=AlertSource(alert.source.value),
-            source_id=alert.source_id,
-            severity=AlertSeverity(alert.severity.value),
-            status=AlertStatus(alert.status.value),
-            alert_type=alert.alert_type,
-            title=alert.title,
-            description=alert.description,
-            location=AlertLocation(
-                latitude=alert.latitude,
-                longitude=alert.longitude,
-                address=alert.address,
-                zone=alert.zone,
-            ) if alert.latitude and alert.longitude else None,
-            raw_payload=alert.raw_payload,
-            created_at=alert.created_at,
-            acknowledged_at=alert.acknowledged_at,
-            acknowledged_by=str(alert.acknowledged_by_id) if alert.acknowledged_by_id else None,
-            linked_incident_id=str(alert.incidents[0].id) if alert.incidents else None,
-        )
-        for alert in alerts
-    ]
+    return [alert_to_response(alert) for alert in alerts]
 
 
 @router.get("/{alert_id}", response_model=AlertResponse)

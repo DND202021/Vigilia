@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db, get_current_active_user
@@ -106,6 +106,28 @@ class PaginatedIncidentResponse(BaseModel):
     total_pages: int
 
 
+def incident_to_response(inc: IncidentModel) -> IncidentResponse:
+    """Convert an incident model to response."""
+    return IncidentResponse(
+        id=str(inc.id),
+        incident_number=inc.incident_number,
+        category=IncidentCategory(inc.category.value),
+        priority=IncidentPriority(inc.priority.value),
+        status=IncidentStatus(inc.status.value),
+        title=inc.title,
+        description=inc.description,
+        location=Location(
+            latitude=inc.latitude,
+            longitude=inc.longitude,
+            address=inc.address,
+            building_info=inc.building_info,
+        ),
+        created_at=inc.created_at,
+        updated_at=inc.updated_at,
+        assigned_units=inc.assigned_units or [],
+    )
+
+
 @router.post("/", response_model=IncidentResponse, status_code=status.HTTP_201_CREATED)
 async def create_incident(incident: IncidentCreate) -> IncidentResponse:
     """Create a new incident."""
@@ -116,27 +138,25 @@ async def create_incident(incident: IncidentCreate) -> IncidentResponse:
     )
 
 
-@router.get("/", response_model=PaginatedIncidentResponse)
+@router.get("", response_model=PaginatedIncidentResponse)
 async def list_incidents(
     status: Annotated[IncidentStatus | None, Query()] = None,
     priority: Annotated[IncidentPriority | None, Query()] = None,
-    category: Annotated[IncidentCategory | None, Query()] = None,
+    incident_type: Annotated[IncidentCategory | None, Query()] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 50,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> PaginatedIncidentResponse:
     """List incidents with optional filters and pagination."""
-    from sqlalchemy import func
-
     query = select(IncidentModel)
 
     if status:
         query = query.where(IncidentModel.status == IncidentStatusModel(status.value))
     if priority:
         query = query.where(IncidentModel.priority == priority.value)
-    if category:
-        query = query.where(IncidentModel.category == category.value)
+    if incident_type:
+        query = query.where(IncidentModel.category == incident_type.value)
 
     # Get total count
     count_query = select(func.count()).select_from(query.subquery())
@@ -144,38 +164,15 @@ async def list_incidents(
     total = total_result.scalar() or 0
 
     # Apply pagination
-    offset = (page - 1) * page_size
-    query = query.offset(offset).limit(page_size).order_by(IncidentModel.created_at.desc())
+    query = query.offset((page - 1) * page_size).limit(page_size).order_by(IncidentModel.created_at.desc())
 
     result = await db.execute(query)
     incidents = result.scalars().all()
 
-    items = [
-        IncidentResponse(
-            id=str(inc.id),
-            incident_number=inc.incident_number,
-            category=IncidentCategory(inc.category.value),
-            priority=IncidentPriority(inc.priority.value),
-            status=IncidentStatus(inc.status.value),
-            title=inc.title,
-            description=inc.description,
-            location=Location(
-                latitude=inc.latitude,
-                longitude=inc.longitude,
-                address=inc.address,
-                building_info=inc.building_info,
-            ),
-            created_at=inc.created_at,
-            updated_at=inc.updated_at,
-            assigned_units=inc.assigned_units or [],
-        )
-        for inc in incidents
-    ]
-
     total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
 
     return PaginatedIncidentResponse(
-        items=items,
+        items=[incident_to_response(inc) for inc in incidents],
         total=total,
         page=page,
         page_size=page_size,
@@ -203,27 +200,7 @@ async def get_active_incidents(
     result = await db.execute(query)
     incidents = result.scalars().all()
 
-    return [
-        IncidentResponse(
-            id=str(inc.id),
-            incident_number=inc.incident_number,
-            category=IncidentCategory(inc.category.value),
-            priority=IncidentPriority(inc.priority.value),
-            status=IncidentStatus(inc.status.value),
-            title=inc.title,
-            description=inc.description,
-            location=Location(
-                latitude=inc.latitude,
-                longitude=inc.longitude,
-                address=inc.address,
-                building_info=inc.building_info,
-            ),
-            created_at=inc.created_at,
-            updated_at=inc.updated_at,
-            assigned_units=inc.assigned_units or [],
-        )
-        for inc in incidents
-    ]
+    return [incident_to_response(inc) for inc in incidents]
 
 
 @router.get("/{incident_id}", response_model=IncidentResponse)

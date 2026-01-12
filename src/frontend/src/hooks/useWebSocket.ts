@@ -10,7 +10,8 @@ import { useResourceStore } from '../stores/resourceStore';
 import { tokenStorage } from '../services/api';
 import type { Incident, Alert, Resource } from '../types';
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'http://localhost:8000';
+// Use relative path to go through nginx proxy, or fall back to localhost for dev
+const WS_URL = import.meta.env.VITE_WS_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000');
 
 interface WebSocketHookResult {
   isConnected: boolean;
