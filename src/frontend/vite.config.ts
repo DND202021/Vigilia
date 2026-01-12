@@ -12,6 +12,9 @@ export default defineConfig({
   server: {
     port: 3000,
     host: '0.0.0.0',
+    // Disable HMR when accessed via nginx proxy to avoid websocket errors
+    // Access directly on port 3002 for HMR during development
+    hmr: false,
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
