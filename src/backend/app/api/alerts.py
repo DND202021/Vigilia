@@ -1,6 +1,7 @@
 """Alert Management API endpoints."""
 
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -12,6 +13,7 @@ from app.core.deps import get_db, get_current_active_user
 from app.models.user import User
 from app.models.alert import Alert as AlertModel
 from app.models.alert import AlertStatus as AlertStatusModel
+from app.services.socketio import emit_alert_updated
 
 router = APIRouter()
 
@@ -180,24 +182,87 @@ async def get_pending_alerts(
     return [alert_to_response(alert) for alert in alerts]
 
 
+@router.get("/unacknowledged", response_model=list[AlertResponse])
+async def get_unacknowledged_alerts(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> list[AlertResponse]:
+    """Get all unacknowledged alerts (pending or processing)."""
+    query = select(AlertModel).where(
+        AlertModel.status.in_([AlertStatusModel.PENDING, AlertStatusModel.PROCESSING])
+    ).order_by(AlertModel.severity, AlertModel.created_at.desc())
+
+    result = await db.execute(query)
+    alerts = result.scalars().all()
+
+    return [alert_to_response(alert) for alert in alerts]
+
+
 @router.get("/{alert_id}", response_model=AlertResponse)
-async def get_alert(alert_id: str) -> AlertResponse:
+async def get_alert(
+    alert_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> AlertResponse:
     """Get alert by ID."""
-    # TODO: Implement alert retrieval
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Alert retrieval not yet implemented",
-    )
+    try:
+        alert_uuid = uuid.UUID(alert_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid alert ID format",
+        )
+
+    query = select(AlertModel).where(AlertModel.id == alert_uuid)
+    result = await db.execute(query)
+    alert = result.scalar_one_or_none()
+
+    if not alert:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Alert not found",
+        )
+
+    return alert_to_response(alert)
 
 
 @router.post("/{alert_id}/acknowledge", response_model=AlertResponse)
-async def acknowledge_alert(alert_id: str, data: AlertAcknowledge) -> AlertResponse:
+async def acknowledge_alert(
+    alert_id: str,
+    data: AlertAcknowledge,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> AlertResponse:
     """Acknowledge an alert."""
-    # TODO: Implement alert acknowledgment
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Alert acknowledgment not yet implemented",
-    )
+    try:
+        alert_uuid = uuid.UUID(alert_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid alert ID format",
+        )
+
+    query = select(AlertModel).where(AlertModel.id == alert_uuid)
+    result = await db.execute(query)
+    alert = result.scalar_one_or_none()
+
+    if not alert:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Alert not found",
+        )
+
+    alert.status = AlertStatusModel.ACKNOWLEDGED
+    alert.acknowledged_at = datetime.now(timezone.utc)
+    alert.acknowledged_by_id = current_user.id
+
+    await db.commit()
+    await db.refresh(alert)
+
+    response = alert_to_response(alert)
+    await emit_alert_updated(response.model_dump(mode="json"))
+
+    return response
 
 
 @router.post("/{alert_id}/dismiss", response_model=AlertResponse)
