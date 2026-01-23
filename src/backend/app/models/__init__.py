@@ -1,6 +1,7 @@
 """ERIOP Database Models."""
 
 from app.models.base import Base, TimestampMixin
+from app.models.role import Role, DEFAULT_ROLES
 from app.models.user import User, UserRole
 from app.models.agency import Agency
 from app.models.incident import Incident, IncidentStatus, IncidentPriority, IncidentCategory
@@ -19,6 +20,8 @@ from app.models.building import (
 __all__ = [
     "Base",
     "TimestampMixin",
+    "Role",
+    "DEFAULT_ROLES",
     "User",
     "UserRole",
     "Agency",

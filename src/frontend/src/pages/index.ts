@@ -10,3 +10,6 @@ export { ResourcesPage } from './ResourcesPage';
 export { MapPage } from './MapPage';
 export { LoginPage } from './LoginPage';
 export { AnalyticsPage } from './AnalyticsPage';
+export { BuildingsPage } from './BuildingsPage';
+export { UsersPage } from './UsersPage';
+export { RolesPage } from './RolesPage';

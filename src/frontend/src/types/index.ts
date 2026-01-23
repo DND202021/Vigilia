@@ -34,6 +34,110 @@ export interface AuthState {
   isLoading: boolean;
 }
 
+// Role Types (for flexible RBAC)
+export interface Role {
+  id: string;
+  name: string;
+  display_name: string;
+  description?: string;
+  hierarchy_level: number;
+  color?: string;
+  is_system_role: boolean;
+  is_active: boolean;
+  permissions: string[];
+  user_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RoleCreateRequest {
+  name: string;
+  display_name: string;
+  description?: string;
+  hierarchy_level: number;
+  color?: string;
+  permissions: string[];
+}
+
+export interface RoleUpdateRequest {
+  display_name?: string;
+  description?: string;
+  hierarchy_level?: number;
+  color?: string;
+  permissions?: string[];
+  is_active?: boolean;
+}
+
+export interface Permission {
+  key: string;
+  name: string;
+  description: string;
+}
+
+// User Management Types (full user for admin)
+export interface UserFull {
+  id: string;
+  email: string;
+  full_name: string;
+  badge_number?: string;
+  phone?: string;
+  role_name: string;
+  role_display_name: string;
+  role?: {
+    id: string;
+    name: string;
+    display_name: string;
+    color?: string;
+  };
+  agency?: {
+    id: string;
+    name: string;
+    code: string;
+  };
+  is_active: boolean;
+  is_verified: boolean;
+  mfa_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserCreateRequest {
+  email: string;
+  password: string;
+  full_name: string;
+  role_id?: string;
+  agency_id?: string;
+  badge_number?: string;
+  phone?: string;
+  is_verified?: boolean;
+}
+
+export interface UserUpdateRequest {
+  full_name?: string;
+  email?: string;
+  role_id?: string;
+  agency_id?: string;
+  badge_number?: string;
+  phone?: string;
+  is_verified?: boolean;
+}
+
+export interface UserStats {
+  total: number;
+  active: number;
+  inactive: number;
+  verified: number;
+  unverified: number;
+  by_role: Record<string, number>;
+}
+
+export interface UserListResponse {
+  items: UserFull[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 // Incident Types
 export interface Incident {
   id: string;

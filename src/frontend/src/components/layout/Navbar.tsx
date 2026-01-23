@@ -16,6 +16,11 @@ const navLinks = [
   { to: '/analytics', label: 'Analytics' },
 ];
 
+const adminLinks = [
+  { to: '/users', label: 'Users' },
+  { to: '/roles', label: 'Roles' },
+];
+
 export function Navbar() {
   const location = useLocation();
   const { user, logout, isAuthenticated } = useAuthStore();
@@ -57,6 +62,29 @@ export function Navbar() {
                 </Link>
               );
             })}
+
+            {/* Admin Links Separator */}
+            <div className="w-px h-6 bg-gray-700 mx-2" />
+
+            {adminLinks.map((link) => {
+              const isActive = location.pathname === link.to ||
+                (link.to !== '/' && location.pathname.startsWith(link.to));
+
+              return (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  className={cn(
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-purple-600 text-white'
+                      : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                  )}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
           </div>
 
           {/* User Menu */}
@@ -91,6 +119,25 @@ export function Navbar() {
                   isActive
                     ? 'bg-blue-600 text-white'
                     : 'text-gray-300 hover:bg-gray-800'
+                )}
+              >
+                {link.label}
+              </Link>
+            );
+          })}
+          {adminLinks.map((link) => {
+            const isActive = location.pathname === link.to ||
+              (link.to !== '/' && location.pathname.startsWith(link.to));
+
+            return (
+              <Link
+                key={link.to}
+                to={link.to}
+                className={cn(
+                  'px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors',
+                  isActive
+                    ? 'bg-purple-600 text-white'
+                    : 'text-gray-400 hover:bg-gray-800'
                 )}
               >
                 {link.label}

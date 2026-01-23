@@ -24,6 +24,15 @@ import type {
   BuildingUpdateRequest,
   BuildingStats,
   FloorPlan,
+  Role,
+  RoleCreateRequest,
+  RoleUpdateRequest,
+  Permission,
+  UserFull,
+  UserCreateRequest,
+  UserUpdateRequest,
+  UserStats,
+  UserListResponse,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
@@ -398,6 +407,105 @@ export const buildingsApi = {
       bim_data: bimData,
       bim_file_url: bimFileUrl,
     });
+    return response.data;
+  },
+};
+
+// Users API
+export const usersApi = {
+  list: async (params?: {
+    agency_id?: string;
+    role_id?: string;
+    is_active?: boolean;
+    search?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<UserListResponse> => {
+    const response = await api.get<UserListResponse>('/users', { params });
+    return response.data;
+  },
+
+  get: async (id: string): Promise<UserFull> => {
+    const response = await api.get<UserFull>(`/users/${id}`);
+    return response.data;
+  },
+
+  getStats: async (agencyId?: string): Promise<UserStats> => {
+    const response = await api.get<UserStats>('/users/stats', {
+      params: agencyId ? { agency_id: agencyId } : undefined,
+    });
+    return response.data;
+  },
+
+  create: async (data: UserCreateRequest): Promise<UserFull> => {
+    const response = await api.post<UserFull>('/users', data);
+    return response.data;
+  },
+
+  update: async (id: string, data: UserUpdateRequest): Promise<UserFull> => {
+    const response = await api.patch<UserFull>(`/users/${id}`, data);
+    return response.data;
+  },
+
+  deactivate: async (id: string): Promise<UserFull> => {
+    const response = await api.post<UserFull>(`/users/${id}/deactivate`);
+    return response.data;
+  },
+
+  activate: async (id: string): Promise<UserFull> => {
+    const response = await api.post<UserFull>(`/users/${id}/activate`);
+    return response.data;
+  },
+
+  verify: async (id: string): Promise<UserFull> => {
+    const response = await api.post<UserFull>(`/users/${id}/verify`);
+    return response.data;
+  },
+
+  resetPassword: async (id: string, newPassword: string): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>(`/users/${id}/reset-password`, {
+      new_password: newPassword,
+    });
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<{ message: string }> => {
+    const response = await api.delete<{ message: string }>(`/users/${id}`);
+    return response.data;
+  },
+};
+
+// Roles API
+export const rolesApi = {
+  list: async (includeInactive?: boolean): Promise<Role[]> => {
+    const response = await api.get<Role[]>('/roles', {
+      params: includeInactive ? { include_inactive: true } : undefined,
+    });
+    return response.data;
+  },
+
+  get: async (id: string): Promise<Role> => {
+    const response = await api.get<Role>(`/roles/${id}`);
+    return response.data;
+  },
+
+  getPermissions: async (): Promise<Permission[]> => {
+    const response = await api.get<Permission[]>('/roles/permissions');
+    return response.data;
+  },
+
+  create: async (data: RoleCreateRequest): Promise<Role> => {
+    const response = await api.post<Role>('/roles', data);
+    return response.data;
+  },
+
+  update: async (id: string, data: RoleUpdateRequest): Promise<Role> => {
+    const response = await api.patch<Role>(`/roles/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<{ message: string }> => {
+    const response = await api.delete<{ message: string }>(`/roles/${id}`);
     return response.data;
   },
 };

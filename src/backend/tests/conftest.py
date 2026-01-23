@@ -17,7 +17,7 @@ from app.models import (
     User, UserRole, Agency, Incident, Resource, Alert,
     AlertSeverity, AlertStatus, AlertSource,
     IncidentStatus, IncidentPriority, IncidentCategory,
-    ResourceType, ResourceStatus,
+    ResourceType, ResourceStatus, Role,
     Building, BuildingType, FloorPlan,
 )
 from app.core.deps import get_db
