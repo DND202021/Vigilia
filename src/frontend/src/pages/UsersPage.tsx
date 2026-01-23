@@ -7,8 +7,6 @@ import { useUserStore } from '../stores/userStore';
 import { useRoleStore } from '../stores/roleStore';
 import {
   Card,
-  CardHeader,
-  CardTitle,
   CardContent,
   Badge,
   Button,
@@ -24,12 +22,6 @@ const statusFilterOptions = [
   { value: '', label: 'All Statuses' },
   { value: 'active', label: 'Active' },
   { value: 'inactive', label: 'Inactive' },
-];
-
-const verificationFilterOptions = [
-  { value: '', label: 'All Verification' },
-  { value: 'verified', label: 'Verified' },
-  { value: 'unverified', label: 'Unverified' },
 ];
 
 export function UsersPage() {
@@ -378,12 +370,7 @@ function UserRow({ user, onEdit, onDelete, onStatusToggle, onVerify }: UserRowPr
         </div>
       </td>
       <td className="px-6 py-4">
-        <Badge
-          style={{
-            backgroundColor: user.role?.color ? `${user.role.color}20` : undefined,
-            color: user.role?.color || undefined,
-          }}
-        >
+        <Badge className="bg-gray-100 text-gray-700">
           {user.role_display_name}
         </Badge>
       </td>

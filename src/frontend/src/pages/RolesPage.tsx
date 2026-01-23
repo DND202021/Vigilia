@@ -6,8 +6,6 @@ import { useEffect, useState } from 'react';
 import { useRoleStore } from '../stores/roleStore';
 import {
   Card,
-  CardHeader,
-  CardTitle,
   CardContent,
   Badge,
   Button,
@@ -16,7 +14,6 @@ import {
   Select,
   Spinner,
 } from '../components/ui';
-import { cn } from '../utils';
 import type { Role, RoleCreateRequest, RoleUpdateRequest, Permission } from '../types';
 
 const colorOptions = [
@@ -218,10 +215,6 @@ interface RoleCardProps {
 }
 
 function RoleCard({ role, onEdit, onDelete }: RoleCardProps) {
-  const bgColor = role.color ? `bg-${role.color}-50` : 'bg-gray-50';
-  const textColor = role.color ? `text-${role.color}-700` : 'text-gray-700';
-  const borderColor = role.color ? `border-${role.color}-200` : 'border-gray-200';
-
   return (
     <Card className="hover:shadow-md transition-shadow">
       <CardContent className="p-4">

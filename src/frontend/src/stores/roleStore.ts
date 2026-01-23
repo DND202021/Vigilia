@@ -24,7 +24,7 @@ interface RoleStore {
   clearError: () => void;
 }
 
-export const useRoleStore = create<RoleStore>((set, get) => ({
+export const useRoleStore = create<RoleStore>((set) => ({
   roles: [],
   selectedRole: null,
   availablePermissions: [],
