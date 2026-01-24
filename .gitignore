@@ -69,3 +69,6 @@ temp/
 *.key
 credentials.json
 secrets.json
+
+# Local Netlify folder
+.netlify
