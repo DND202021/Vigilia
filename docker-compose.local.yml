@@ -78,7 +78,9 @@ services:
     depends_on:
       - backend
     networks:
-      - eriop-net
+      eriop-net:
+        aliases:
+          - eriop-nginx
 
   nginx:
     image: nginx:alpine
