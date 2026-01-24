@@ -118,6 +118,17 @@ Vigilia/
   - Health checks
   - Resource limits
 
+- [x] **Phase 9: Users & Roles Management** (January 2025)
+  - Flexible database-backed Role model (replaces hardcoded UserRole enum)
+  - Role permissions stored as JSON array
+  - Role hierarchy levels for access control
+  - 7 default system roles seeded via migration
+  - Full Users management page with CRUD operations
+  - Full Roles management page with permission editor
+  - Backend: RoleService, UserService, REST APIs
+  - Frontend: UsersPage, RolesPage, Zustand stores
+  - Database migration: 002_add_roles_table.py
+
 ## Key Commands
 
 ### Backend Development
@@ -206,16 +217,49 @@ alembic revision --autogenerate -m "description"  # Create migration
 - `POST /api/v1/alerts/{id}/resolve` - Resolve
 - `POST /api/v1/alerts/{id}/create-incident` - Create incident
 
+### Users (Admin)
+- `GET /api/v1/users` - List users (filters: agency_id, role_id, is_active, search)
+- `GET /api/v1/users/stats` - User statistics
+- `GET /api/v1/users/{id}` - Get user details
+- `POST /api/v1/users` - Create user
+- `PATCH /api/v1/users/{id}` - Update user
+- `POST /api/v1/users/{id}/deactivate` - Deactivate user
+- `POST /api/v1/users/{id}/activate` - Activate user
+- `POST /api/v1/users/{id}/verify` - Verify user
+- `POST /api/v1/users/{id}/reset-password` - Reset password
+- `DELETE /api/v1/users/{id}` - Soft delete user
+
+### Roles (Admin)
+- `GET /api/v1/roles` - List roles
+- `GET /api/v1/roles/permissions` - List available permissions
+- `GET /api/v1/roles/{id}` - Get role details
+- `POST /api/v1/roles` - Create custom role
+- `PATCH /api/v1/roles/{id}` - Update role
+- `DELETE /api/v1/roles/{id}` - Soft delete role
+
 ### Health
 - `GET /health` - Health check
 
 ## Database Models
 
-- **User** - Authentication, roles (RBAC), MFA support
+- **User** - Authentication, role_id FK to Role, MFA support
+- **Role** - Flexible RBAC with permissions JSON, hierarchy_level, is_system_role
 - **Agency** - Multi-tenant organizations
 - **Incident** - Emergency events with status tracking
 - **Resource** - Personnel, vehicles, equipment
 - **Alert** - Incoming alerts from various sources
+- **Building** - Building information management with floor plans
+
+### Default System Roles (seeded in migration 002)
+| Name | Hierarchy | Key Permissions |
+|------|-----------|-----------------|
+| system_admin | 0 | system:admin (full access) |
+| agency_admin | 10 | users:manage_agency, all incidents/resources/alerts |
+| commander | 20 | incidents:*, resources:*, alerts:* |
+| dispatcher | 30 | incidents:read/create/update/assign, alerts:* |
+| field_unit_leader | 40 | incidents:read/update, resources:read/update |
+| responder | 50 | incidents:read, resources:read, alerts:read |
+| public_user | 100 | incidents:report only |
 
 ## Integration Adapters
 
@@ -235,6 +279,59 @@ See `.env.example` for all configuration options.
 - [API Design](docs/architecture/API_DESIGN.md)
 - [Functional Requirements](docs/requirements/FUNCTIONAL_REQUIREMENTS.md)
 - [Security Requirements](docs/requirements/SECURITY_REQUIREMENTS.md)
+
+## Local Deployment
+
+The application is deployed locally via Docker on a server at **http://10.0.0.13:83/**
+
+### Deployment Commands (on server)
+```bash
+cd /path/to/Vigilia
+git pull origin main
+docker compose -f docker-compose.local.yml down
+docker compose -f docker-compose.local.yml build --no-cache
+docker compose -f docker-compose.local.yml up -d
+```
+
+### After deploying new features, run database migrations:
+```bash
+docker exec -it eriop-backend alembic upgrade head
+```
+
+## Recent Changes (January 2025 Session)
+
+### Files Created
+- `src/backend/app/models/role.py` - Role model with permissions, hierarchy
+- `src/backend/app/services/role_service.py` - RoleService CRUD
+- `src/backend/app/services/user_service.py` - UserService CRUD
+- `src/backend/app/api/users.py` - Users REST API
+- `src/backend/app/api/roles.py` - Roles REST API
+- `src/backend/alembic/versions/002_add_roles_table.py` - Migration
+- `src/backend/tests/test_role_service.py` - Role tests
+- `src/backend/tests/test_user_service.py` - User tests
+- `src/frontend/src/pages/UsersPage.tsx` - Users management UI
+- `src/frontend/src/pages/RolesPage.tsx` - Roles management UI
+- `src/frontend/src/stores/userStore.ts` - User Zustand store
+- `src/frontend/src/stores/roleStore.ts` - Role Zustand store
+- `src/frontend/netlify.toml` - Netlify config (kept for future use)
+
+### Files Modified
+- `src/backend/app/models/user.py` - Added role_id FK, role_obj relationship
+- `src/backend/app/models/__init__.py` - Added Role export
+- `src/backend/app/services/__init__.py` - Added RoleService, UserService exports
+- `src/backend/app/api/__init__.py` - Added users, roles routers
+- `src/backend/tests/conftest.py` - Added Role import
+- `src/frontend/src/App.tsx` - Added /users, /roles routes (lazy loaded)
+- `src/frontend/src/pages/index.ts` - Added UsersPage, RolesPage exports
+- `src/frontend/src/services/api.ts` - Added usersApi, rolesApi
+- `src/frontend/src/types/index.ts` - Added Role, UserFull types
+- `src/frontend/src/components/layout/Navbar.tsx` - Added Users, Roles nav links
+
+### Key Technical Decisions
+- Used generic `JSON` type instead of `JSONB` for Role.permissions (SQLite test compatibility)
+- Role model uses soft delete pattern (SoftDeleteMixin)
+- System roles (is_system_role=true) cannot be deleted, only display name/description edited
+- Frontend uses React.lazy() for code-splitting all pages
 
 ---
 
