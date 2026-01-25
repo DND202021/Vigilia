@@ -18,46 +18,32 @@ down_revision: Union[str, None] = "002"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+# Define enum type
+auditaction_enum = postgresql.ENUM(
+    "login", "logout", "login_failed", "password_changed",
+    "mfa_enabled", "mfa_disabled",
+    "user_created", "user_updated", "user_deleted", "user_role_changed",
+    "incident_created", "incident_updated", "incident_assigned",
+    "incident_escalated", "incident_closed",
+    "alert_received", "alert_acknowledged", "alert_dismissed", "alert_to_incident",
+    "resource_created", "resource_updated", "resource_deleted",
+    "resource_assigned", "resource_status_changed",
+    "system_config_changed", "api_access", "permission_denied",
+    name="auditaction",
+    create_type=False,
+)
+
 
 def upgrade() -> None:
     # Create audit action enum
-    op.execute("""
-        CREATE TYPE auditaction AS ENUM (
-            'login', 'logout', 'login_failed', 'password_changed',
-            'mfa_enabled', 'mfa_disabled',
-            'user_created', 'user_updated', 'user_deleted', 'user_role_changed',
-            'incident_created', 'incident_updated', 'incident_assigned',
-            'incident_escalated', 'incident_closed',
-            'alert_received', 'alert_acknowledged', 'alert_dismissed', 'alert_to_incident',
-            'resource_created', 'resource_updated', 'resource_deleted',
-            'resource_assigned', 'resource_status_changed',
-            'system_config_changed', 'api_access', 'permission_denied'
-        )
-    """)
+    auditaction_enum.create(op.get_bind(), checkfirst=True)
 
     # Create audit_logs table
     op.create_table(
         "audit_logs",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("timestamp", sa.DateTime(timezone=True), nullable=False, index=True),
-        sa.Column(
-            "action",
-            sa.Enum(
-                "login", "logout", "login_failed", "password_changed",
-                "mfa_enabled", "mfa_disabled",
-                "user_created", "user_updated", "user_deleted", "user_role_changed",
-                "incident_created", "incident_updated", "incident_assigned",
-                "incident_escalated", "incident_closed",
-                "alert_received", "alert_acknowledged", "alert_dismissed", "alert_to_incident",
-                "resource_created", "resource_updated", "resource_deleted",
-                "resource_assigned", "resource_status_changed",
-                "system_config_changed", "api_access", "permission_denied",
-                name="auditaction",
-                create_type=False,
-            ),
-            nullable=False,
-            index=True,
-        ),
+        sa.Column("action", auditaction_enum, nullable=False, index=True),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=True, index=True),
         sa.Column("entity_type", sa.String(50), nullable=True, index=True),
         sa.Column("entity_id", sa.String(50), nullable=True, index=True),
@@ -86,4 +72,4 @@ def downgrade() -> None:
     op.drop_index("ix_audit_logs_timestamp_action", table_name="audit_logs")
     op.drop_index("ix_audit_logs_entity", table_name="audit_logs")
     op.drop_table("audit_logs")
-    op.execute("DROP TYPE IF EXISTS auditaction")
+    auditaction_enum.drop(op.get_bind(), checkfirst=True)

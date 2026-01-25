@@ -11,7 +11,7 @@ import { tokenStorage } from '../services/api';
 import type { Incident, Alert, Resource } from '../types';
 
 // Use relative path to go through nginx proxy, or fall back to localhost for dev
-const WS_URL = import.meta.env.VITE_WS_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000');
+// WS_URL is now determined at connection time in connect() function
 
 interface WebSocketHookResult {
   isConnected: boolean;
@@ -35,7 +35,8 @@ export function useWebSocket(): WebSocketHookResult {
     const token = tokenStorage.getAccessToken();
     if (!token) return;
 
-    const socket = io(WS_URL, {
+    const wsUrl = window.location.origin;
+    const socket = io(wsUrl, {
       auth: { token },
       transports: ['websocket'],
       reconnection: true,

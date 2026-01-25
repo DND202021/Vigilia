@@ -3,7 +3,7 @@
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.core.deps import DbSession, CurrentUser, require_role
@@ -138,7 +138,7 @@ class MessageResponse(BaseModel):
 async def list_users(
     db: DbSession,
     current_user: Annotated[
-        Any, require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN)
+        Any, Depends(require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN))
     ],
     agency_id: uuid.UUID | None = Query(None, description="Filter by agency"),
     role_id: uuid.UUID | None = Query(None, description="Filter by role"),
@@ -177,7 +177,7 @@ async def list_users(
 async def get_user_stats(
     db: DbSession,
     current_user: Annotated[
-        Any, require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN)
+        Any, Depends(require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN))
     ],
     agency_id: uuid.UUID | None = Query(None, description="Filter by agency"),
 ) -> UserStatsResponse:
@@ -198,7 +198,7 @@ async def get_user(
     user_id: uuid.UUID,
     db: DbSession,
     current_user: Annotated[
-        Any, require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN, UserRole.COMMANDER)
+        Any, Depends(require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN, UserRole.COMMANDER))
     ],
 ) -> UserResponse:
     """Get a specific user."""
@@ -230,7 +230,7 @@ async def create_user(
     request: UserCreateRequest,
     db: DbSession,
     current_user: Annotated[
-        Any, require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN)
+        Any, Depends(require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN))
     ],
 ) -> UserResponse:
     """Create a new user."""
@@ -266,7 +266,7 @@ async def update_user(
     request: UserUpdateRequest,
     db: DbSession,
     current_user: Annotated[
-        Any, require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN)
+        Any, Depends(require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN))
     ],
 ) -> UserResponse:
     """Update an existing user."""
@@ -319,7 +319,7 @@ async def deactivate_user(
     user_id: uuid.UUID,
     db: DbSession,
     current_user: Annotated[
-        Any, require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN)
+        Any, Depends(require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN))
     ],
 ) -> UserResponse:
     """Deactivate a user account."""
@@ -365,7 +365,7 @@ async def activate_user(
     user_id: uuid.UUID,
     db: DbSession,
     current_user: Annotated[
-        Any, require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN)
+        Any, Depends(require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN))
     ],
 ) -> UserResponse:
     """Activate a user account."""
@@ -403,7 +403,7 @@ async def verify_user(
     user_id: uuid.UUID,
     db: DbSession,
     current_user: Annotated[
-        Any, require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN)
+        Any, Depends(require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN))
     ],
 ) -> UserResponse:
     """Mark a user as verified."""
@@ -441,7 +441,7 @@ async def reset_password(
     user_id: uuid.UUID,
     request: PasswordResetRequest,
     db: DbSession,
-    current_user: Annotated[Any, require_role(UserRole.SYSTEM_ADMIN)],
+    current_user: Annotated[Any, Depends(require_role(UserRole.SYSTEM_ADMIN))],
 ) -> MessageResponse:
     """Reset a user's password (admin only)."""
     user_service = UserService(db)
@@ -467,7 +467,7 @@ async def reset_password(
 async def delete_user(
     user_id: uuid.UUID,
     db: DbSession,
-    current_user: Annotated[Any, require_role(UserRole.SYSTEM_ADMIN)],
+    current_user: Annotated[Any, Depends(require_role(UserRole.SYSTEM_ADMIN))],
 ) -> MessageResponse:
     """Soft delete a user (system admin only)."""
     user_service = UserService(db)

@@ -18,38 +18,41 @@ down_revision: Union[str, None] = "004"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+# Define enums with create_type=False since we create them manually
+buildingtype = postgresql.ENUM(
+    'residential_single', 'residential_multi', 'commercial', 'industrial',
+    'institutional', 'healthcare', 'educational', 'government',
+    'religious', 'mixed_use', 'parking', 'warehouse', 'high_rise', 'other',
+    name='buildingtype',
+    create_type=False,
+)
+
+occupancytype = postgresql.ENUM(
+    'assembly', 'business', 'educational', 'factory', 'high_hazard',
+    'institutional', 'mercantile', 'residential', 'storage', 'utility',
+    name='occupancytype',
+    create_type=False,
+)
+
+constructiontype = postgresql.ENUM(
+    'type_i', 'type_ii', 'type_iii', 'type_iv', 'type_v', 'unknown',
+    name='constructiontype',
+    create_type=False,
+)
+
+hazardlevel = postgresql.ENUM(
+    'low', 'moderate', 'high', 'extreme',
+    name='hazardlevel',
+    create_type=False,
+)
+
 
 def upgrade() -> None:
-    # Create building type enum
-    op.execute("""
-        CREATE TYPE buildingtype AS ENUM (
-            'residential_single', 'residential_multi', 'commercial', 'industrial',
-            'institutional', 'healthcare', 'educational', 'government',
-            'religious', 'mixed_use', 'parking', 'warehouse', 'high_rise', 'other'
-        )
-    """)
-
-    # Create occupancy type enum
-    op.execute("""
-        CREATE TYPE occupancytype AS ENUM (
-            'assembly', 'business', 'educational', 'factory', 'high_hazard',
-            'institutional', 'mercantile', 'residential', 'storage', 'utility'
-        )
-    """)
-
-    # Create construction type enum
-    op.execute("""
-        CREATE TYPE constructiontype AS ENUM (
-            'type_i', 'type_ii', 'type_iii', 'type_iv', 'type_v', 'unknown'
-        )
-    """)
-
-    # Create hazard level enum
-    op.execute("""
-        CREATE TYPE hazardlevel AS ENUM (
-            'low', 'moderate', 'high', 'extreme'
-        )
-    """)
+    # Create enums with checkfirst
+    buildingtype.create(op.get_bind(), checkfirst=True)
+    occupancytype.create(op.get_bind(), checkfirst=True)
+    constructiontype.create(op.get_bind(), checkfirst=True)
+    hazardlevel.create(op.get_bind(), checkfirst=True)
 
     # Create buildings table
     op.create_table(
@@ -73,38 +76,9 @@ def upgrade() -> None:
         sa.Column("longitude", sa.Float, nullable=False),
 
         # Building Classification
-        sa.Column(
-            "building_type",
-            sa.Enum(
-                'residential_single', 'residential_multi', 'commercial', 'industrial',
-                'institutional', 'healthcare', 'educational', 'government',
-                'religious', 'mixed_use', 'parking', 'warehouse', 'high_rise', 'other',
-                name="buildingtype",
-                create_type=False,
-            ),
-            default="other",
-            nullable=False,
-        ),
-        sa.Column(
-            "occupancy_type",
-            sa.Enum(
-                'assembly', 'business', 'educational', 'factory', 'high_hazard',
-                'institutional', 'mercantile', 'residential', 'storage', 'utility',
-                name="occupancytype",
-                create_type=False,
-            ),
-            nullable=True,
-        ),
-        sa.Column(
-            "construction_type",
-            sa.Enum(
-                'type_i', 'type_ii', 'type_iii', 'type_iv', 'type_v', 'unknown',
-                name="constructiontype",
-                create_type=False,
-            ),
-            default="unknown",
-            nullable=False,
-        ),
+        sa.Column("building_type", buildingtype, default="other", nullable=False),
+        sa.Column("occupancy_type", occupancytype, nullable=True),
+        sa.Column("construction_type", constructiontype, default="unknown", nullable=False),
 
         # Building Specifications
         sa.Column("year_built", sa.Integer, nullable=True),
@@ -116,16 +90,7 @@ def upgrade() -> None:
         sa.Column("max_occupancy", sa.Integer, nullable=True),
 
         # Emergency Response Information
-        sa.Column(
-            "hazard_level",
-            sa.Enum(
-                'low', 'moderate', 'high', 'extreme',
-                name="hazardlevel",
-                create_type=False,
-            ),
-            default="low",
-            nullable=False,
-        ),
+        sa.Column("hazard_level", hazardlevel, default="low", nullable=False),
         sa.Column("has_sprinkler_system", sa.Boolean, default=False),
         sa.Column("has_fire_alarm", sa.Boolean, default=False),
         sa.Column("has_standpipe", sa.Boolean, default=False),
@@ -299,7 +264,7 @@ def downgrade() -> None:
     op.drop_table("buildings")
 
     # Drop enums
-    op.execute("DROP TYPE IF EXISTS hazardlevel")
-    op.execute("DROP TYPE IF EXISTS constructiontype")
-    op.execute("DROP TYPE IF EXISTS occupancytype")
-    op.execute("DROP TYPE IF EXISTS buildingtype")
+    hazardlevel.drop(op.get_bind(), checkfirst=True)
+    constructiontype.drop(op.get_bind(), checkfirst=True)
+    occupancytype.drop(op.get_bind(), checkfirst=True)
+    buildingtype.drop(op.get_bind(), checkfirst=True)

@@ -3,7 +3,7 @@
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.deps import DbSession, CurrentUser, require_role
@@ -153,7 +153,7 @@ async def get_role(
 async def create_role(
     request: RoleCreateRequest,
     db: DbSession,
-    current_user: Annotated[Any, require_role(UserRole.SYSTEM_ADMIN)],
+    current_user: Annotated[Any, Depends(require_role(UserRole.SYSTEM_ADMIN))],
 ) -> RoleResponse:
     """Create a new role (system admin only)."""
     role_service = RoleService(db)
@@ -180,7 +180,7 @@ async def update_role(
     role_id: uuid.UUID,
     request: RoleUpdateRequest,
     db: DbSession,
-    current_user: Annotated[Any, require_role(UserRole.SYSTEM_ADMIN)],
+    current_user: Annotated[Any, Depends(require_role(UserRole.SYSTEM_ADMIN))],
 ) -> RoleResponse:
     """Update an existing role (system admin only)."""
     role_service = RoleService(db)
@@ -217,7 +217,7 @@ async def update_role(
 async def delete_role(
     role_id: uuid.UUID,
     db: DbSession,
-    current_user: Annotated[Any, require_role(UserRole.SYSTEM_ADMIN)],
+    current_user: Annotated[Any, Depends(require_role(UserRole.SYSTEM_ADMIN))],
 ) -> MessageResponse:
     """Delete a role (system admin only, cannot delete system roles)."""
     role_service = RoleService(db)

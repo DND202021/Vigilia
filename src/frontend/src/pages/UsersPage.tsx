@@ -72,7 +72,7 @@ export function UsersPage() {
 
   const roleFilterOptions = [
     { value: '', label: 'All Roles' },
-    ...roles.map((r) => ({ value: r.id, label: r.display_name })),
+    ...(Array.isArray(roles) ? roles : []).map((r) => ({ value: r.id, label: r.display_name })),
   ];
 
   const handleStatusToggle = async (user: UserFull) => {
@@ -477,7 +477,7 @@ function CreateUserModal({ isOpen, onClose, onCreate, roles }: CreateUserModalPr
 
   const roleOptions = [
     { value: '', label: 'Select Role' },
-    ...roles.map((r) => ({ value: r.id, label: r.display_name })),
+    ...(Array.isArray(roles) ? roles : []).map((r) => ({ value: r.id, label: r.display_name })),
   ];
 
   return (
@@ -600,7 +600,7 @@ function EditUserModal({ isOpen, onClose, user, onUpdate, roles }: EditUserModal
 
   const roleOptions = [
     { value: '', label: 'Select Role' },
-    ...roles.map((r) => ({ value: r.id, label: r.display_name })),
+    ...(Array.isArray(roles) ? roles : []).map((r) => ({ value: r.id, label: r.display_name })),
   ];
 
   return (
