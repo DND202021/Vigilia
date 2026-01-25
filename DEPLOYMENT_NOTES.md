@@ -109,6 +109,25 @@ curl -s "https://vigilia.4541f.duckdns.org/socket.io/?EIO=4&transport=polling"
 4. **WebSocket-only transport fails** - Frontend should use `transports: ['polling', 'websocket']` to allow fallback
 5. **HTTP/2 conflicts** - WebSocket upgrade works differently with HTTP/2; ensure proxy handles this
 
+### ROOT CAUSE: HTTP/2 + WebSocket Incompatibility
+
+The nginx-proxy-manager has `http2 on;` enabled for the vigilia proxy host. HTTP/2 handles connections differently than HTTP/1.1, and WebSocket upgrades don't work reliably through HTTP/2 proxies.
+
+**Symptoms:**
+- Initial Socket.IO polling works (gets session ID)
+- WebSocket upgrade fails
+- Subsequent polling requests return 400 (session invalidated)
+- Reconnection loop ensues
+
+**Solutions (in order of preference):**
+
+1. **Disable HTTP/2 in nginx-proxy-manager** (UI: Edit proxy host → Disable HTTP/2)
+2. **Use polling-only transport** (current implementation)
+3. **Bypass nginx-proxy-manager** for WebSocket traffic
+
+**Current Workaround:**
+The frontend uses polling-only transport and silently fails after 2 attempts. The app works fully without real-time updates - users just need to refresh to see changes.
+
 ### Frontend Socket.IO Configuration (src/hooks/useWebSocket.ts):
 ```typescript
 const socket = io(wsUrl, {

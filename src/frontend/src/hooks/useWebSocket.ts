@@ -1,5 +1,12 @@
 /**
  * WebSocket Hook for Real-time Updates
+ *
+ * This hook provides optional real-time updates via Socket.IO.
+ * If the connection fails (e.g., due to proxy configuration issues),
+ * it fails silently without spamming the console.
+ *
+ * The app works fully without WebSocket - users just need to refresh
+ * to see updates instead of getting them in real-time.
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
@@ -10,8 +17,11 @@ import { useResourceStore } from '../stores/resourceStore';
 import { tokenStorage } from '../services/api';
 import type { Incident, Alert, Resource } from '../types';
 
-// Use relative path to go through nginx proxy, or fall back to localhost for dev
-// WS_URL is now determined at connection time in connect() function
+// Feature flag to completely disable WebSocket (set via env or here)
+const WEBSOCKET_ENABLED = import.meta.env.VITE_WEBSOCKET_ENABLED !== 'false';
+
+// After this many consecutive failures, stop trying
+const MAX_CONSECUTIVE_FAILURES = 2;
 
 interface WebSocketHookResult {
   isConnected: boolean;
@@ -22,6 +32,7 @@ interface WebSocketHookResult {
 
 export function useWebSocket(): WebSocketHookResult {
   const socketRef = useRef<Socket | null>(null);
+  const failureCountRef = useRef(0);
   const [isConnected, setIsConnected] = useState(false);
   const [lastEvent, setLastEvent] = useState<string | null>(null);
 
@@ -30,7 +41,14 @@ export function useWebSocket(): WebSocketHookResult {
   const handleResourceUpdate = useResourceStore((state) => state.handleResourceUpdate);
 
   const connect = useCallback(() => {
+    // Skip if disabled or already connected
+    if (!WEBSOCKET_ENABLED) return;
     if (socketRef.current?.connected) return;
+
+    // Stop trying after too many failures
+    if (failureCountRef.current >= MAX_CONSECUTIVE_FAILURES) {
+      return;
+    }
 
     const token = tokenStorage.getAccessToken();
     if (!token) return;
@@ -39,28 +57,37 @@ export function useWebSocket(): WebSocketHookResult {
     const socket = io(wsUrl, {
       path: '/socket.io/',
       auth: { token },
-      // Use polling first, then upgrade to websocket - more reliable through proxy chains
-      transports: ['polling', 'websocket'],
-      reconnection: true,
-      reconnectionAttempts: 3,
-      reconnectionDelay: 2000,
-      reconnectionDelayMax: 10000,
+      // Only use polling - WebSocket upgrade fails through HTTP/2 proxies
+      transports: ['polling'],
+      reconnection: false, // Don't auto-reconnect, we'll handle it manually
       timeout: 10000,
     });
 
     socket.on('connect', () => {
+      failureCountRef.current = 0; // Reset on success
       setIsConnected(true);
-      console.log('[WS] Connected');
+      // Only log in development
+      if (import.meta.env.DEV) {
+        console.log('[WS] Connected');
+      }
     });
 
     socket.on('disconnect', (reason) => {
       setIsConnected(false);
-      console.log('[WS] Disconnected:', reason);
+      if (import.meta.env.DEV) {
+        console.log('[WS] Disconnected:', reason);
+      }
     });
 
-    socket.on('connect_error', (error) => {
-      console.error('[WS] Connection error:', error.message);
+    socket.on('connect_error', () => {
+      failureCountRef.current++;
       setIsConnected(false);
+      // Silently fail - WebSocket is optional
+      // The app works fine without real-time updates
+      if (failureCountRef.current >= MAX_CONSECUTIVE_FAILURES) {
+        socket.disconnect();
+        socketRef.current = null;
+      }
     });
 
     // Event handlers
