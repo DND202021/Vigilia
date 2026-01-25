@@ -298,6 +298,82 @@ class TestFileStorageService:
         assert count == 0
 
 
+class TestFileStoragePermissions:
+    """Tests for file storage permission handling."""
+
+    def test_storage_directory_writable(self):
+        """Test that the storage directory is writable.
+
+        This test catches permission errors like:
+        PermissionError: [Errno 13] Permission denied: '/data/buildings/...'
+
+        In Docker, volumes may be created with root ownership but the app
+        runs as a non-root user. This test ensures we detect such issues.
+        """
+        import tempfile
+        import os
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            service = FileStorageService(base_path=tmpdir)
+            building_id = uuid.uuid4()
+
+            # This should not raise PermissionError
+            building_path = service._get_building_path(building_id)
+            assert building_path.exists()
+            assert os.access(building_path, os.W_OK)
+
+    def test_storage_directory_creation_fails_gracefully(self):
+        """Test that we get a clear error when directory creation fails."""
+        import os
+        import stat
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a read-only directory
+            readonly_dir = Path(tmpdir) / "readonly"
+            readonly_dir.mkdir()
+            os.chmod(readonly_dir, stat.S_IRUSR | stat.S_IXUSR)
+
+            try:
+                service = FileStorageService(base_path=str(readonly_dir / "storage"))
+                # Should raise PermissionError during initialization
+                pytest.fail("Expected PermissionError for read-only directory")
+            except PermissionError:
+                pass  # Expected
+            finally:
+                # Restore permissions for cleanup
+                os.chmod(readonly_dir, stat.S_IRWXU)
+
+    @pytest.mark.asyncio
+    async def test_save_file_permission_error(self):
+        """Test that save_floor_plan handles permission errors gracefully."""
+        import os
+        import stat
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            service = FileStorageService(base_path=tmpdir)
+            building_id = uuid.uuid4()
+
+            # Create the building path first
+            building_path = service._get_building_path(building_id)
+
+            # Make it read-only
+            os.chmod(building_path, stat.S_IRUSR | stat.S_IXUSR)
+
+            try:
+                with pytest.raises(PermissionError):
+                    await service.save_floor_plan(
+                        building_id=building_id,
+                        floor_number=0,
+                        file_content=b'test',
+                        content_type='application/pdf'
+                    )
+            finally:
+                # Restore permissions for cleanup
+                os.chmod(building_path, stat.S_IRWXU)
+
+
 class TestFileStorageServiceHelpers:
     """Tests for helper functions in file storage."""
 

@@ -353,3 +353,172 @@ class TestFloorPlanUploadAPI:
         )
 
         assert response.status_code == 404
+
+    # ==================== File Upload Tests ====================
+
+    @pytest.mark.asyncio
+    async def test_upload_floor_plan_png(self, client: AsyncClient, admin_user: User, test_agency: Agency):
+        """Test uploading a PNG floor plan file."""
+        token = await self.get_admin_token(client)
+        building_id = await self.create_test_building(client, token)
+
+        # Create a simple PNG file (1x1 pixel)
+        png_data = (
+            b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01'
+            b'\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00'
+            b'\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00'
+            b'\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82'
+        )
+
+        response = await client.post(
+            f"/api/v1/buildings/{building_id}/floor-plans/upload",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"floor_number": 0},
+            files={"file": ("floor_plan.png", io.BytesIO(png_data), "image/png")},
+        )
+
+        assert response.status_code == 200, f"Upload failed: {response.json()}"
+        data = response.json()
+        assert "file_url" in data
+        assert data["file_type"] == "png"
+
+    @pytest.mark.asyncio
+    async def test_upload_floor_plan_pdf(self, client: AsyncClient, admin_user: User, test_agency: Agency):
+        """Test uploading a PDF floor plan file."""
+        token = await self.get_admin_token(client)
+        building_id = await self.create_test_building(client, token)
+
+        # Create a minimal PDF
+        pdf_data = b'%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 0/Kids[]>>endobj\nxref\n0 3\n0000000000 65535 f\n0000000009 00000 n\n0000000052 00000 n\ntrailer<</Size 3/Root 1 0 R>>\nstartxref\n101\n%%EOF'
+
+        response = await client.post(
+            f"/api/v1/buildings/{building_id}/floor-plans/upload",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"floor_number": 1},
+            files={"file": ("floor_plan.pdf", io.BytesIO(pdf_data), "application/pdf")},
+        )
+
+        assert response.status_code == 200, f"Upload failed: {response.json()}"
+        data = response.json()
+        assert "file_url" in data
+        assert data["file_type"] == "pdf"
+
+    @pytest.mark.asyncio
+    async def test_upload_floor_plan_invalid_type(self, client: AsyncClient, admin_user: User, test_agency: Agency):
+        """Test uploading an invalid file type fails."""
+        token = await self.get_admin_token(client)
+        building_id = await self.create_test_building(client, token)
+
+        response = await client.post(
+            f"/api/v1/buildings/{building_id}/floor-plans/upload",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"floor_number": 0},
+            files={"file": ("malware.exe", io.BytesIO(b"MZ..."), "application/x-msdownload")},
+        )
+
+        assert response.status_code == 400
+        assert "Invalid file type" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_upload_floor_plan_no_auth(self, client: AsyncClient, admin_user: User, test_agency: Agency):
+        """Test uploading without auth fails."""
+        token = await self.get_admin_token(client)
+        building_id = await self.create_test_building(client, token)
+
+        png_data = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR'
+
+        response = await client.post(
+            f"/api/v1/buildings/{building_id}/floor-plans/upload",
+            params={"floor_number": 0},
+            files={"file": ("floor.png", io.BytesIO(png_data), "image/png")},
+        )
+
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_upload_floor_plan_building_not_found(self, client: AsyncClient, admin_user: User, test_agency: Agency):
+        """Test uploading to non-existent building fails."""
+        token = await self.get_admin_token(client)
+        fake_id = "00000000-0000-0000-0000-000000000000"
+
+        png_data = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR'
+
+        response = await client.post(
+            f"/api/v1/buildings/{fake_id}/floor-plans/upload",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"floor_number": 0},
+            files={"file": ("floor.png", io.BytesIO(png_data), "image/png")},
+        )
+
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_get_floor_plan_file(self, client: AsyncClient, admin_user: User, test_agency: Agency):
+        """Test retrieving an uploaded floor plan file."""
+        token = await self.get_admin_token(client)
+        building_id = await self.create_test_building(client, token)
+
+        # Upload a file first
+        png_data = (
+            b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01'
+            b'\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00'
+            b'\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00'
+            b'\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82'
+        )
+
+        upload_response = await client.post(
+            f"/api/v1/buildings/{building_id}/floor-plans/upload",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"floor_number": 0},
+            files={"file": ("floor.png", io.BytesIO(png_data), "image/png")},
+        )
+        assert upload_response.status_code == 200
+
+        # Get the filename from the URL
+        file_url = upload_response.json()["file_url"]
+        filename = file_url.split("/")[-1]
+
+        # Retrieve the file
+        get_response = await client.get(
+            f"/api/v1/buildings/{building_id}/floor-plans/files/{filename}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert get_response.status_code == 200
+        assert get_response.headers["content-type"] == "image/png"
+        assert get_response.content == png_data
+
+    @pytest.mark.asyncio
+    async def test_delete_floor_plan_file(self, client: AsyncClient, admin_user: User, test_agency: Agency):
+        """Test deleting an uploaded floor plan file."""
+        token = await self.get_admin_token(client)
+        building_id = await self.create_test_building(client, token)
+
+        # Upload a file first
+        png_data = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR'
+
+        upload_response = await client.post(
+            f"/api/v1/buildings/{building_id}/floor-plans/upload",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"floor_number": 0},
+            files={"file": ("floor.png", io.BytesIO(png_data), "image/png")},
+        )
+        assert upload_response.status_code == 200
+
+        file_url = upload_response.json()["file_url"]
+        filename = file_url.split("/")[-1]
+
+        # Delete the file
+        delete_response = await client.delete(
+            f"/api/v1/buildings/{building_id}/floor-plans/files/{filename}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert delete_response.status_code == 204
+
+        # Verify file is deleted
+        get_response = await client.get(
+            f"/api/v1/buildings/{building_id}/floor-plans/files/{filename}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert get_response.status_code == 404
