@@ -15,6 +15,7 @@ from app.services.socketio import (
 )
 from app.services.role_service import RoleService, RoleError, AVAILABLE_PERMISSIONS
 from app.services.user_service import UserService, UserError
+from app.services.file_storage import FileStorageService, FileStorageError, get_file_storage
 
 __all__ = [
     "AuthService",
@@ -37,4 +38,7 @@ __all__ = [
     "AVAILABLE_PERMISSIONS",
     "UserService",
     "UserError",
+    "FileStorageService",
+    "FileStorageError",
+    "get_file_storage",
 ]

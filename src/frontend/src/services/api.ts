@@ -409,6 +409,61 @@ export const buildingsApi = {
     });
     return response.data;
   },
+
+  uploadFloorPlan: async (
+    buildingId: string,
+    file: File,
+    floorNumber: number,
+    floorName?: string,
+    onProgress?: (progress: number) => void,
+  ): Promise<FloorPlan> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await api.post<FloorPlan>(
+      `/buildings/${buildingId}/floor-plans/upload`,
+      formData,
+      {
+        params: {
+          floor_number: floorNumber,
+          floor_name: floorName,
+        },
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        onUploadProgress: (progressEvent) => {
+          if (onProgress && progressEvent.total) {
+            const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            onProgress(percent);
+          }
+        },
+      }
+    );
+    return response.data;
+  },
+
+  updateFloorPlanLocations: async (
+    floorPlanId: string,
+    data: {
+      key_locations?: Array<{ type: string; name: string; x: number; y: number; description?: string }>;
+      emergency_exits?: Array<{ name: string; x: number; y: number; description?: string }>;
+      fire_equipment?: Array<{ type: string; name: string; x: number; y: number }>;
+      hazards?: Array<{ type: string; name: string; x: number; y: number; description?: string }>;
+    },
+  ): Promise<FloorPlan> => {
+    const response = await api.patch<FloorPlan>(`/buildings/floors/${floorPlanId}/locations`, data);
+    return response.data;
+  },
+
+  deleteFloorPlan: async (floorPlanId: string): Promise<void> => {
+    await api.delete(`/buildings/floors/${floorPlanId}`);
+  },
+
+  getFloorPlanImageUrl: (buildingId: string, filename: string): string => {
+    const token = tokenStorage.getAccessToken();
+    // For images, we can use the URL directly with auth header
+    return `${API_BASE_URL}/buildings/${buildingId}/floor-plans/files/${filename}`;
+  },
 };
 
 // Users API

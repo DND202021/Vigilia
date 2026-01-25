@@ -2,7 +2,7 @@
  * Buildings Page - Building Information Management
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { buildingsApi } from '../services/api';
 import {
   Card,
@@ -14,6 +14,7 @@ import {
   Input,
   Spinner,
 } from '../components/ui';
+import { FloorPlanViewer, FloorPlanUpload } from '../components/buildings';
 import { cn } from '../utils';
 import type {
   Building,
@@ -506,28 +507,37 @@ interface BuildingDetailModalProps {
   onVerify: (id: string) => Promise<void>;
 }
 
+type DetailTab = 'info' | 'floors' | 'upload';
+
 function BuildingDetailModal({ isOpen, onClose, building, onVerify }: BuildingDetailModalProps) {
   const [floorPlans, setFloorPlans] = useState<FloorPlan[]>([]);
   const [isLoadingFloors, setIsLoadingFloors] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [activeTab, setActiveTab] = useState<DetailTab>('info');
+  const [selectedFloor, setSelectedFloor] = useState<FloorPlan | null>(null);
 
   useEffect(() => {
     if (isOpen && building) {
       loadFloorPlans();
+      setActiveTab('info');
+      setSelectedFloor(null);
     }
   }, [isOpen, building]);
 
-  const loadFloorPlans = async () => {
+  const loadFloorPlans = useCallback(async () => {
     setIsLoadingFloors(true);
     try {
       const plans = await buildingsApi.getFloorPlans(building.id);
       setFloorPlans(plans);
+      if (plans.length > 0 && !selectedFloor) {
+        setSelectedFloor(plans[0]);
+      }
     } catch (err) {
       console.error('Failed to load floor plans:', err);
     } finally {
       setIsLoadingFloors(false);
     }
-  };
+  }, [building.id, selectedFloor]);
 
   const handleVerify = async () => {
     setIsVerifying(true);
@@ -538,14 +548,20 @@ function BuildingDetailModal({ isOpen, onClose, building, onVerify }: BuildingDe
     }
   };
 
+  const handleUploadComplete = useCallback((newFloorPlan: FloorPlan) => {
+    setFloorPlans((prev) => [...prev, newFloorPlan].sort((a, b) => a.floor_number - b.floor_number));
+    setSelectedFloor(newFloorPlan);
+    setActiveTab('floors');
+  }, []);
+
   const hazardStyle = hazardLevelConfig[building.hazard_level];
   const typeLabel = buildingTypeOptions.find((t) => t.value === building.building_type)?.label || building.building_type;
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={building.name}>
-      <div className="space-y-6">
+      <div className="flex flex-col h-[70vh]">
         {/* Header Info */}
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between pb-4 border-b">
           <div>
             <p className="text-gray-600">{building.full_address}</p>
             <div className="flex gap-2 mt-2">
@@ -562,122 +578,207 @@ function BuildingDetailModal({ isOpen, onClose, building, onVerify }: BuildingDe
           </div>
         </div>
 
-        {/* Building Specs */}
-        <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
-          <div>
-            <p className="text-xs text-gray-500">Floors</p>
-            <p className="font-semibold">{building.total_floors}</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500">Basements</p>
-            <p className="font-semibold">{building.basement_levels}</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500">Year Built</p>
-            <p className="font-semibold">{building.year_built || 'Unknown'}</p>
-          </div>
+        {/* Tabs */}
+        <div className="flex border-b mt-4">
+          <button
+            onClick={() => setActiveTab('info')}
+            className={cn(
+              'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+              activeTab === 'info'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            )}
+          >
+            Building Info
+          </button>
+          <button
+            onClick={() => setActiveTab('floors')}
+            className={cn(
+              'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+              activeTab === 'floors'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            )}
+          >
+            Floor Plans ({floorPlans.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('upload')}
+            className={cn(
+              'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+              activeTab === 'upload'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            )}
+          >
+            Upload Plan
+          </button>
         </div>
 
-        {/* Safety Features */}
-        <div>
-          <h4 className="font-semibold mb-2">Safety Features</h4>
-          <div className="flex flex-wrap gap-2">
-            {building.has_sprinkler_system && (
-              <Badge className="bg-blue-100 text-blue-700">Sprinkler System</Badge>
-            )}
-            {building.has_fire_alarm && (
-              <Badge className="bg-blue-100 text-blue-700">Fire Alarm</Badge>
-            )}
-            {building.has_standpipe && (
-              <Badge className="bg-blue-100 text-blue-700">Standpipe</Badge>
-            )}
-            {building.has_elevator && (
-              <Badge className="bg-blue-100 text-blue-700">Elevator ({building.elevator_count || 1})</Badge>
-            )}
-            {building.has_generator && (
-              <Badge className="bg-blue-100 text-blue-700">Generator</Badge>
-            )}
-            {building.knox_box && (
-              <Badge className="bg-blue-100 text-blue-700">Knox Box</Badge>
-            )}
-            {building.has_hazmat && (
-              <Badge className="bg-red-100 text-red-700">HAZMAT Present</Badge>
-            )}
-          </div>
-        </div>
+        {/* Tab Content */}
+        <div className="flex-1 overflow-auto py-4">
+          {activeTab === 'info' && (
+            <div className="space-y-6">
+              {/* Building Specs */}
+              <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <p className="text-xs text-gray-500">Floors</p>
+                  <p className="font-semibold">{building.total_floors}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Basements</p>
+                  <p className="font-semibold">{building.basement_levels}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Year Built</p>
+                  <p className="font-semibold">{building.year_built || 'Unknown'}</p>
+                </div>
+              </div>
 
-        {/* Access Information */}
-        {(building.primary_entrance || building.staging_area || building.key_box_location) && (
-          <div>
-            <h4 className="font-semibold mb-2">Access Information</h4>
-            <div className="space-y-2 text-sm">
-              {building.primary_entrance && (
-                <p><span className="text-gray-500">Primary Entrance:</span> {building.primary_entrance}</p>
-              )}
-              {building.staging_area && (
-                <p><span className="text-gray-500">Staging Area:</span> {building.staging_area}</p>
-              )}
-              {building.key_box_location && (
-                <p><span className="text-gray-500">Key Box:</span> {building.key_box_location}</p>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Emergency Contacts */}
-        {(building.emergency_contact_name || building.owner_name) && (
-          <div>
-            <h4 className="font-semibold mb-2">Contacts</h4>
-            <div className="space-y-2 text-sm">
-              {building.emergency_contact_name && (
-                <p>
-                  <span className="text-gray-500">Emergency:</span> {building.emergency_contact_name}
-                  {building.emergency_contact_phone && ` - ${building.emergency_contact_phone}`}
-                </p>
-              )}
-              {building.owner_name && (
-                <p>
-                  <span className="text-gray-500">Owner:</span> {building.owner_name}
-                  {building.owner_phone && ` - ${building.owner_phone}`}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Tactical Notes */}
-        {building.tactical_notes && (
-          <div>
-            <h4 className="font-semibold mb-2">Tactical Notes</h4>
-            <p className="text-sm text-gray-700 bg-yellow-50 p-3 rounded">{building.tactical_notes}</p>
-          </div>
-        )}
-
-        {/* Floor Plans */}
-        <div>
-          <h4 className="font-semibold mb-2">Floor Plans ({floorPlans.length})</h4>
-          {isLoadingFloors ? (
-            <Spinner size="sm" />
-          ) : floorPlans.length === 0 ? (
-            <p className="text-sm text-gray-500">No floor plans available</p>
-          ) : (
-            <div className="space-y-2">
-              {floorPlans.map((plan) => (
-                <div key={plan.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                  <span>{plan.floor_name || `Floor ${plan.floor_number}`}</span>
-                  {plan.plan_file_url && (
-                    <a
-                      href={plan.plan_file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline text-sm"
-                    >
-                      View Plan
-                    </a>
+              {/* Safety Features */}
+              <div>
+                <h4 className="font-semibold mb-2">Safety Features</h4>
+                <div className="flex flex-wrap gap-2">
+                  {building.has_sprinkler_system && (
+                    <Badge className="bg-blue-100 text-blue-700">Sprinkler System</Badge>
+                  )}
+                  {building.has_fire_alarm && (
+                    <Badge className="bg-blue-100 text-blue-700">Fire Alarm</Badge>
+                  )}
+                  {building.has_standpipe && (
+                    <Badge className="bg-blue-100 text-blue-700">Standpipe</Badge>
+                  )}
+                  {building.has_elevator && (
+                    <Badge className="bg-blue-100 text-blue-700">Elevator ({building.elevator_count || 1})</Badge>
+                  )}
+                  {building.has_generator && (
+                    <Badge className="bg-blue-100 text-blue-700">Generator</Badge>
+                  )}
+                  {building.knox_box && (
+                    <Badge className="bg-blue-100 text-blue-700">Knox Box</Badge>
+                  )}
+                  {building.has_hazmat && (
+                    <Badge className="bg-red-100 text-red-700">HAZMAT Present</Badge>
+                  )}
+                  {!building.has_sprinkler_system && !building.has_fire_alarm && !building.has_standpipe &&
+                   !building.has_elevator && !building.has_generator && !building.knox_box && !building.has_hazmat && (
+                    <span className="text-sm text-gray-500">No safety features recorded</span>
                   )}
                 </div>
-              ))}
+              </div>
+
+              {/* Access Information */}
+              {(building.primary_entrance || building.staging_area || building.key_box_location) && (
+                <div>
+                  <h4 className="font-semibold mb-2">Access Information</h4>
+                  <div className="space-y-2 text-sm">
+                    {building.primary_entrance && (
+                      <p><span className="text-gray-500">Primary Entrance:</span> {building.primary_entrance}</p>
+                    )}
+                    {building.staging_area && (
+                      <p><span className="text-gray-500">Staging Area:</span> {building.staging_area}</p>
+                    )}
+                    {building.key_box_location && (
+                      <p><span className="text-gray-500">Key Box:</span> {building.key_box_location}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Emergency Contacts */}
+              {(building.emergency_contact_name || building.owner_name) && (
+                <div>
+                  <h4 className="font-semibold mb-2">Contacts</h4>
+                  <div className="space-y-2 text-sm">
+                    {building.emergency_contact_name && (
+                      <p>
+                        <span className="text-gray-500">Emergency:</span> {building.emergency_contact_name}
+                        {building.emergency_contact_phone && ` - ${building.emergency_contact_phone}`}
+                      </p>
+                    )}
+                    {building.owner_name && (
+                      <p>
+                        <span className="text-gray-500">Owner:</span> {building.owner_name}
+                        {building.owner_phone && ` - ${building.owner_phone}`}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Tactical Notes */}
+              {building.tactical_notes && (
+                <div>
+                  <h4 className="font-semibold mb-2">Tactical Notes</h4>
+                  <p className="text-sm text-gray-700 bg-yellow-50 p-3 rounded">{building.tactical_notes}</p>
+                </div>
+              )}
             </div>
+          )}
+
+          {activeTab === 'floors' && (
+            <div className="h-full flex flex-col">
+              {isLoadingFloors ? (
+                <div className="flex-1 flex items-center justify-center">
+                  <Spinner size="lg" />
+                </div>
+              ) : floorPlans.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
+                  <svg className="w-16 h-16 mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                  </svg>
+                  <p>No floor plans uploaded yet</p>
+                  <Button className="mt-4" onClick={() => setActiveTab('upload')}>
+                    Upload Floor Plan
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col h-full">
+                  {/* Floor selector */}
+                  <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+                    {floorPlans.map((plan) => (
+                      <button
+                        key={plan.id}
+                        onClick={() => setSelectedFloor(plan)}
+                        className={cn(
+                          'px-3 py-1.5 text-sm rounded-lg whitespace-nowrap transition-colors',
+                          selectedFloor?.id === plan.id
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        )}
+                      >
+                        {plan.floor_name || `Floor ${plan.floor_number}`}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Floor plan viewer */}
+                  {selectedFloor && (
+                    <div className="flex-1 border rounded-lg overflow-hidden">
+                      <FloorPlanViewer
+                        floorPlan={selectedFloor}
+                        keyLocations={selectedFloor.key_locations || []}
+                        emergencyExits={selectedFloor.emergency_exits || []}
+                        fireEquipment={selectedFloor.fire_equipment || []}
+                        hazards={selectedFloor.hazards || []}
+                        showControls={true}
+                        showLegend={true}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'upload' && (
+            <FloorPlanUpload
+              buildingId={building.id}
+              totalFloors={building.total_floors}
+              basementLevels={building.basement_levels}
+              existingFloorPlans={floorPlans}
+              onUploadComplete={handleUploadComplete}
+            />
           )}
         </div>
 

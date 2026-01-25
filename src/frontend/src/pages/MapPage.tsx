@@ -2,7 +2,7 @@
  * Tactical Map Page
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -10,7 +10,9 @@ import { useIncidentStore } from '../stores/incidentStore';
 import { useResourceStore } from '../stores/resourceStore';
 import { useAlertStore } from '../stores/alertStore';
 import { usePolling } from '../hooks/useInterval';
-import { Badge } from '../components/ui';
+import { buildingsApi } from '../services/api';
+import { Badge, Button, Modal, Spinner } from '../components/ui';
+import { FloorPlanViewer } from '../components/buildings';
 import {
   getPriorityLabel,
   getPriorityBgColor,
@@ -22,7 +24,7 @@ import {
   formatRelativeTime,
   cn,
 } from '../utils';
-import type { Incident, Resource, Alert } from '../types';
+import type { Incident, Resource, Alert, Building, FloorPlan } from '../types';
 
 const POLL_INTERVAL = 10000;
 const DEFAULT_CENTER: [number, number] = [45.5017, -73.5673]; // Montreal
@@ -47,6 +49,7 @@ const createIcon = (color: string, size: number = 24) => {
 const incidentIcon = createIcon('#EF4444', 28); // Red
 const resourceIcon = createIcon('#10B981', 24); // Green
 const alertIcon = createIcon('#F59E0B', 26); // Yellow
+const buildingIcon = createIcon('#8B5CF6', 22); // Purple
 
 // Priority-based incident icons
 const incidentIcons: Record<number, L.DivIcon> = {
@@ -57,6 +60,14 @@ const incidentIcons: Record<number, L.DivIcon> = {
   5: createIcon('#6B7280', 22), // Info
 };
 
+// Hazard level building icons
+const buildingIcons: Record<string, L.DivIcon> = {
+  low: createIcon('#8B5CF6', 20), // Purple
+  moderate: createIcon('#F59E0B', 22), // Yellow
+  high: createIcon('#F97316', 24), // Orange
+  extreme: createIcon('#DC2626', 26), // Red
+};
+
 export function MapPage() {
   const { activeIncidents, fetchActiveIncidents } = useIncidentStore();
   const { resources, fetchResources } = useResourceStore();
@@ -65,10 +76,34 @@ export function MapPage() {
   const [showIncidents, setShowIncidents] = useState(true);
   const [showResources, setShowResources] = useState(true);
   const [showAlerts, setShowAlerts] = useState(true);
+  const [showBuildings, setShowBuildings] = useState(true);
+  const [buildings, setBuildings] = useState<Building[]>([]);
+  const [isLoadingBuildings, setIsLoadingBuildings] = useState(false);
   const [selectedItem, setSelectedItem] = useState<{
-    type: 'incident' | 'resource' | 'alert';
-    item: Incident | Resource | Alert;
+    type: 'incident' | 'resource' | 'alert' | 'building';
+    item: Incident | Resource | Alert | Building;
   } | null>(null);
+  const [buildingModalOpen, setBuildingModalOpen] = useState(false);
+  const [selectedBuildingFloorPlans, setSelectedBuildingFloorPlans] = useState<FloorPlan[]>([]);
+  const [isLoadingFloorPlans, setIsLoadingFloorPlans] = useState(false);
+
+  // Fetch buildings
+  const fetchBuildings = useCallback(async () => {
+    setIsLoadingBuildings(true);
+    try {
+      const response = await buildingsApi.list({ page_size: 200 });
+      setBuildings(response.items);
+    } catch (err) {
+      console.error('Failed to fetch buildings:', err);
+    } finally {
+      setIsLoadingBuildings(false);
+    }
+  }, []);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchBuildings();
+  }, [fetchBuildings]);
 
   // Fetch data
   usePolling(fetchActiveIncidents, POLL_INTERVAL);
@@ -90,6 +125,29 @@ export function MapPage() {
     () => pendingAlerts.filter((a) => a.latitude && a.longitude),
     [pendingAlerts]
   );
+
+  const buildingsWithCoords = useMemo(
+    () => buildings.filter((b) => b.latitude && b.longitude),
+    [buildings]
+  );
+
+  // Handle building click for floor plans
+  const handleBuildingClick = useCallback(async (building: Building) => {
+    setSelectedItem({ type: 'building', item: building });
+  }, []);
+
+  const handleViewBuildingDetails = useCallback(async (building: Building) => {
+    setBuildingModalOpen(true);
+    setIsLoadingFloorPlans(true);
+    try {
+      const plans = await buildingsApi.getFloorPlans(building.id);
+      setSelectedBuildingFloorPlans(plans);
+    } catch (err) {
+      console.error('Failed to fetch floor plans:', err);
+    } finally {
+      setIsLoadingFloorPlans(false);
+    }
+  }, []);
 
   return (
     <div className="h-[calc(100vh-64px)] flex">
@@ -120,6 +178,13 @@ export function MapPage() {
               enabled={showAlerts}
               onChange={setShowAlerts}
             />
+            <LayerToggle
+              label="Buildings"
+              count={buildingsWithCoords.length}
+              color="purple"
+              enabled={showBuildings}
+              onChange={setShowBuildings}
+            />
           </div>
         </div>
 
@@ -139,7 +204,10 @@ export function MapPage() {
                 </svg>
               </button>
             </div>
-            <SelectedItemDetail item={selectedItem} />
+            <SelectedItemDetail
+              item={selectedItem}
+              onViewBuildingDetails={handleViewBuildingDetails}
+            />
           </div>
         )}
 
@@ -298,6 +366,55 @@ export function MapPage() {
               </Marker>
             ))}
 
+          {/* Buildings */}
+          {showBuildings &&
+            buildingsWithCoords.map((building) => (
+              <Marker
+                key={`building-${building.id}`}
+                position={[building.latitude, building.longitude]}
+                icon={buildingIcons[building.hazard_level] || buildingIcon}
+                eventHandlers={{
+                  click: () => handleBuildingClick(building),
+                }}
+              >
+                <Popup>
+                  <div className="min-w-48">
+                    <p className="font-semibold">{building.name}</p>
+                    <p className="text-sm text-gray-600">{building.full_address}</p>
+                    <div className="mt-2 flex gap-2 flex-wrap">
+                      <Badge size="sm" variant="secondary">
+                        {building.building_type.replace('_', ' ')}
+                      </Badge>
+                      <Badge
+                        size="sm"
+                        className={cn(
+                          building.hazard_level === 'extreme' && 'bg-red-100 text-red-700',
+                          building.hazard_level === 'high' && 'bg-orange-100 text-orange-700',
+                          building.hazard_level === 'moderate' && 'bg-yellow-100 text-yellow-700',
+                          building.hazard_level === 'low' && 'bg-green-100 text-green-700'
+                        )}
+                      >
+                        {building.hazard_level}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 text-xs text-gray-500">
+                      {building.total_floors} floor{building.total_floors !== 1 && 's'}
+                      {building.has_hazmat && ' | HAZMAT'}
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewBuildingDetails(building);
+                      }}
+                      className="mt-2 text-sm text-blue-600 hover:underline"
+                    >
+                      View Details & Floor Plans
+                    </button>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+
           <MapControls />
         </MapContainer>
 
@@ -317,8 +434,158 @@ export function MapPage() {
               <div className="w-3 h-3 rounded-full bg-yellow-500" />
               <span>Alert</span>
             </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-purple-500" />
+              <span>Building</span>
+            </div>
           </div>
         </div>
+      </div>
+
+      {/* Building Detail Modal */}
+      {selectedItem?.type === 'building' && (
+        <Modal
+          isOpen={buildingModalOpen}
+          onClose={() => {
+            setBuildingModalOpen(false);
+            setSelectedBuildingFloorPlans([]);
+          }}
+          title={(selectedItem.item as Building).name}
+        >
+          <BuildingMapModal
+            building={selectedItem.item as Building}
+            floorPlans={selectedBuildingFloorPlans}
+            isLoadingFloorPlans={isLoadingFloorPlans}
+          />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// Building modal content for map
+interface BuildingMapModalProps {
+  building: Building;
+  floorPlans: FloorPlan[];
+  isLoadingFloorPlans: boolean;
+}
+
+function BuildingMapModal({ building, floorPlans, isLoadingFloorPlans }: BuildingMapModalProps) {
+  const [selectedFloor, setSelectedFloor] = useState<FloorPlan | null>(null);
+
+  useEffect(() => {
+    if (floorPlans.length > 0) {
+      setSelectedFloor(floorPlans[0]);
+    }
+  }, [floorPlans]);
+
+  return (
+    <div className="space-y-4">
+      {/* Building Info Summary */}
+      <div className="grid grid-cols-2 gap-4 text-sm">
+        <div>
+          <p className="text-gray-500">Address</p>
+          <p className="font-medium">{building.full_address}</p>
+        </div>
+        <div>
+          <p className="text-gray-500">Type</p>
+          <p className="font-medium capitalize">{building.building_type.replace('_', ' ')}</p>
+        </div>
+        <div>
+          <p className="text-gray-500">Floors</p>
+          <p className="font-medium">{building.total_floors} ({building.basement_levels} basement)</p>
+        </div>
+        <div>
+          <p className="text-gray-500">Hazard Level</p>
+          <Badge
+            size="sm"
+            className={cn(
+              building.hazard_level === 'extreme' && 'bg-red-100 text-red-700',
+              building.hazard_level === 'high' && 'bg-orange-100 text-orange-700',
+              building.hazard_level === 'moderate' && 'bg-yellow-100 text-yellow-700',
+              building.hazard_level === 'low' && 'bg-green-100 text-green-700'
+            )}
+          >
+            {building.hazard_level}
+          </Badge>
+        </div>
+      </div>
+
+      {/* Safety Features */}
+      <div>
+        <p className="text-sm text-gray-500 mb-2">Safety Features</p>
+        <div className="flex flex-wrap gap-2">
+          {building.has_sprinkler_system && (
+            <Badge size="sm" className="bg-blue-100 text-blue-700">Sprinkler</Badge>
+          )}
+          {building.has_fire_alarm && (
+            <Badge size="sm" className="bg-blue-100 text-blue-700">Fire Alarm</Badge>
+          )}
+          {building.has_elevator && (
+            <Badge size="sm" className="bg-blue-100 text-blue-700">Elevator</Badge>
+          )}
+          {building.knox_box && (
+            <Badge size="sm" className="bg-blue-100 text-blue-700">Knox Box</Badge>
+          )}
+          {building.has_hazmat && (
+            <Badge size="sm" className="bg-red-100 text-red-700">HAZMAT</Badge>
+          )}
+        </div>
+      </div>
+
+      {/* Tactical Notes */}
+      {building.tactical_notes && (
+        <div className="bg-yellow-50 p-3 rounded-lg">
+          <p className="text-sm font-medium text-yellow-800 mb-1">Tactical Notes</p>
+          <p className="text-sm text-yellow-700">{building.tactical_notes}</p>
+        </div>
+      )}
+
+      {/* Floor Plans */}
+      <div>
+        <p className="text-sm text-gray-500 mb-2">Floor Plans</p>
+        {isLoadingFloorPlans ? (
+          <div className="flex justify-center py-8">
+            <Spinner />
+          </div>
+        ) : floorPlans.length === 0 ? (
+          <p className="text-sm text-gray-400 py-4 text-center">No floor plans available</p>
+        ) : (
+          <div className="space-y-3">
+            {/* Floor selector */}
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {floorPlans.map((plan) => (
+                <button
+                  key={plan.id}
+                  onClick={() => setSelectedFloor(plan)}
+                  className={cn(
+                    'px-3 py-1.5 text-sm rounded-lg whitespace-nowrap transition-colors',
+                    selectedFloor?.id === plan.id
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  )}
+                >
+                  {plan.floor_name || `Floor ${plan.floor_number}`}
+                </button>
+              ))}
+            </div>
+
+            {/* Floor plan viewer */}
+            {selectedFloor && (
+              <div className="h-[300px] border rounded-lg overflow-hidden">
+                <FloorPlanViewer
+                  floorPlan={selectedFloor}
+                  keyLocations={selectedFloor.key_locations || []}
+                  emergencyExits={selectedFloor.emergency_exits || []}
+                  fireEquipment={selectedFloor.fire_equipment || []}
+                  hazards={selectedFloor.hazards || []}
+                  showControls={true}
+                  showLegend={true}
+                />
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -355,7 +622,7 @@ function MapControls() {
 interface LayerToggleProps {
   label: string;
   count: number;
-  color: 'red' | 'green' | 'yellow';
+  color: 'red' | 'green' | 'yellow' | 'purple';
   enabled: boolean;
   onChange: (enabled: boolean) => void;
 }
@@ -365,6 +632,7 @@ function LayerToggle({ label, count, color, enabled, onChange }: LayerToggleProp
     red: 'bg-red-500',
     green: 'bg-green-500',
     yellow: 'bg-yellow-500',
+    purple: 'bg-purple-500',
   };
 
   return (
@@ -434,12 +702,13 @@ function ItemListCard({
 
 interface SelectedItemDetailProps {
   item: {
-    type: 'incident' | 'resource' | 'alert';
-    item: Incident | Resource | Alert;
+    type: 'incident' | 'resource' | 'alert' | 'building';
+    item: Incident | Resource | Alert | Building;
   };
+  onViewBuildingDetails?: (building: Building) => void;
 }
 
-function SelectedItemDetail({ item }: SelectedItemDetailProps) {
+function SelectedItemDetail({ item, onViewBuildingDetails }: SelectedItemDetailProps) {
   if (item.type === 'incident') {
     const incident = item.item as Incident;
     return (
@@ -498,6 +767,44 @@ function SelectedItemDetail({ item }: SelectedItemDetailProps) {
         <p className="text-xs text-gray-400 mt-2">
           {formatRelativeTime(alert.created_at)}
         </p>
+      </div>
+    );
+  }
+
+  if (item.type === 'building') {
+    const building = item.item as Building;
+    return (
+      <div>
+        <h3 className="font-semibold">{building.name}</h3>
+        <p className="text-sm text-gray-600 mt-1">{building.full_address}</p>
+        <div className="mt-2 flex gap-2 flex-wrap">
+          <Badge size="sm" variant="secondary" className="capitalize">
+            {building.building_type.replace('_', ' ')}
+          </Badge>
+          <Badge
+            size="sm"
+            className={cn(
+              building.hazard_level === 'extreme' && 'bg-red-100 text-red-700',
+              building.hazard_level === 'high' && 'bg-orange-100 text-orange-700',
+              building.hazard_level === 'moderate' && 'bg-yellow-100 text-yellow-700',
+              building.hazard_level === 'low' && 'bg-green-100 text-green-700'
+            )}
+          >
+            {building.hazard_level}
+          </Badge>
+        </div>
+        <p className="text-xs text-gray-500 mt-2">
+          {building.total_floors} floor{building.total_floors !== 1 && 's'}
+          {building.has_hazmat && ' | HAZMAT'}
+        </p>
+        {onViewBuildingDetails && (
+          <button
+            onClick={() => onViewBuildingDetails(building)}
+            className="mt-2 text-sm text-blue-600 hover:underline"
+          >
+            View Details & Floor Plans
+          </button>
+        )}
       </div>
     );
   }

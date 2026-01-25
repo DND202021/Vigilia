@@ -54,6 +54,9 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://localhost:3000}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       PORT: 8000
+      FILE_STORAGE_PATH: /data/buildings
+    volumes:
+      - building_files:/data/buildings
     depends_on:
       postgres:
         condition: service_healthy
@@ -122,6 +125,8 @@ volumes:
   redis_data:
     driver: local
   nginx_logs:
+    driver: local
+  building_files:
     driver: local
 
 networks:

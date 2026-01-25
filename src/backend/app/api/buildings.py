@@ -5,6 +5,7 @@ from typing import Any
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import FileResponse
 from starlette import status as http_status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +21,7 @@ from app.models.building import (
     FloorPlan as FloorPlanModel,
 )
 from app.services.building_service import BuildingService, BuildingError
+from app.services.file_storage import get_file_storage, FileStorageError
 
 router = APIRouter()
 
@@ -901,3 +903,193 @@ async def delete_floor_plan(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
+
+
+# ==================== Floor Plan File Upload Endpoints ====================
+
+class FloorPlanUploadResponse(BaseModel):
+    """Response after uploading a floor plan file."""
+
+    id: str
+    floor_number: int
+    floor_name: str | None
+    plan_file_url: str
+    plan_thumbnail_url: str | None
+    file_type: str
+    message: str
+
+
+@router.post(
+    "/{building_id}/floor-plans/upload",
+    response_model=FloorPlanUploadResponse,
+    status_code=http_status.HTTP_201_CREATED,
+)
+async def upload_floor_plan(
+    building_id: str,
+    floor_number: int = Query(..., description="Floor number (negative for basements)"),
+    floor_name: str | None = Query(None, description="Optional floor name"),
+    file: UploadFile = File(..., description="Floor plan image (PNG, JPG, PDF, SVG, DWG)"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> FloorPlanUploadResponse:
+    """Upload a floor plan file for a building.
+
+    Accepts PNG, JPG, PDF, SVG, and DWG files up to 50MB.
+    Automatically generates thumbnails for image files.
+    """
+    try:
+        building_uuid = uuid.UUID(building_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid building_id format",
+        )
+
+    # Verify building exists
+    service = BuildingService(db)
+    building = await service.get_building(building_uuid)
+    if not building:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Building not found",
+        )
+
+    # Read file content
+    file_content = await file.read()
+
+    # Get file storage service
+    storage = get_file_storage()
+
+    try:
+        # Save file
+        file_url, thumbnail_url, file_type = await storage.save_floor_plan(
+            building_id=building_uuid,
+            floor_number=floor_number,
+            file_content=file_content,
+            content_type=file.content_type or "application/octet-stream",
+        )
+
+        # Create or update floor plan record in database
+        try:
+            floor_plan = await service.add_floor_plan(
+                building_id=building_uuid,
+                floor_number=floor_number,
+                floor_name=floor_name,
+                plan_file_url=file_url,
+                plan_thumbnail_url=thumbnail_url,
+                file_type=file_type,
+            )
+        except BuildingError:
+            # Floor plan exists, update it
+            floor_plans = await service.get_building_floor_plans(building_uuid)
+            existing = next(
+                (fp for fp in floor_plans if fp.floor_number == floor_number),
+                None
+            )
+            if existing:
+                floor_plan = await service.update_floor_plan(
+                    floor_plan_id=existing.id,
+                    plan_file_url=file_url,
+                    plan_thumbnail_url=thumbnail_url,
+                    file_type=file_type,
+                    floor_name=floor_name or existing.floor_name,
+                )
+            else:
+                raise
+
+        return FloorPlanUploadResponse(
+            id=str(floor_plan.id),
+            floor_number=floor_plan.floor_number,
+            floor_name=floor_plan.floor_name,
+            plan_file_url=file_url,
+            plan_thumbnail_url=thumbnail_url,
+            file_type=file_type,
+            message="Floor plan uploaded successfully",
+        )
+
+    except FileStorageError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get("/{building_id}/floor-plans/files/{filename}")
+async def get_floor_plan_file(
+    building_id: str,
+    filename: str,
+    current_user: User = Depends(get_current_active_user),
+) -> FileResponse:
+    """Serve a floor plan file.
+
+    Returns the file with appropriate content type for display/download.
+    """
+    try:
+        building_uuid = uuid.UUID(building_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid building_id format",
+        )
+
+    storage = get_file_storage()
+    file_path = storage.get_file_path(building_uuid, filename)
+
+    if not file_path:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="File not found",
+        )
+
+    content_type = storage.get_content_type(filename)
+
+    return FileResponse(
+        path=file_path,
+        media_type=content_type,
+        filename=filename,
+    )
+
+
+@router.patch("/floors/{floor_plan_id}/locations", response_model=FloorPlanResponse)
+async def update_floor_plan_locations(
+    floor_plan_id: str,
+    key_locations: list[dict] | None = None,
+    emergency_exits: list[dict] | None = None,
+    fire_equipment: list[dict] | None = None,
+    hazards: list[dict] | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> FloorPlanResponse:
+    """Update key locations and emergency information on a floor plan.
+
+    This endpoint is optimized for the floor plan marking tool.
+    """
+    try:
+        floor_plan_uuid = uuid.UUID(floor_plan_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid floor_plan_id format",
+        )
+
+    service = BuildingService(db)
+
+    updates = {}
+    if key_locations is not None:
+        updates['key_locations'] = key_locations
+    if emergency_exits is not None:
+        updates['emergency_exits'] = emergency_exits
+    if fire_equipment is not None:
+        updates['fire_equipment'] = fire_equipment
+    if hazards is not None:
+        updates['hazards'] = hazards
+
+    try:
+        floor_plan = await service.update_floor_plan(floor_plan_uuid, **updates)
+    except BuildingError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+
+    return floor_plan_to_response(floor_plan)

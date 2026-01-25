@@ -52,6 +52,9 @@ services:
       CORS_ORIGINS: http://localhost,http://localhost:80,http://${SERVER_IP:-192.168.1.100}
       LOG_LEVEL: info
       PORT: 8000
+      FILE_STORAGE_PATH: /data/buildings
+    volumes:
+      - eriop_building_files:/data/buildings
     depends_on:
       postgres:
         condition: service_healthy
@@ -99,6 +102,7 @@ services:
 volumes:
   eriop_postgres:
   eriop_redis:
+  eriop_building_files:
 
 networks:
   eriop-net:
