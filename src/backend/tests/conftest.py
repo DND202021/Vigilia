@@ -130,7 +130,7 @@ async def test_user(db_session: AsyncSession, test_agency: Agency) -> User:
 
 
 @pytest_asyncio.fixture
-async def admin_user(db_session: AsyncSession) -> User:
+async def admin_user(db_session: AsyncSession, test_agency: Agency) -> User:
     """Create a test admin user."""
     user = User(
         id=uuid.uuid4(),
@@ -138,6 +138,7 @@ async def admin_user(db_session: AsyncSession) -> User:
         hashed_password=get_password_hash("AdminPassword123!"),
         full_name="Admin User",
         role=UserRole.SYSTEM_ADMIN,
+        agency_id=test_agency.id,
         is_active=True,
         is_verified=True,
     )

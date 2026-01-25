@@ -1050,6 +1050,66 @@ async def get_floor_plan_file(
     )
 
 
+class FloorPlanUpdateRequest(BaseModel):
+    """Request to update a floor plan."""
+
+    floor_name: str | None = None
+    floor_area_sqm: float | None = None
+    ceiling_height_m: float | None = None
+    key_locations: list[dict] | None = None
+    emergency_exits: list[dict] | None = None
+    fire_equipment: list[dict] | None = None
+    hazards: list[dict] | None = None
+    notes: str | None = None
+
+
+@router.patch("/floors/{floor_plan_id}", response_model=FloorPlanResponse)
+async def update_floor_plan(
+    floor_plan_id: str,
+    data: FloorPlanUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> FloorPlanResponse:
+    """Update floor plan information."""
+    try:
+        floor_plan_uuid = uuid.UUID(floor_plan_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid floor_plan_id format",
+        )
+
+    service = BuildingService(db)
+
+    updates = {}
+    if data.floor_name is not None:
+        updates['floor_name'] = data.floor_name
+    if data.floor_area_sqm is not None:
+        updates['floor_area_sqm'] = data.floor_area_sqm
+    if data.ceiling_height_m is not None:
+        updates['ceiling_height_m'] = data.ceiling_height_m
+    if data.key_locations is not None:
+        updates['key_locations'] = data.key_locations
+    if data.emergency_exits is not None:
+        updates['emergency_exits'] = data.emergency_exits
+    if data.fire_equipment is not None:
+        updates['fire_equipment'] = data.fire_equipment
+    if data.hazards is not None:
+        updates['hazards'] = data.hazards
+    if data.notes is not None:
+        updates['notes'] = data.notes
+
+    try:
+        floor_plan = await service.update_floor_plan(floor_plan_uuid, **updates)
+    except BuildingError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+
+    return floor_plan_to_response(floor_plan)
+
+
 @router.patch("/floors/{floor_plan_id}/locations", response_model=FloorPlanResponse)
 async def update_floor_plan_locations(
     floor_plan_id: str,
