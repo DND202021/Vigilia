@@ -37,11 +37,15 @@ export function useWebSocket(): WebSocketHookResult {
 
     const wsUrl = window.location.origin;
     const socket = io(wsUrl, {
+      path: '/socket.io/',
       auth: { token },
-      transports: ['websocket'],
+      // Use polling first, then upgrade to websocket - more reliable through proxy chains
+      transports: ['polling', 'websocket'],
       reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
+      reconnectionAttempts: 3,
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 10000,
+      timeout: 10000,
     });
 
     socket.on('connect', () => {
