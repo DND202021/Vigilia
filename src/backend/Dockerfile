@@ -38,7 +38,8 @@ RUN pip install --no-cache-dir pip --upgrade && \
     "bcrypt>=4.0.0" \
     "python-socketio>=5.10.0" \
     "pyotp>=2.9.0" \
-    "qrcode[pil]>=7.4.0"
+    "qrcode[pil]>=7.4.0" \
+    "aiohttp>=3.9.0"
 
 # Copy application code
 COPY . .
