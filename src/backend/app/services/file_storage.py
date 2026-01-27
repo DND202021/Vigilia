@@ -3,12 +3,15 @@
 import os
 import uuid
 import hashlib
+import logging
 from pathlib import Path
 from datetime import datetime
 from typing import BinaryIO
 
 from PIL import Image
 import io
+
+logger = logging.getLogger(__name__)
 
 
 class FileStorageError(Exception):
@@ -49,15 +52,27 @@ class FileStorageService:
         """
         self.base_path = Path(base_path)
         self._ensure_base_directory()
+        logger.info(f"FileStorageService initialized with base_path: {self.base_path.resolve()}")
 
     def _ensure_base_directory(self) -> None:
-        """Ensure the base storage directory exists."""
-        self.base_path.mkdir(parents=True, exist_ok=True)
+        """Ensure the base storage directory exists and is writable."""
+        try:
+            self.base_path.mkdir(parents=True, exist_ok=True)
+            # Check if directory is writable
+            if not os.access(self.base_path, os.W_OK):
+                logger.error(f"Base directory is not writable: {self.base_path}")
+        except PermissionError as e:
+            logger.error(f"Cannot create base directory {self.base_path}: {e}")
 
     def _get_building_path(self, building_id: uuid.UUID) -> Path:
         """Get the storage path for a building."""
         path = self.base_path / str(building_id) / "floor_plans"
-        path.mkdir(parents=True, exist_ok=True)
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            logger.debug(f"Building path ready: {path}")
+        except PermissionError as e:
+            logger.error(f"Cannot create building directory {path}: {e}")
+            raise FileStorageError(f"Cannot create storage directory: permission denied")
         return path
 
     def _generate_filename(
@@ -134,8 +149,25 @@ class FileStorageService:
         file_path = building_path / filename
 
         # Save file
-        with open(file_path, 'wb') as f:
-            f.write(file_content)
+        try:
+            with open(file_path, 'wb') as f:
+                f.write(file_content)
+                f.flush()
+                os.fsync(f.fileno())  # Force write to disk
+        except PermissionError as e:
+            logger.error(f"Permission denied writing file {file_path}: {e}")
+            raise FileStorageError(f"Cannot write file: permission denied")
+        except OSError as e:
+            logger.error(f"OS error writing file {file_path}: {e}")
+            raise FileStorageError(f"Cannot write file: {e}")
+
+        # Verify file was saved
+        if file_path.exists():
+            file_size = file_path.stat().st_size
+            logger.info(f"Floor plan saved successfully: {file_path} ({file_size} bytes)")
+        else:
+            logger.error(f"Floor plan file NOT found after save: {file_path}")
+            raise FileStorageError("File save failed: file not found after write")
 
         # Generate thumbnail for images
         thumbnail_url = None
@@ -202,14 +234,25 @@ class FileStorageService:
         building_path = self._get_building_path(building_id)
         file_path = building_path / filename
 
+        logger.info(f"Looking for file: {file_path}")
+
         # Security: ensure the path is within the building directory
         try:
             file_path.resolve().relative_to(building_path.resolve())
         except ValueError:
+            logger.warning(f"Path traversal attempt detected: {filename}")
             return None
 
         if file_path.exists():
+            logger.info(f"File found: {file_path}")
             return file_path
+
+        # Debug: list files in directory
+        if building_path.exists():
+            files = list(building_path.iterdir())
+            logger.warning(f"File NOT found: {file_path}. Directory contains {len(files)} files: {[f.name for f in files[:10]]}")
+        else:
+            logger.warning(f"Building directory does not exist: {building_path}")
 
         return None
 

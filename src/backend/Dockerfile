@@ -43,10 +43,12 @@ RUN pip install --no-cache-dir pip --upgrade && \
 # Copy application code
 COPY . .
 
-# Create non-root user
+# Create non-root user and data directories
 RUN useradd -m -u 1000 eriop && \
     mkdir -p /app/logs && \
-    chown -R eriop:eriop /app
+    mkdir -p /data/buildings && \
+    chown -R eriop:eriop /app && \
+    chown -R eriop:eriop /data
 
 USER eriop
 
