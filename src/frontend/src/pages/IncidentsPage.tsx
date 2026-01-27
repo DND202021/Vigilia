@@ -257,8 +257,8 @@ function CreateIncidentModal({ isOpen, onClose, onCreate }: CreateIncidentModalP
     title: '',
     description: '',
     address: '',
-    caller_name: '',
-    caller_phone: '',
+    latitude: undefined,
+    longitude: undefined,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -267,8 +267,8 @@ function CreateIncidentModal({ isOpen, onClose, onCreate }: CreateIncidentModalP
     e.preventDefault();
     setError('');
 
-    if (!formData.title) {
-      setError('Title is required');
+    if (!formData.title || formData.title.length < 5) {
+      setError('Title is required and must be at least 5 characters');
       return;
     }
 
@@ -282,8 +282,8 @@ function CreateIncidentModal({ isOpen, onClose, onCreate }: CreateIncidentModalP
         title: '',
         description: '',
         address: '',
-        caller_name: '',
-        caller_phone: '',
+        latitude: undefined,
+        longitude: undefined,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create incident');
@@ -345,18 +345,23 @@ function CreateIncidentModal({ isOpen, onClose, onCreate }: CreateIncidentModalP
 
         <div className="grid grid-cols-2 gap-4">
           <Input
-            label="Caller Name"
-            value={formData.caller_name || ''}
-            onChange={(e) => setFormData({ ...formData, caller_name: e.target.value })}
-            placeholder="Caller name"
+            label="Latitude (optional)"
+            type="number"
+            value={formData.latitude ?? ''}
+            onChange={(e) => setFormData({ ...formData, latitude: e.target.value ? parseFloat(e.target.value) : undefined })}
+            placeholder="e.g., 45.5017"
           />
           <Input
-            label="Caller Phone"
-            value={formData.caller_phone || ''}
-            onChange={(e) => setFormData({ ...formData, caller_phone: e.target.value })}
-            placeholder="Phone number"
+            label="Longitude (optional)"
+            type="number"
+            value={formData.longitude ?? ''}
+            onChange={(e) => setFormData({ ...formData, longitude: e.target.value ? parseFloat(e.target.value) : undefined })}
+            placeholder="e.g., -73.5673"
           />
         </div>
+        <p className="text-xs text-gray-500">
+          Leave coordinates blank to use default location. You can update the location later.
+        </p>
 
         <div className="flex justify-end gap-3 pt-4">
           <Button type="button" variant="secondary" onClick={onClose}>

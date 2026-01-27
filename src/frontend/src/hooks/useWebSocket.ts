@@ -21,7 +21,7 @@ import type { Incident, Alert, Resource } from '../types';
 const WEBSOCKET_ENABLED = import.meta.env.VITE_WEBSOCKET_ENABLED !== 'false';
 
 // After this many consecutive failures, stop trying
-const MAX_CONSECUTIVE_FAILURES = 2;
+const MAX_CONSECUTIVE_FAILURES = 5;
 
 interface WebSocketHookResult {
   isConnected: boolean;
@@ -59,7 +59,11 @@ export function useWebSocket(): WebSocketHookResult {
       auth: { token },
       // Only use polling - WebSocket upgrade fails through HTTP/2 proxies
       transports: ['polling'],
-      reconnection: false, // Don't auto-reconnect, we'll handle it manually
+      // Enable reconnection with reasonable settings
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
       timeout: 10000,
     });
 
@@ -79,14 +83,37 @@ export function useWebSocket(): WebSocketHookResult {
       }
     });
 
-    socket.on('connect_error', () => {
+    socket.on('connect_error', (err) => {
       failureCountRef.current++;
       setIsConnected(false);
-      // Silently fail - WebSocket is optional
-      // The app works fine without real-time updates
+      // Log error in dev mode for debugging
+      if (import.meta.env.DEV) {
+        console.log('[WS] Connection error:', err.message);
+      }
+      // Socket.io will handle reconnection automatically now
+      // Only fully give up after max consecutive failures
       if (failureCountRef.current >= MAX_CONSECUTIVE_FAILURES) {
+        if (import.meta.env.DEV) {
+          console.log('[WS] Max failures reached, disabling real-time updates');
+        }
         socket.disconnect();
         socketRef.current = null;
+      }
+    });
+
+    socket.on('reconnect', (attemptNumber) => {
+      failureCountRef.current = 0; // Reset on successful reconnect
+      setIsConnected(true);
+      if (import.meta.env.DEV) {
+        console.log('[WS] Reconnected after', attemptNumber, 'attempts');
+      }
+    });
+
+    socket.on('reconnect_failed', () => {
+      failureCountRef.current = MAX_CONSECUTIVE_FAILURES;
+      setIsConnected(false);
+      if (import.meta.env.DEV) {
+        console.log('[WS] Reconnection failed, giving up');
       }
     });
 

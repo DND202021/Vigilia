@@ -200,7 +200,20 @@ export const incidentsApi = {
   },
 
   create: async (data: IncidentCreateRequest): Promise<Incident> => {
-    const response = await api.post<ApiIncident>('/incidents', data);
+    // Transform frontend request to backend schema
+    // Backend expects 'category' and nested 'location' object
+    const backendData = {
+      category: data.incident_type, // Map incident_type to category
+      priority: data.priority,
+      title: data.title,
+      description: data.description,
+      location: {
+        latitude: data.latitude ?? 45.5017, // Default to Montreal coordinates
+        longitude: data.longitude ?? -73.5673,
+        address: data.address,
+      },
+    };
+    const response = await api.post<ApiIncident>('/incidents', backendData);
     return transformIncident(response.data);
   },
 

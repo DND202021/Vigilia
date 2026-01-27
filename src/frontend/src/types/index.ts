@@ -216,6 +216,7 @@ export interface ResourceCreateRequest {
   name: string;
   call_sign?: string;
   capabilities?: string[];
+  agency_id?: string; // Required by backend, but frontend can get it from current user
 }
 
 export interface ResourceStatusUpdate {

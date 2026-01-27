@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from 'react';
 import { useResourceStore } from '../stores/resourceStore';
+import { useAuthStore } from '../stores/authStore';
 import { usePolling } from '../hooks/useInterval';
 import {
   Card,
@@ -62,6 +63,8 @@ export function ResourcesPage() {
     error,
     clearError,
   } = useResourceStore();
+
+  const { user } = useAuthStore();
 
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -205,6 +208,7 @@ export function ResourcesPage() {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onCreate={createResource}
+        agencyId={user?.agency_id}
       />
 
       {/* Status Update Modal */}
@@ -312,9 +316,10 @@ interface CreateResourceModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreate: (data: ResourceCreateRequest) => Promise<Resource>;
+  agencyId?: string;
 }
 
-function CreateResourceModal({ isOpen, onClose, onCreate }: CreateResourceModalProps) {
+function CreateResourceModal({ isOpen, onClose, onCreate, agencyId }: CreateResourceModalProps) {
   const [formData, setFormData] = useState<ResourceCreateRequest>({
     resource_type: 'vehicle',
     name: '',
@@ -334,6 +339,11 @@ function CreateResourceModal({ isOpen, onClose, onCreate }: CreateResourceModalP
       return;
     }
 
+    if (!agencyId) {
+      setError('You must belong to an agency to create resources');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const capabilities = capabilitiesInput
@@ -341,7 +351,7 @@ function CreateResourceModal({ isOpen, onClose, onCreate }: CreateResourceModalP
         .map((c) => c.trim())
         .filter(Boolean);
 
-      await onCreate({ ...formData, capabilities });
+      await onCreate({ ...formData, capabilities, agency_id: agencyId });
       onClose();
       setFormData({
         resource_type: 'vehicle',

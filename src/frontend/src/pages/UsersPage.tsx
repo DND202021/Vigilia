@@ -437,6 +437,21 @@ function CreateUserModal({ isOpen, onClose, onCreate, roles }: CreateUserModalPr
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  // Reset form state when modal opens to prevent autofill persistence
+  useEffect(() => {
+    if (isOpen) {
+      setFormData({
+        email: '',
+        password: '',
+        full_name: '',
+        role_id: '',
+        badge_number: '',
+        phone: '',
+      });
+      setError('');
+    }
+  }, [isOpen]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -494,6 +509,7 @@ function CreateUserModal({ isOpen, onClose, onCreate, roles }: CreateUserModalPr
           value={formData.full_name}
           onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
           placeholder="John Doe"
+          autoComplete="off"
           required
         />
 
@@ -503,6 +519,7 @@ function CreateUserModal({ isOpen, onClose, onCreate, roles }: CreateUserModalPr
           value={formData.email}
           onChange={(e) => setFormData({ ...formData, email: e.target.value })}
           placeholder="john@example.com"
+          autoComplete="new-email"
           required
         />
 
@@ -512,6 +529,7 @@ function CreateUserModal({ isOpen, onClose, onCreate, roles }: CreateUserModalPr
           value={formData.password}
           onChange={(e) => setFormData({ ...formData, password: e.target.value })}
           placeholder="Minimum 12 characters"
+          autoComplete="new-password"
           required
         />
 
