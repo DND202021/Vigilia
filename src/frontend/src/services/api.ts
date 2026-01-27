@@ -483,8 +483,6 @@ export const buildingsApi = {
   },
 
   getFloorPlanImageUrl: (buildingId: string, filename: string): string => {
-    const token = tokenStorage.getAccessToken();
-    // For images, we can use the URL directly with auth header
     return `${API_BASE_URL}/buildings/${buildingId}/floor-plans/files/${filename}`;
   },
 };

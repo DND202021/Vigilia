@@ -14,3 +14,4 @@ export { BuildingsPage } from './BuildingsPage';
 export { UsersPage } from './UsersPage';
 export { RolesPage } from './RolesPage';
 export { DeviceManagementPage } from './DeviceManagementPage';
+export { BuildingDetailPage } from './BuildingDetailPage';

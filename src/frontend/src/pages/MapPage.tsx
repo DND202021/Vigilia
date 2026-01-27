@@ -11,8 +11,9 @@ import { useResourceStore } from '../stores/resourceStore';
 import { useAlertStore } from '../stores/alertStore';
 import { usePolling } from '../hooks/useInterval';
 import { buildingsApi } from '../services/api';
-import { Badge, Button, Modal, Spinner } from '../components/ui';
+import { Badge, Modal, Spinner } from '../components/ui';
 import { FloorPlanViewer } from '../components/buildings';
+import type { LocationMarker } from '../components/buildings';
 import {
   getPriorityLabel,
   getPriorityBgColor,
@@ -78,7 +79,7 @@ export function MapPage() {
   const [showAlerts, setShowAlerts] = useState(true);
   const [showBuildings, setShowBuildings] = useState(true);
   const [buildings, setBuildings] = useState<Building[]>([]);
-  const [isLoadingBuildings, setIsLoadingBuildings] = useState(false);
+  const [, setIsLoadingBuildings] = useState(false);
   const [selectedItem, setSelectedItem] = useState<{
     type: 'incident' | 'resource' | 'alert' | 'building';
     item: Incident | Resource | Alert | Building;
@@ -575,10 +576,10 @@ function BuildingMapModal({ building, floorPlans, isLoadingFloorPlans }: Buildin
               <div className="h-[300px] border rounded-lg overflow-hidden">
                 <FloorPlanViewer
                   floorPlan={selectedFloor}
-                  keyLocations={selectedFloor.key_locations || []}
-                  emergencyExits={selectedFloor.emergency_exits || []}
-                  fireEquipment={selectedFloor.fire_equipment || []}
-                  hazards={selectedFloor.hazards || []}
+                  keyLocations={(selectedFloor.key_locations || []) as LocationMarker[]}
+                  emergencyExits={(selectedFloor.emergency_exits || []) as LocationMarker[]}
+                  fireEquipment={(selectedFloor.fire_equipment || []) as LocationMarker[]}
+                  hazards={(selectedFloor.hazards || []) as LocationMarker[]}
                   showControls={true}
                   showLegend={true}
                 />
