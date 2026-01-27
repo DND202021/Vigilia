@@ -109,7 +109,7 @@ export const useBuildingDetailStore = create<BuildingDetailStore>((set, get) => 
     try {
       const response = await iotDevicesApi.list({
         floor_plan_id: floorPlanId,
-        page_size: 200,
+        page_size: 100,
       });
       set({ devices: response.items, isLoadingDevices: false });
     } catch (error) {

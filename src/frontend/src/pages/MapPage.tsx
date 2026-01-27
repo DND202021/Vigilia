@@ -92,7 +92,7 @@ export function MapPage() {
   const fetchBuildings = useCallback(async () => {
     setIsLoadingBuildings(true);
     try {
-      const response = await buildingsApi.list({ page_size: 200 });
+      const response = await buildingsApi.list({ page_size: 100 });
       setBuildings(response.items);
     } catch (err) {
       console.error('Failed to fetch buildings:', err);

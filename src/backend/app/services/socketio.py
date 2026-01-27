@@ -8,12 +8,23 @@ from app.core.config import settings
 
 logger = structlog.get_logger()
 
+# Use Redis client manager for multi-worker support (gunicorn with multiple workers)
+# This allows Socket.IO sessions to be shared across all workers
+_client_manager = None
+if settings.redis_url:
+    try:
+        _client_manager = socketio.AsyncRedisManager(settings.redis_url)
+        logger.info("Socket.IO using Redis client manager for multi-worker support")
+    except Exception as e:
+        logger.warning("Failed to create Redis client manager, falling back to in-memory", error=str(e))
+
 # Create Socket.IO server with ASGI support
 sio = socketio.AsyncServer(
     async_mode="asgi",
     cors_allowed_origins="*",  # Allow all origins for Socket.IO
-    logger=True,
-    engineio_logger=True,
+    client_manager=_client_manager,
+    logger=False,
+    engineio_logger=False,
 )
 
 # socket_app will be set after FastAPI app is created
