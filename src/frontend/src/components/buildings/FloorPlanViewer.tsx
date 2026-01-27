@@ -5,6 +5,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '../../utils';
+import { tokenStorage } from '../../services/api';
 import type { FloorPlan } from '../../types';
 
 // Marker types for different location categories
@@ -165,8 +166,44 @@ export function FloorPlanViewer({
     [onMarkerClick]
   );
 
-  // Determine image source
-  const imgSrc = imageUrl || floorPlan.plan_file_url || floorPlan.plan_thumbnail_url;
+  // Fetch image with auth header since <img> tags don't send Authorization headers
+  const [authImageUrl, setAuthImageUrl] = useState<string | null>(null);
+  const rawImgSrc = imageUrl || floorPlan.plan_file_url || floorPlan.plan_thumbnail_url;
+
+  useEffect(() => {
+    if (!rawImgSrc) return;
+
+    let revoked = false;
+    const token = tokenStorage.getAccessToken();
+
+    fetch(rawImgSrc, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.blob();
+      })
+      .then((blob) => {
+        if (!revoked) {
+          setAuthImageUrl(URL.createObjectURL(blob));
+          setImageError(false);
+        }
+      })
+      .catch(() => {
+        if (!revoked) {
+          setImageError(true);
+        }
+      });
+
+    return () => {
+      revoked = true;
+      if (authImageUrl) {
+        URL.revokeObjectURL(authImageUrl);
+      }
+    };
+  }, [rawImgSrc]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const imgSrc = authImageUrl;
 
   // Get unique marker types for legend
   const activeMarkerTypes = new Set(allMarkers.map((m) => m.type));
