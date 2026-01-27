@@ -16,6 +16,9 @@ from app.services.socketio import (
 from app.services.role_service import RoleService, RoleError, AVAILABLE_PERMISSIONS
 from app.services.user_service import UserService, UserError
 from app.services.file_storage import FileStorageService, FileStorageError, get_file_storage
+from app.services.device_service import DeviceService, DeviceError
+from app.services.audio_storage_service import AudioStorageService, AudioStorageError
+from app.services.notification_service import NotificationService
 
 __all__ = [
     "AuthService",
@@ -41,4 +44,9 @@ __all__ = [
     "FileStorageService",
     "FileStorageError",
     "get_file_storage",
+    "DeviceService",
+    "DeviceError",
+    "AudioStorageService",
+    "AudioStorageError",
+    "NotificationService",
 ]

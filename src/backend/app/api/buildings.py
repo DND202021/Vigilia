@@ -8,10 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import FileResponse
 from starlette import status as http_status
 from pydantic import BaseModel, Field
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db, get_current_active_user
 from app.models.user import User
+from app.models.alert import Alert as AlertModel, AlertStatus as AlertStatusModel
 from app.models.building import (
     Building as BuildingModel,
     BuildingType as BuildingTypeModel,
@@ -1153,3 +1155,177 @@ async def update_floor_plan_locations(
         )
 
     return floor_plan_to_response(floor_plan)
+
+
+# ==================== Building & Floor Alert Endpoints ====================
+
+class BuildingAlertResponse(BaseModel):
+    """Alert response for building context."""
+
+    id: str
+    source: str
+    severity: str
+    status: str
+    alert_type: str
+    title: str
+    description: str | None = None
+    device_id: str | None = None
+    floor_plan_id: str | None = None
+    confidence: float | None = None
+    risk_level: str | None = None
+    occurrence_count: int = 1
+    last_occurrence: str | None = None
+    assigned_to_id: str | None = None
+    created_at: str
+
+
+class PaginatedBuildingAlertResponse(BaseModel):
+    """Paginated building alert response."""
+
+    items: list[BuildingAlertResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+def _alert_to_building_response(alert: AlertModel) -> BuildingAlertResponse:
+    """Convert alert model to building alert response."""
+    return BuildingAlertResponse(
+        id=str(alert.id),
+        source=alert.source.value if hasattr(alert.source, 'value') else alert.source,
+        severity=alert.severity.value if hasattr(alert.severity, 'value') else alert.severity,
+        status=alert.status.value if hasattr(alert.status, 'value') else alert.status,
+        alert_type=alert.alert_type,
+        title=alert.title,
+        description=alert.description,
+        device_id=str(alert.device_id) if alert.device_id else None,
+        floor_plan_id=str(alert.floor_plan_id) if alert.floor_plan_id else None,
+        confidence=alert.confidence,
+        risk_level=alert.risk_level,
+        occurrence_count=alert.occurrence_count or 1,
+        last_occurrence=alert.last_occurrence.isoformat() if alert.last_occurrence else None,
+        assigned_to_id=str(alert.assigned_to_id) if alert.assigned_to_id else None,
+        created_at=alert.created_at.isoformat() if alert.created_at else datetime.utcnow().isoformat(),
+    )
+
+
+@router.get("/{building_id}/alerts", response_model=PaginatedBuildingAlertResponse)
+async def get_building_alerts(
+    building_id: str,
+    severity: str | None = None,
+    status: str | None = None,
+    alert_type: str | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> PaginatedBuildingAlertResponse:
+    """Get all alerts for a specific building."""
+    try:
+        building_uuid = uuid.UUID(building_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid building_id format",
+        )
+
+    query = select(AlertModel).where(AlertModel.building_id == building_uuid)
+
+    if severity:
+        query = query.where(AlertModel.severity == severity)
+    if status:
+        query = query.where(AlertModel.status == AlertStatusModel(status))
+    if alert_type:
+        query = query.where(AlertModel.alert_type == alert_type)
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    query = query.offset((page - 1) * page_size).limit(page_size).order_by(AlertModel.created_at.desc())
+    result = await db.execute(query)
+    alerts = result.scalars().all()
+
+    total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+
+    return PaginatedBuildingAlertResponse(
+        items=[_alert_to_building_response(a) for a in alerts],
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
+
+
+@router.get("/{building_id}/alert-count")
+async def get_building_alert_count(
+    building_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """Get active alert count for a building (for list view badges)."""
+    try:
+        building_uuid = uuid.UUID(building_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid building_id format",
+        )
+
+    count_result = await db.execute(
+        select(func.count()).select_from(
+            select(AlertModel).where(
+                AlertModel.building_id == building_uuid,
+                AlertModel.status.in_([AlertStatusModel.PENDING, AlertStatusModel.ACKNOWLEDGED]),
+            ).subquery()
+        )
+    )
+    count = count_result.scalar() or 0
+
+    return {"building_id": building_id, "active_alert_count": count}
+
+
+@router.get("/floors/{floor_plan_id}/alerts", response_model=PaginatedBuildingAlertResponse)
+async def get_floor_plan_alerts(
+    floor_plan_id: str,
+    severity: str | None = None,
+    alert_type: str | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> PaginatedBuildingAlertResponse:
+    """Get all alerts for a specific floor plan."""
+    try:
+        floor_uuid = uuid.UUID(floor_plan_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid floor_plan_id format",
+        )
+
+    query = select(AlertModel).where(AlertModel.floor_plan_id == floor_uuid)
+
+    if severity:
+        query = query.where(AlertModel.severity == severity)
+    if alert_type:
+        query = query.where(AlertModel.alert_type == alert_type)
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    query = query.offset((page - 1) * page_size).limit(page_size).order_by(AlertModel.created_at.desc())
+    result = await db.execute(query)
+    alerts = result.scalars().all()
+
+    total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+
+    return PaginatedBuildingAlertResponse(
+        items=[_alert_to_building_response(a) for a in alerts],
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )

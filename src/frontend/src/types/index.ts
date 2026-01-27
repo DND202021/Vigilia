@@ -499,3 +499,150 @@ export interface BuildingStats {
   with_sprinkler: number;
   high_rise: number;
 }
+
+// IoT Device Types
+export type DeviceType = 'microphone' | 'camera' | 'sensor' | 'gateway' | 'other';
+export type DeviceStatus = 'online' | 'offline' | 'alert' | 'maintenance' | 'error';
+
+export interface IoTDevice {
+  id: string;
+  name: string;
+  device_type: DeviceType;
+  serial_number?: string;
+  ip_address?: string;
+  mac_address?: string;
+  model?: string;
+  firmware_version?: string;
+  manufacturer?: string;
+  building_id?: string;
+  floor_plan_id?: string;
+  position_x?: number;
+  position_y?: number;
+  latitude?: number;
+  longitude?: number;
+  location_name?: string;
+  status: DeviceStatus;
+  last_seen?: string;
+  connection_quality?: number;
+  config?: Record<string, unknown>;
+  capabilities?: string[];
+  metadata_extra?: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IoTDeviceCreateRequest {
+  name: string;
+  device_type: DeviceType;
+  serial_number?: string;
+  ip_address?: string;
+  mac_address?: string;
+  model?: string;
+  firmware_version?: string;
+  manufacturer?: string;
+  building_id: string;
+  floor_plan_id?: string;
+  position_x?: number;
+  position_y?: number;
+  latitude?: number;
+  longitude?: number;
+  location_name?: string;
+  config?: Record<string, unknown>;
+  capabilities?: string[];
+}
+
+export interface IoTDeviceUpdateRequest {
+  name?: string;
+  device_type?: DeviceType;
+  serial_number?: string;
+  ip_address?: string;
+  mac_address?: string;
+  model?: string;
+  firmware_version?: string;
+  manufacturer?: string;
+  building_id?: string;
+  floor_plan_id?: string;
+  location_name?: string;
+  config?: Record<string, unknown>;
+  capabilities?: string[];
+}
+
+export interface DevicePositionUpdate {
+  position_x: number;
+  position_y: number;
+  floor_plan_id: string;
+}
+
+// Audio Clip Types
+export interface AudioClip {
+  id: string;
+  alert_id?: string;
+  device_id: string;
+  file_path: string;
+  file_size_bytes?: number;
+  duration_seconds?: number;
+  format?: string;
+  sample_rate?: number;
+  event_type: string;
+  confidence?: number;
+  peak_level_db?: number;
+  background_level_db?: number;
+  event_timestamp: string;
+  captured_at: string;
+  expires_at?: string;
+}
+
+// Sound Alert (extended Alert for sound anomaly context)
+export interface SoundAlert extends Alert {
+  device_id?: string;
+  building_id?: string;
+  floor_plan_id?: string;
+  audio_clip_id?: string;
+  confidence?: number;
+  peak_level_db?: number;
+  background_level_db?: number;
+  risk_level?: string;
+  occurrence_count?: number;
+  last_occurrence?: string;
+  assigned_to_id?: string;
+}
+
+// Notification Preference Types
+export interface NotificationPreference {
+  id: string;
+  user_id: string;
+  call_enabled: boolean;
+  sms_enabled: boolean;
+  email_enabled: boolean;
+  push_enabled: boolean;
+  building_ids: string[];
+  min_severity: number;
+  quiet_start?: string;
+  quiet_end?: string;
+  quiet_override_critical: boolean;
+}
+
+export interface NotificationPreferenceUpdate {
+  call_enabled?: boolean;
+  sms_enabled?: boolean;
+  email_enabled?: boolean;
+  push_enabled?: boolean;
+  building_ids?: string[];
+  min_severity?: number;
+  quiet_start?: string;
+  quiet_end?: string;
+  quiet_override_critical?: boolean;
+}
+
+// Alert History Chart Data
+export interface AlertHistoryPoint {
+  date: string;
+  severity: string;
+  count: number;
+}
+
+// Building Alert Count
+export interface BuildingAlertCount {
+  building_id: string;
+  active_alert_count: number;
+}

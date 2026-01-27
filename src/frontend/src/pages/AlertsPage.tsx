@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAlertStore } from '../stores/alertStore';
+import { useAudioStore } from '../stores/audioStore';
 import { usePolling } from '../hooks/useInterval';
 import {
   Card,
@@ -23,6 +24,8 @@ import {
   getAlertTypeLabel,
   cn,
 } from '../utils';
+import { AlertsFloorTable } from '../components/alerts/AlertsFloorTable';
+import { AlertHistoryChart } from '../components/alerts/AlertHistoryChart';
 import type { Alert, AlertSeverity, IncidentType, IncidentPriority } from '../types';
 
 const POLL_INTERVAL = 10000;
@@ -64,6 +67,8 @@ const priorityOptions = [
   { value: '5', label: 'P5 - Info' },
 ];
 
+type AlertTab = 'all' | 'alarms' | 'noise' | 'chart';
+
 export function AlertsPage() {
   const {
     alerts,
@@ -78,6 +83,16 @@ export function AlertsPage() {
     clearError,
   } = useAlertStore();
 
+  const {
+    alarms,
+    noiseWarnings,
+    totalAlarms,
+    totalNoiseWarnings,
+    fetchAlarms,
+    fetchNoiseWarnings,
+  } = useAudioStore();
+
+  const [activeTab, setActiveTab] = useState<AlertTab>('all');
   const [severityFilter, setSeverityFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
@@ -97,6 +112,11 @@ export function AlertsPage() {
   useEffect(() => {
     fetchWithFilters();
   }, [severityFilter, statusFilter]);
+
+  useEffect(() => {
+    if (activeTab === 'alarms') fetchAlarms();
+    if (activeTab === 'noise') fetchNoiseWarnings();
+  }, [activeTab, fetchAlarms, fetchNoiseWarnings]);
 
   const handleAcknowledge = async (alert: Alert) => {
     await acknowledgeAlert(alert.id);
@@ -170,30 +190,84 @@ export function AlertsPage() {
         </div>
       )}
 
-      {/* Alerts List */}
-      <Card>
-        <CardContent className="p-0">
-          {isLoading && alerts.length === 0 ? (
-            <div className="flex justify-center py-12">
-              <Spinner size="lg" />
-            </div>
-          ) : alerts.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">No alerts found</div>
-          ) : (
-            <div className="divide-y divide-gray-200">
-              {alerts.map((alert) => (
-                <AlertRow
-                  key={alert.id}
-                  alert={alert}
-                  onAcknowledge={() => handleAcknowledge(alert)}
-                  onViewDetail={() => openDetail(alert)}
-                  onCreateIncident={() => openCreateIncident(alert)}
-                />
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* View Tabs */}
+      <div className="border-b mb-6">
+        <nav className="flex gap-6 -mb-px">
+          {([
+            { key: 'all', label: 'All Alerts' },
+            { key: 'alarms', label: 'Alarms', count: totalAlarms },
+            { key: 'noise', label: 'Noise Warnings', count: totalNoiseWarnings },
+            { key: 'chart', label: 'History Chart' },
+          ] as { key: AlertTab; label: string; count?: number }[]).map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={cn(
+                'pb-3 text-sm font-medium border-b-2 transition-colors',
+                activeTab === tab.key
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              )}
+            >
+              {tab.label}
+              {tab.count != null && tab.count > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium">
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'all' && (
+        <Card>
+          <CardContent className="p-0">
+            {isLoading && alerts.length === 0 ? (
+              <div className="flex justify-center py-12">
+                <Spinner size="lg" />
+              </div>
+            ) : alerts.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">No alerts found</div>
+            ) : (
+              <div className="divide-y divide-gray-200">
+                {alerts.map((alert) => (
+                  <AlertRow
+                    key={alert.id}
+                    alert={alert}
+                    onAcknowledge={() => handleAcknowledge(alert)}
+                    onViewDetail={() => openDetail(alert)}
+                    onCreateIncident={() => openCreateIncident(alert)}
+                  />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {activeTab === 'alarms' && (
+        <div>
+          <p className="text-sm text-gray-500 mb-4">
+            Critical alarms: gunshots, explosions, glass breakage, and aggression events
+          </p>
+          <AlertsFloorTable alerts={alarms} />
+        </div>
+      )}
+
+      {activeTab === 'noise' && (
+        <div>
+          <p className="text-sm text-gray-500 mb-4">
+            Noise warnings: screams and car alarms with peak/background level data
+          </p>
+          <AlertsFloorTable alerts={noiseWarnings} />
+        </div>
+      )}
+
+      {activeTab === 'chart' && (
+        <AlertHistoryChart />
+      )}
 
       {/* Detail Modal */}
       {selectedAlert && (

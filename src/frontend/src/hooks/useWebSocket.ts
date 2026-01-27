@@ -14,8 +14,10 @@ import { io, Socket } from 'socket.io-client';
 import { useIncidentStore } from '../stores/incidentStore';
 import { useAlertStore } from '../stores/alertStore';
 import { useResourceStore } from '../stores/resourceStore';
+import { useDeviceStore } from '../stores/deviceStore';
+import { useAudioStore } from '../stores/audioStore';
 import { tokenStorage } from '../services/api';
-import type { Incident, Alert, Resource } from '../types';
+import type { Incident, Alert, Resource, SoundAlert } from '../types';
 
 // Feature flag to completely disable WebSocket (set via env or here)
 const WEBSOCKET_ENABLED = import.meta.env.VITE_WEBSOCKET_ENABLED !== 'false';
@@ -39,6 +41,8 @@ export function useWebSocket(): WebSocketHookResult {
   const handleIncidentUpdate = useIncidentStore((state) => state.handleIncidentUpdate);
   const handleAlertUpdate = useAlertStore((state) => state.handleAlertUpdate);
   const handleResourceUpdate = useResourceStore((state) => state.handleResourceUpdate);
+  const handleDeviceStatusUpdate = useDeviceStore((state) => state.handleDeviceStatusUpdate);
+  const handleNewSoundAlert = useAudioStore((state) => state.handleNewSoundAlert);
 
   const connect = useCallback(() => {
     // Skip if disabled or already connected
@@ -143,8 +147,19 @@ export function useWebSocket(): WebSocketHookResult {
       handleResourceUpdate(data);
     });
 
+    // Device events
+    socket.on('device:status', (data: { device_id: string; status: string; name?: string }) => {
+      setLastEvent(`device:status:${data.device_id}`);
+      handleDeviceStatusUpdate(data);
+    });
+
+    socket.on('device:alert', (data: SoundAlert) => {
+      setLastEvent(`device:alert:${data.device_id}`);
+      handleNewSoundAlert(data);
+    });
+
     socketRef.current = socket;
-  }, [handleIncidentUpdate, handleAlertUpdate, handleResourceUpdate]);
+  }, [handleIncidentUpdate, handleAlertUpdate, handleResourceUpdate, handleDeviceStatusUpdate, handleNewSoundAlert]);
 
   const disconnect = useCallback(() => {
     if (socketRef.current) {

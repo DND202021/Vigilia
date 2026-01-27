@@ -33,6 +33,16 @@ import type {
   UserUpdateRequest,
   UserStats,
   UserListResponse,
+  IoTDevice,
+  IoTDeviceCreateRequest,
+  IoTDeviceUpdateRequest,
+  DevicePositionUpdate,
+  AudioClip,
+  SoundAlert,
+  NotificationPreference,
+  NotificationPreferenceUpdate,
+  AlertHistoryPoint,
+  BuildingAlertCount,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
@@ -574,6 +584,173 @@ export const rolesApi = {
 
   delete: async (id: string): Promise<{ message: string }> => {
     const response = await api.delete<{ message: string }>(`/roles/${id}`);
+    return response.data;
+  },
+};
+
+// IoT Devices API
+export const iotDevicesApi = {
+  list: async (params?: {
+    building_id?: string;
+    floor_plan_id?: string;
+    device_type?: string;
+    status?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<PaginatedResponse<IoTDevice>> => {
+    const response = await api.get<PaginatedResponse<IoTDevice>>('/iot-devices', { params });
+    return response.data;
+  },
+
+  get: async (id: string): Promise<IoTDevice> => {
+    const response = await api.get<IoTDevice>(`/iot-devices/${id}`);
+    return response.data;
+  },
+
+  create: async (data: IoTDeviceCreateRequest): Promise<IoTDevice> => {
+    const response = await api.post<IoTDevice>('/iot-devices', data);
+    return response.data;
+  },
+
+  update: async (id: string, data: IoTDeviceUpdateRequest): Promise<IoTDevice> => {
+    const response = await api.patch<IoTDevice>(`/iot-devices/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/iot-devices/${id}`);
+  },
+
+  updatePosition: async (id: string, data: DevicePositionUpdate): Promise<IoTDevice> => {
+    const response = await api.patch<IoTDevice>(`/iot-devices/${id}/position`, data);
+    return response.data;
+  },
+
+  updateConfig: async (id: string, config: Record<string, unknown>): Promise<IoTDevice> => {
+    const response = await api.patch<IoTDevice>(`/iot-devices/${id}/config`, { config });
+    return response.data;
+  },
+
+  getStatus: async (id: string): Promise<IoTDevice> => {
+    const response = await api.get<IoTDevice>(`/iot-devices/${id}/status`);
+    return response.data;
+  },
+};
+
+// Audio Clips API
+export const audioClipsApi = {
+  list: async (params?: {
+    device_id?: string;
+    alert_id?: string;
+    event_type?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<PaginatedResponse<AudioClip>> => {
+    const response = await api.get<PaginatedResponse<AudioClip>>('/audio-clips', { params });
+    return response.data;
+  },
+
+  get: async (id: string): Promise<AudioClip> => {
+    const response = await api.get<AudioClip>(`/audio-clips/${id}`);
+    return response.data;
+  },
+
+  getStreamUrl: (id: string): string => {
+    return `${API_BASE_URL}/audio-clips/${id}/stream`;
+  },
+
+  getDownloadUrl: (id: string): string => {
+    return `${API_BASE_URL}/audio-clips/${id}/download`;
+  },
+};
+
+// Enhanced Alerts API (sound anomaly endpoints)
+export const soundAlertsApi = {
+  listSoundAnomalies: async (params?: {
+    building_id?: string;
+    floor_plan_id?: string;
+    device_id?: string;
+    severity?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<PaginatedResponse<SoundAlert>> => {
+    const response = await api.get<PaginatedResponse<SoundAlert>>('/alerts/sound-anomalies', { params });
+    return response.data;
+  },
+
+  listAlarms: async (params?: {
+    page?: number;
+    page_size?: number;
+  }): Promise<PaginatedResponse<SoundAlert>> => {
+    const response = await api.get<PaginatedResponse<SoundAlert>>('/alerts/alarms', { params });
+    return response.data;
+  },
+
+  listNoiseWarnings: async (params?: {
+    page?: number;
+    page_size?: number;
+  }): Promise<PaginatedResponse<SoundAlert>> => {
+    const response = await api.get<PaginatedResponse<SoundAlert>>('/alerts/noise-warnings', { params });
+    return response.data;
+  },
+
+  assignAlert: async (alertId: string, assignedToId: string): Promise<SoundAlert> => {
+    const response = await api.post<SoundAlert>(`/alerts/${alertId}/assign`, {
+      assigned_to_id: assignedToId,
+    });
+    return response.data;
+  },
+
+  getHistoryChart: async (params?: {
+    building_id?: string;
+    floor_plan_id?: string;
+    days?: number;
+  }): Promise<{ data: AlertHistoryPoint[]; days: number }> => {
+    const response = await api.get<{ data: AlertHistoryPoint[]; days: number }>('/alerts/history/chart', { params });
+    return response.data;
+  },
+
+  getBuildingAlerts: async (buildingId: string, params?: {
+    severity?: string;
+    status?: string;
+    alert_type?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<PaginatedResponse<SoundAlert>> => {
+    const response = await api.get<PaginatedResponse<SoundAlert>>(`/buildings/${buildingId}/alerts`, { params });
+    return response.data;
+  },
+
+  getBuildingAlertCount: async (buildingId: string): Promise<BuildingAlertCount> => {
+    const response = await api.get<BuildingAlertCount>(`/buildings/${buildingId}/alert-count`);
+    return response.data;
+  },
+
+  getFloorAlerts: async (floorPlanId: string, params?: {
+    severity?: string;
+    alert_type?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<PaginatedResponse<SoundAlert>> => {
+    const response = await api.get<PaginatedResponse<SoundAlert>>(`/buildings/floors/${floorPlanId}/alerts`, { params });
+    return response.data;
+  },
+};
+
+// Notification Preferences API
+export const notificationPrefsApi = {
+  get: async (userId: string): Promise<NotificationPreference> => {
+    const response = await api.get<NotificationPreference>(`/users/${userId}/notification-preferences`);
+    return response.data;
+  },
+
+  update: async (userId: string, data: NotificationPreferenceUpdate): Promise<NotificationPreference> => {
+    const response = await api.put<NotificationPreference>(`/users/${userId}/notification-preferences`, data);
+    return response.data;
+  },
+
+  getBuildingContacts: async (buildingId: string): Promise<unknown[]> => {
+    const response = await api.get(`/buildings/${buildingId}/notification-contacts`);
     return response.data;
   },
 };

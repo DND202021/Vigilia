@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String, Text, Float, ForeignKey, Enum as SQLEnum, DateTime
+from sqlalchemy import String, Text, Float, Integer, ForeignKey, Enum as SQLEnum, DateTime
 from sqlalchemy import JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -14,6 +14,9 @@ from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.incident import Incident
+    from app.models.device import IoTDevice
+    from app.models.building import Building, FloorPlan
+    from app.models.audio_clip import AudioClip
 
 
 class AlertSeverity(str, Enum):
@@ -128,6 +131,54 @@ class Alert(Base, TimestampMixin):
         nullable=True,
     )
     dismissal_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # IoT Device reference (for sound anomaly alerts)
+    device_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("iot_devices.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    device: Mapped["IoTDevice | None"] = relationship("IoTDevice", backref="alerts")
+
+    # Building and floor reference
+    building_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("buildings.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    building: Mapped["Building | None"] = relationship("Building", backref="alerts")
+
+    floor_plan_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("floor_plans.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # Audio clip reference
+    audio_clip_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("audio_clips.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # Sound-specific fields
+    peak_level_db: Mapped[float | None] = mapped_column(Float, nullable=True)
+    background_level_db: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    risk_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    occurrence_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    last_occurrence: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Alert assignment
+    assigned_to_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True,
+    )
 
     # Linked incidents
     incidents: Mapped[list["Incident"]] = relationship(

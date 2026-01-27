@@ -75,6 +75,18 @@ class AlertResponse(BaseModel):
     acknowledged_at: datetime | None
     acknowledged_by: str | None
     linked_incident_id: str | None
+    # Sound anomaly fields
+    device_id: str | None = None
+    building_id: str | None = None
+    floor_plan_id: str | None = None
+    audio_clip_id: str | None = None
+    confidence: float | None = None
+    peak_level_db: float | None = None
+    background_level_db: float | None = None
+    risk_level: str | None = None
+    occurrence_count: int = 1
+    last_occurrence: datetime | None = None
+    assigned_to_id: str | None = None
 
 
 class AlertAcknowledge(BaseModel):
@@ -121,6 +133,17 @@ def alert_to_response(alert: AlertModel) -> AlertResponse:
         acknowledged_at=alert.acknowledged_at,
         acknowledged_by=str(alert.acknowledged_by_id) if alert.acknowledged_by_id else None,
         linked_incident_id=str(alert.incidents[0].id) if alert.incidents else None,
+        device_id=str(alert.device_id) if alert.device_id else None,
+        building_id=str(alert.building_id) if alert.building_id else None,
+        floor_plan_id=str(alert.floor_plan_id) if alert.floor_plan_id else None,
+        audio_clip_id=str(alert.audio_clip_id) if alert.audio_clip_id else None,
+        confidence=alert.confidence,
+        peak_level_db=alert.peak_level_db,
+        background_level_db=alert.background_level_db,
+        risk_level=alert.risk_level,
+        occurrence_count=alert.occurrence_count,
+        last_occurrence=alert.last_occurrence,
+        assigned_to_id=str(alert.assigned_to_id) if alert.assigned_to_id else None,
     )
 
 
@@ -308,6 +331,187 @@ async def dismiss_alert(
     await emit_alert_updated(response.model_dump(mode="json"))
 
     return response
+
+
+class AlertAssign(BaseModel):
+    """Schema for assigning alert to a user."""
+    assigned_to_id: str
+
+
+# ==================== Sound Anomaly Alert Endpoints ====================
+
+@router.get("/sound-anomalies", response_model=PaginatedAlertResponse)
+async def list_sound_anomaly_alerts(
+    building_id: str | None = None,
+    floor_plan_id: str | None = None,
+    device_id: str | None = None,
+    severity: AlertSeverity | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> PaginatedAlertResponse:
+    """List alerts specifically from sound anomaly detection (Axis microphones)."""
+    query = select(AlertModel).where(
+        AlertModel.source == AlertStatusModel("axis_microphone") if False
+        else AlertModel.alert_type.in_([
+            "gunshot", "explosion", "glass_break", "aggression", "scream", "car_alarm"
+        ])
+    )
+
+    if building_id:
+        query = query.where(AlertModel.building_id == uuid.UUID(building_id))
+    if floor_plan_id:
+        query = query.where(AlertModel.floor_plan_id == uuid.UUID(floor_plan_id))
+    if device_id:
+        query = query.where(AlertModel.device_id == uuid.UUID(device_id))
+    if severity:
+        query = query.where(AlertModel.severity == severity.value)
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    query = query.offset((page - 1) * page_size).limit(page_size).order_by(AlertModel.created_at.desc())
+    result = await db.execute(query)
+    alerts = result.scalars().all()
+
+    total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+
+    return PaginatedAlertResponse(
+        items=[alert_to_response(alert) for alert in alerts],
+        total=total, page=page, page_size=page_size, total_pages=total_pages,
+    )
+
+
+@router.get("/alarms", response_model=PaginatedAlertResponse)
+async def list_alarms(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> PaginatedAlertResponse:
+    """List critical alarms (high risk level sound events)."""
+    query = select(AlertModel).where(
+        AlertModel.severity.in_(["critical", "high"]),
+        AlertModel.alert_type.in_(["gunshot", "explosion", "glass_break", "aggression"]),
+    )
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    query = query.offset((page - 1) * page_size).limit(page_size).order_by(AlertModel.created_at.desc())
+    result = await db.execute(query)
+    alerts = result.scalars().all()
+
+    total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+
+    return PaginatedAlertResponse(
+        items=[alert_to_response(alert) for alert in alerts],
+        total=total, page=page, page_size=page_size, total_pages=total_pages,
+    )
+
+
+@router.get("/noise-warnings", response_model=PaginatedAlertResponse)
+async def list_noise_warnings(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> PaginatedAlertResponse:
+    """List noise warning alerts (scream, car alarm)."""
+    query = select(AlertModel).where(
+        AlertModel.alert_type.in_(["scream", "car_alarm"]),
+    )
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    query = query.offset((page - 1) * page_size).limit(page_size).order_by(AlertModel.created_at.desc())
+    result = await db.execute(query)
+    alerts = result.scalars().all()
+
+    total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+
+    return PaginatedAlertResponse(
+        items=[alert_to_response(alert) for alert in alerts],
+        total=total, page=page, page_size=page_size, total_pages=total_pages,
+    )
+
+
+@router.post("/{alert_id}/assign", response_model=AlertResponse)
+async def assign_alert(
+    alert_id: str,
+    data: AlertAssign,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> AlertResponse:
+    """Assign an alert to a user."""
+    try:
+        alert_uuid = uuid.UUID(alert_id)
+        user_uuid = uuid.UUID(data.assigned_to_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ID format")
+
+    query = select(AlertModel).where(AlertModel.id == alert_uuid)
+    result = await db.execute(query)
+    alert = result.scalar_one_or_none()
+
+    if not alert:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+
+    alert.assigned_to_id = user_uuid
+    await db.commit()
+    await db.refresh(alert)
+
+    response = alert_to_response(alert)
+    await emit_alert_updated(response.model_dump(mode="json"))
+    return response
+
+
+@router.get("/history/chart")
+async def get_alert_history_chart(
+    building_id: str | None = None,
+    floor_plan_id: str | None = None,
+    days: int = Query(7, ge=1, le=90),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """Get alert level history data for charting (daily counts by severity)."""
+    from datetime import timedelta
+    from sqlalchemy import cast, Date
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    query = select(
+        cast(AlertModel.created_at, Date).label("date"),
+        AlertModel.severity,
+        func.count(AlertModel.id).label("count"),
+    ).where(AlertModel.created_at >= since)
+
+    if building_id:
+        query = query.where(AlertModel.building_id == uuid.UUID(building_id))
+    if floor_plan_id:
+        query = query.where(AlertModel.floor_plan_id == uuid.UUID(floor_plan_id))
+
+    query = query.group_by(
+        cast(AlertModel.created_at, Date), AlertModel.severity
+    ).order_by(cast(AlertModel.created_at, Date))
+
+    result = await db.execute(query)
+    rows = result.all()
+
+    chart_data = []
+    for row in rows:
+        chart_data.append({
+            "date": row[0].isoformat() if row[0] else None,
+            "severity": row[1].value if hasattr(row[1], 'value') else row[1],
+            "count": row[2],
+        })
+
+    return {"data": chart_data, "days": days}
 
 
 class CreateIncidentFromAlertRequest(BaseModel):

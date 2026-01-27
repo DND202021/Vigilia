@@ -13,3 +13,4 @@ export { AnalyticsPage } from './AnalyticsPage';
 export { BuildingsPage } from './BuildingsPage';
 export { UsersPage } from './UsersPage';
 export { RolesPage } from './RolesPage';
+export { DeviceManagementPage } from './DeviceManagementPage';

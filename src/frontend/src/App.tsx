@@ -21,6 +21,7 @@ const MapPage = lazy(() => import('./pages/MapPage').then(m => ({ default: m.Map
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })));
 const UsersPage = lazy(() => import('./pages/UsersPage').then(m => ({ default: m.UsersPage })));
 const RolesPage = lazy(() => import('./pages/RolesPage').then(m => ({ default: m.RolesPage })));
+const DeviceManagementPage = lazy(() => import('./pages/DeviceManagementPage').then(m => ({ default: m.DeviceManagementPage })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
 
 // Loading fallback component
@@ -152,6 +153,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <RolesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/devices"
+            element={
+              <ProtectedRoute>
+                <DeviceManagementPage />
               </ProtectedRoute>
             }
           />

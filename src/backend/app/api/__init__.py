@@ -21,6 +21,9 @@ from app.api import (
     buildings,
     users,
     roles,
+    iot_devices,
+    audio_clips,
+    notification_preferences,
 )
 
 router = APIRouter()
@@ -43,3 +46,6 @@ router.include_router(cad.router, prefix="/cad", tags=["CAD Integration"])
 router.include_router(gis.router, prefix="/gis", tags=["GIS Layers"])
 router.include_router(streaming.router, prefix="/streaming", tags=["Streaming & Recording"])
 router.include_router(analytics.router, prefix="/analytics", tags=["Analytics & Reporting"])
+router.include_router(iot_devices.router, prefix="/iot-devices", tags=["IoT Devices"])
+router.include_router(audio_clips.router, prefix="/audio-clips", tags=["Audio Clips"])
+router.include_router(notification_preferences.router, tags=["Notification Preferences"])

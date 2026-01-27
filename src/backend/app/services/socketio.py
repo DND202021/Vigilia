@@ -114,3 +114,36 @@ async def emit_resource_updated(resource: dict[str, Any]) -> None:
     """Emit resource updated event to all authenticated users."""
     await sio.emit("resource:updated", resource, room="authenticated")
     logger.info("Emitted resource:updated", resource_id=resource.get("id"))
+
+
+async def emit_device_status(device_data: dict[str, Any]) -> None:
+    """Emit device status change to all authenticated users."""
+    await sio.emit("device:status", device_data, room="authenticated")
+    logger.info("Emitted device:status", device_id=device_data.get("device_id"))
+
+
+async def emit_device_alert(device_alert: dict[str, Any]) -> None:
+    """Emit device alert event to all authenticated users."""
+    await sio.emit("device:alert", device_alert, room="authenticated")
+    logger.info("Emitted device:alert", device_id=device_alert.get("device_id"))
+
+
+# Building-specific rooms for targeted alert delivery
+@sio.event
+async def join_building(sid: str, building_id: str) -> None:
+    """Join a building room to receive building-specific alerts."""
+    room = f"building:{building_id}"
+    await sio.enter_room(sid, room)
+    if sid in connected_clients:
+        connected_clients[sid]["rooms"].add(room)
+    logger.info("Client joined building room", sid=sid, building_id=building_id)
+
+
+@sio.event
+async def leave_building(sid: str, building_id: str) -> None:
+    """Leave a building room."""
+    room = f"building:{building_id}"
+    await sio.leave_room(sid, room)
+    if sid in connected_clients:
+        connected_clients[sid]["rooms"].discard(room)
+    logger.info("Client left building room", sid=sid, building_id=building_id)
