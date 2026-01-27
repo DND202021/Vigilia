@@ -101,8 +101,14 @@ services:
 
 volumes:
   eriop_postgres:
+    external: true
+    name: eriop_postgres_data
   eriop_redis:
+    external: true
+    name: eriop_redis_data
   eriop_building_files:
+    external: true
+    name: eriop_building_files
 
 networks:
   eriop-net:
