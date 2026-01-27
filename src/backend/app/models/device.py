@@ -6,7 +6,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import String, Text, Float, Integer, Boolean, ForeignKey
-from sqlalchemy import Enum as SQLEnum, DateTime, JSON
+from sqlalchemy import DateTime, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -49,8 +49,8 @@ class IoTDevice(Base, TimestampMixin, SoftDeleteMixin):
 
     # Device identification
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
-    device_type: Mapped[DeviceType] = mapped_column(
-        SQLEnum(DeviceType, values_callable=lambda x: [e.value for e in x]),
+    device_type: Mapped[str] = mapped_column(
+        String(20),
         nullable=False,
         index=True,
     )
@@ -90,9 +90,9 @@ class IoTDevice(Base, TimestampMixin, SoftDeleteMixin):
     location_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     # Status
-    status: Mapped[DeviceStatus] = mapped_column(
-        SQLEnum(DeviceStatus, values_callable=lambda x: [e.value for e in x]),
-        default=DeviceStatus.OFFLINE,
+    status: Mapped[str] = mapped_column(
+        String(20),
+        default=DeviceStatus.OFFLINE.value,
         nullable=False,
         index=True,
     )

@@ -47,7 +47,7 @@ class DeviceService:
         device = IoTDevice(
             id=uuid.uuid4(),
             name=name,
-            device_type=device_type,
+            device_type=device_type.value if hasattr(device_type, 'value') else device_type,
             serial_number=serial_number,
             ip_address=ip_address,
             mac_address=mac_address,
@@ -61,7 +61,7 @@ class DeviceService:
             latitude=latitude,
             longitude=longitude,
             location_name=location_name,
-            status=DeviceStatus.OFFLINE,
+            status=DeviceStatus.OFFLINE.value,
             config=config or {},
             capabilities=capabilities or [],
         )
@@ -97,9 +97,9 @@ class DeviceService:
         if floor_plan_id:
             query = query.where(IoTDevice.floor_plan_id == floor_plan_id)
         if device_type:
-            query = query.where(IoTDevice.device_type == device_type)
+            query = query.where(IoTDevice.device_type == (device_type.value if hasattr(device_type, 'value') else device_type))
         if status:
-            query = query.where(IoTDevice.status == status)
+            query = query.where(IoTDevice.status == (status.value if hasattr(status, 'value') else status))
 
         # Count total
         count_query = select(func.count()).select_from(query.subquery())
@@ -159,7 +159,7 @@ class DeviceService:
         if not device:
             raise DeviceError(f"Device {device_id} not found")
 
-        device.status = status
+        device.status = status.value if hasattr(status, 'value') else status
         device.last_seen = datetime.now(timezone.utc)
         if connection_quality is not None:
             device.connection_quality = connection_quality

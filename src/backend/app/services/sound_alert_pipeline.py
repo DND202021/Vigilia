@@ -162,7 +162,7 @@ class SoundAlertPipeline:
                 alert.floor_plan_id = device.floor_plan_id
 
                 # Update device status to ALERT
-                device.status = DeviceStatus.ALERT
+                device.status = DeviceStatus.ALERT.value
                 device.last_seen = datetime.now(timezone.utc)
 
             db.add(alert)

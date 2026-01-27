@@ -72,7 +72,7 @@ class DeviceMonitorService:
                 select(IoTDevice).where(
                     and_(
                         IoTDevice.deleted_at.is_(None),
-                        IoTDevice.status != DeviceStatus.MAINTENANCE,
+                        IoTDevice.status != DeviceStatus.MAINTENANCE.value,
                     )
                 )
             )
@@ -84,8 +84,8 @@ class DeviceMonitorService:
 
                 # Mark device as offline if not seen within threshold
                 if device.last_seen and (now - device.last_seen) > self.offline_threshold:
-                    if device.status in (DeviceStatus.ONLINE, DeviceStatus.ALERT):
-                        device.status = DeviceStatus.OFFLINE
+                    if device.status in (DeviceStatus.ONLINE.value, DeviceStatus.ALERT.value):
+                        device.status = DeviceStatus.OFFLINE.value
                         await db.commit()
 
                         # Emit status change
@@ -93,7 +93,7 @@ class DeviceMonitorService:
                             "device_id": str(device.id),
                             "name": device.name,
                             "status": DeviceStatus.OFFLINE.value,
-                            "previous_status": old_status.value if hasattr(old_status, 'value') else old_status,
+                            "previous_status": old_status,
                             "last_seen": device.last_seen.isoformat() if device.last_seen else None,
                             "timestamp": now.isoformat(),
                         })
@@ -120,15 +120,15 @@ class DeviceMonitorService:
             device.connection_quality = connection_quality
 
         # If device was offline, mark it online
-        if device.status == DeviceStatus.OFFLINE:
-            device.status = DeviceStatus.ONLINE
+        if device.status == DeviceStatus.OFFLINE.value:
+            device.status = DeviceStatus.ONLINE.value
             await db.commit()
 
             await emit_device_status({
                 "device_id": str(device.id),
                 "name": device.name,
                 "status": DeviceStatus.ONLINE.value,
-                "previous_status": old_status.value if hasattr(old_status, 'value') else old_status,
+                "previous_status": old_status,
                 "last_seen": now.isoformat(),
                 "timestamp": now.isoformat(),
             })
