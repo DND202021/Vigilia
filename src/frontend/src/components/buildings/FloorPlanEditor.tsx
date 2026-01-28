@@ -9,6 +9,8 @@
  * - Marker properties modal
  * - Save/undo functionality
  * - Print support
+ * - Real-time synchronization
+ * - Collaborative editing with presence indicators
  */
 
 import { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react';
@@ -16,6 +18,10 @@ import { cn } from '../../utils';
 import { tokenStorage } from '../../services/api';
 import { LocationMarker } from './LocationMarker';
 import { useMarkerStore, initializeMarkersFromFloorPlan } from '../../stores/markerStore';
+import { useFloorPlanSync } from '../../hooks/useFloorPlanSync';
+import { PresenceIndicator } from './PresenceIndicator';
+import { DeviceStatusOverlay } from './DeviceStatusOverlay';
+import { useAuthStore } from '../../stores/authStore';
 import type { FloorPlan, Building, FloorKeyLocation, LocationMarkerType } from '../../types';
 import { DEFAULT_MARKER_CONFIGS } from '../../types';
 
@@ -68,6 +74,7 @@ export function FloorPlanEditor({
   // Refs
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
+  const floorPlanContainerRef = useRef<HTMLDivElement>(null);
 
   // Local state
   const [scale, setScale] = useState(1);
@@ -82,6 +89,31 @@ export function FloorPlanEditor({
   const [editingMarker, setEditingMarker] = useState<FloorKeyLocation | null>(null);
   const [pendingPosition, setPendingPosition] = useState<{ x: number; y: number } | null>(null);
   const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
+  const [containerDimensions, setContainerDimensions] = useState({ width: 0, height: 0 });
+
+  // Auth store for current user
+  const { user } = useAuthStore();
+
+  // Real-time sync hook
+  const {
+    isConnected,
+    isSyncing,
+    // activeUsers - accessed via PresenceIndicator from store
+    setEditing: setSyncEditing,
+    addMarker: syncAddMarker,
+    updateMarker: syncUpdateMarker,
+    deleteMarker: syncDeleteMarker,
+    conflicts,
+    resolveConflict,
+    // devicePositions - accessed via DeviceStatusOverlay from store
+    error: syncError,
+  } = useFloorPlanSync({
+    floorPlanId: floorPlan.id,
+    userId: user?.id || '',
+    userName: user?.full_name || 'Anonymous',
+    userRole: user?.role || undefined,
+    enabled: !!user,
+  });
 
   // Marker store state
   const {
@@ -91,13 +123,46 @@ export function FloorPlanEditor({
     isDirty,
     isSaving,
     error,
-    addMarker,
-    updateMarker,
-    deleteMarker,
+    addMarker: localAddMarker,
+    updateMarker: localUpdateMarker,
+    deleteMarker: localDeleteMarker,
     selectMarker,
     setEditing,
     saveMarkers,
   } = useMarkerStore();
+
+  // Use sync methods when connected, fall back to local methods
+  const addMarker = isConnected ? syncAddMarker : localAddMarker;
+  const updateMarker = isConnected ? syncUpdateMarker : localUpdateMarker;
+  const deleteMarker = isConnected ? syncDeleteMarker : localDeleteMarker;
+
+  // Track container dimensions for DeviceStatusOverlay
+  useEffect(() => {
+    const updateDimensions = () => {
+      if (floorPlanContainerRef.current) {
+        setContainerDimensions({
+          width: floorPlanContainerRef.current.offsetWidth,
+          height: floorPlanContainerRef.current.offsetHeight,
+        });
+      }
+    };
+
+    updateDimensions();
+    window.addEventListener('resize', updateDimensions);
+    return () => window.removeEventListener('resize', updateDimensions);
+  }, [imageLoaded]);
+
+  // Sync editing state with presence
+  useEffect(() => {
+    setSyncEditing(isEditing);
+  }, [isEditing, setSyncEditing]);
+
+  // Cleanup: set editing to false when component unmounts
+  useEffect(() => {
+    return () => {
+      setSyncEditing(false);
+    };
+  }, [setSyncEditing]);
 
   // Initialize markers on mount or when floor plan changes
   useEffect(() => {
@@ -489,6 +554,30 @@ export function FloorPlanEditor({
           )}
         </div>
 
+        {/* Center: Presence and sync status */}
+        <div className="flex items-center gap-2 ml-auto">
+          {/* Connection status indicator */}
+          {!isConnected && user && (
+            <span className="flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded">
+              <span className="w-2 h-2 bg-amber-500 rounded-full" />
+              Offline
+            </span>
+          )}
+
+          {/* Sync status indicator */}
+          {isSyncing && (
+            <span className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+              <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Syncing...
+            </span>
+          )}
+
+          {/* Presence indicator */}
+          <PresenceIndicator floorPlanId={floorPlan.id} className="ml-auto" />
+        </div>
+
         {/* Right: Action buttons */}
         <div className="flex items-center gap-1">
           {/* Save button (when dirty) */}
@@ -568,6 +657,57 @@ export function FloorPlanEditor({
         </div>
       )}
 
+      {/* Sync error message */}
+      {syncError && (
+        <div className="px-3 py-2 bg-red-50 border-b border-red-200 text-sm text-red-700 flex items-center gap-2">
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          Sync error: {syncError}
+        </div>
+      )}
+
+      {/* Conflict notification banner */}
+      {conflicts.length > 0 && (
+        <div className="px-3 py-2 bg-orange-50 border-b border-orange-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span className="text-sm text-orange-800">
+              {conflicts.length} conflict{conflicts.length > 1 ? 's' : ''} detected - another user modified markers you were editing
+            </span>
+          </div>
+          <div className="flex gap-2">
+            {conflicts.map((conflict) => (
+              <div key={conflict.marker_id} className="flex gap-1">
+                <button
+                  onClick={() => resolveConflict(conflict.marker_id, 'keep_local')}
+                  className="px-2 py-1 text-xs text-orange-700 bg-white border border-orange-300 rounded hover:bg-orange-50"
+                  title="Keep your version"
+                >
+                  Keep Mine
+                </button>
+                <button
+                  onClick={() => resolveConflict(conflict.marker_id, 'accept_remote')}
+                  className="px-2 py-1 text-xs text-orange-700 bg-white border border-orange-300 rounded hover:bg-orange-50"
+                  title="Accept the other user's version"
+                >
+                  Accept Theirs
+                </button>
+                <button
+                  onClick={() => resolveConflict(conflict.marker_id, 'merge')}
+                  className="px-2 py-1 text-xs text-white bg-orange-600 rounded hover:bg-orange-700"
+                  title="Merge both versions"
+                >
+                  Merge
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Unsaved changes warning */}
       {showUnsavedWarning && (
         <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 flex items-center justify-between">
@@ -617,7 +757,7 @@ export function FloorPlanEditor({
           }}
         >
           {authImageUrl ? (
-            <div className="relative" onClick={handleFloorPlanClick}>
+            <div ref={floorPlanContainerRef} className="relative" onClick={handleFloorPlanClick}>
               <img
                 ref={imageRef}
                 src={authImageUrl}
@@ -647,6 +787,16 @@ export function FloorPlanEditor({
                     onDelete={handleMarkerDelete}
                   />
                 ))}
+
+              {/* Device status overlay - shows real-time device positions */}
+              {imageLoaded && containerDimensions.width > 0 && (
+                <DeviceStatusOverlay
+                  floorPlanId={floorPlan.id}
+                  containerWidth={containerDimensions.width}
+                  containerHeight={containerDimensions.height}
+                  showLabels={scale >= 1.5}
+                />
+              )}
             </div>
           ) : (
             <div className="text-center text-gray-500 p-8">

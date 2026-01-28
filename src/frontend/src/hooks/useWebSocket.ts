@@ -19,6 +19,8 @@ import { useAudioStore } from '../stores/audioStore';
 import { useBuildingDetailStore } from '../stores/buildingDetailStore';
 import { useBuildingMapStore } from '../stores/buildingMapStore';
 import { useMarkerStore, initializeMarkersFromFloorPlan } from '../stores/markerStore';
+import { usePresenceStore } from '../stores/presenceStore';
+import { useDevicePositionStore } from '../stores/devicePositionStore';
 import { tokenStorage } from '../services/api';
 import type { Incident, Alert, Resource, SoundAlert, Building, FloorPlan } from '../types';
 
@@ -35,6 +37,13 @@ interface WebSocketHookResult {
   disconnect: () => void;
   joinBuilding: (buildingId: string) => void;
   leaveBuilding: (buildingId: string) => void;
+  // Floor Plan methods
+  joinFloorPlan: (floorPlanId: string) => void;
+  leaveFloorPlan: (floorPlanId: string) => void;
+  sendMarkerAdd: (floorPlanId: string, marker: any, clientId: string) => void;
+  sendMarkerUpdate: (floorPlanId: string, markerId: string, updates: any, clientId: string) => void;
+  sendMarkerDelete: (floorPlanId: string, markerId: string) => void;
+  sendPresenceHeartbeat: (floorPlanId: string, isEditing: boolean) => void;
 }
 
 export function useWebSocket(): WebSocketHookResult {
@@ -225,6 +234,64 @@ export function useWebSocket(): WebSocketHookResult {
       }
     });
 
+    // Floor Plan Real-time Events
+    socket.on('marker:added', (data) => {
+      const markerStore = useMarkerStore.getState();
+      if (data.client_id !== markerStore.clientId) {
+        markerStore.handleRemoteMarkerAdded(data.marker, data.user_id, data.client_id);
+      }
+    });
+
+    socket.on('marker:updated', (data) => {
+      const markerStore = useMarkerStore.getState();
+      if (data.client_id !== markerStore.clientId) {
+        markerStore.handleRemoteMarkerUpdated(data.marker_id, data.updates, data.user_id, data.client_id);
+      }
+    });
+
+    socket.on('marker:deleted', (data) => {
+      const markerStore = useMarkerStore.getState();
+      markerStore.handleRemoteMarkerDeleted(data.marker_id, data.user_id);
+    });
+
+    socket.on('presence:joined_floor_plan', (data) => {
+      usePresenceStore.getState().handleUserJoined({
+        user_id: data.user_id,
+        user_name: data.user_name,
+        user_role: data.user_role,
+        is_editing: false,
+        joined_at: data.timestamp,
+      });
+    });
+
+    socket.on('presence:left_floor_plan', (data) => {
+      usePresenceStore.getState().handleUserLeft(data.user_id);
+    });
+
+    socket.on('presence:list', (data) => {
+      usePresenceStore.getState().updateActiveUsers(data.active_users);
+    });
+
+    socket.on('presence:editing', (data) => {
+      const presenceStore = usePresenceStore.getState();
+      presenceStore.handleUserJoined({
+        ...presenceStore.activeUsers.find(u => u.user_id === data.user_id),
+        user_id: data.user_id,
+        user_name: data.user_name,
+        is_editing: data.is_editing,
+        joined_at: data.timestamp,
+      });
+    });
+
+    socket.on('device:position_updated', (data) => {
+      useDevicePositionStore.getState().handleRemotePositionUpdate(
+        data.device_id,
+        data.position_x,
+        data.position_y,
+        data.timestamp
+      );
+    });
+
     socketRef.current = socket;
   }, [handleIncidentUpdate, handleAlertUpdate, handleResourceUpdate, handleDeviceStatusUpdate, handleNewSoundAlert, fetchMapBuildings, currentBuilding, addFloorPlan, fetchFloorPlans, currentFloorPlanId, isEditing]);
 
@@ -248,6 +315,46 @@ export function useWebSocket(): WebSocketHookResult {
     }
   }, []);
 
+  // Floor Plan methods
+  const joinFloorPlan = useCallback((floorPlanId: string) => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('join_floor_plan', { floor_plan_id: floorPlanId });
+      usePresenceStore.getState().setCurrentFloorPlan(floorPlanId);
+    }
+  }, []);
+
+  const leaveFloorPlan = useCallback((floorPlanId: string) => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('leave_floor_plan', { floor_plan_id: floorPlanId });
+      usePresenceStore.getState().setCurrentFloorPlan(null);
+      usePresenceStore.getState().reset();
+    }
+  }, []);
+
+  const sendMarkerAdd = useCallback((floorPlanId: string, marker: any, clientId: string) => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('marker_added', { floor_plan_id: floorPlanId, marker, client_id: clientId });
+    }
+  }, []);
+
+  const sendMarkerUpdate = useCallback((floorPlanId: string, markerId: string, updates: any, clientId: string) => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('marker_updated', { floor_plan_id: floorPlanId, marker_id: markerId, updates, client_id: clientId });
+    }
+  }, []);
+
+  const sendMarkerDelete = useCallback((floorPlanId: string, markerId: string) => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('marker_deleted', { floor_plan_id: floorPlanId, marker_id: markerId });
+    }
+  }, []);
+
+  const sendPresenceHeartbeat = useCallback((floorPlanId: string, isEditing: boolean) => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('presence_editing', { floor_plan_id: floorPlanId, is_editing: isEditing });
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
       disconnect();
@@ -261,5 +368,12 @@ export function useWebSocket(): WebSocketHookResult {
     disconnect,
     joinBuilding,
     leaveBuilding,
+    // Floor Plan methods
+    joinFloorPlan,
+    leaveFloorPlan,
+    sendMarkerAdd,
+    sendMarkerUpdate,
+    sendMarkerDelete,
+    sendPresenceHeartbeat,
   };
 }

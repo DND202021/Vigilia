@@ -10,10 +10,13 @@
  * - Sub-tabs for Alerts, Incidents, and Floor Plan Upload
  */
 
-import React, { useEffect, useState, useCallback, Suspense } from 'react';
+import React, { useEffect, useState, useCallback, Suspense, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useBuildingDetailStore } from '../stores/buildingDetailStore';
 import { useInspectionStore } from '../stores/inspectionStore';
+import { useDocumentStore } from '../stores/documentStore';
+import { usePhotoStore } from '../stores/photoStore';
+import { useWebSocket } from '../hooks/useWebSocket';
 import { FloorSelector } from '../components/buildings/FloorSelector';
 import { BuildingInfoPanel } from '../components/buildings/BuildingInfoPanel';
 import { FloorPlanEditor } from '../components/buildings/FloorPlanEditor';
@@ -64,9 +67,71 @@ const hazardLevelConfig: Record<HazardLevel, { color: string; bgColor: string }>
 
 type SubTab = 'alerts' | 'incidents' | 'upload' | 'bim' | 'documents' | 'photos' | 'inspections';
 
+/**
+ * ConnectionStatusIndicator
+ * Small colored dot showing WebSocket connection state
+ */
+function ConnectionStatusIndicator({ isConnected }: { isConnected: boolean }) {
+  return (
+    <div className="flex items-center gap-1.5" title={isConnected ? 'Real-time updates active' : 'Real-time updates unavailable'}>
+      <span
+        className={cn(
+          'w-2 h-2 rounded-full',
+          isConnected ? 'bg-green-500' : 'bg-gray-400'
+        )}
+      />
+      <span className="text-xs text-gray-500">
+        {isConnected ? 'Live' : 'Offline'}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * RemoteUpdateNotification
+ * Subtle notification when remote changes occur
+ */
+function RemoteUpdateNotification({
+  message,
+  onDismiss
+}: {
+  message: string;
+  onDismiss: () => void;
+}) {
+  useEffect(() => {
+    const timer = setTimeout(onDismiss, 5000);
+    return () => clearTimeout(timer);
+  }, [onDismiss]);
+
+  return (
+    <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-2 fade-in duration-200">
+      <div className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-3">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span className="text-sm">{message}</span>
+        <button onClick={onDismiss} className="ml-2 text-blue-200 hover:text-white">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function BuildingDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+
+  // WebSocket hook for real-time updates
+  const {
+    isConnected,
+    lastEvent,
+    connect,
+    joinBuilding,
+    leaveBuilding,
+  } = useWebSocket();
 
   const {
     building,
@@ -93,6 +158,10 @@ export function BuildingDetailPage() {
     clearError,
   } = useBuildingDetailStore();
 
+  // Document and photo stores for real-time refresh
+  const fetchDocuments = useDocumentStore((state) => state.fetchDocuments);
+  const fetchPhotos = usePhotoStore((state) => state.fetchPhotos);
+
   const [subTab, setSubTab] = useState<SubTab>('alerts');
 
   // BIM tab state - track whether showing import form vs viewer
@@ -100,6 +169,12 @@ export function BuildingDetailPage() {
 
   // PhotoCapture modal state
   const [showPhotoCapture, setShowPhotoCapture] = useState(false);
+
+  // Remote update notification state
+  const [remoteNotification, setRemoteNotification] = useState<string | null>(null);
+
+  // Track previous lastEvent to detect changes
+  const prevLastEventRef = useRef<string | null>(null);
 
   // Get inspection counts for alert badges
   const {
@@ -160,6 +235,96 @@ export function BuildingDetailPage() {
       reset();
     };
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Connect to WebSocket on mount
+  useEffect(() => {
+    connect();
+  }, [connect]);
+
+  // Join/leave building WebSocket room for real-time updates
+  useEffect(() => {
+    if (id && isConnected) {
+      joinBuilding(id);
+    }
+    return () => {
+      if (id) {
+        leaveBuilding(id);
+      }
+    };
+  }, [id, isConnected, joinBuilding, leaveBuilding]);
+
+  // Handle incoming WebSocket events for this building
+  useEffect(() => {
+    if (!lastEvent || lastEvent === prevLastEventRef.current) return;
+    prevLastEventRef.current = lastEvent;
+
+    // Parse the event type and id
+    const [eventType, eventSubType, eventId] = lastEvent.split(':');
+    const fullEventType = `${eventType}:${eventSubType}`;
+
+    // Only handle events for the current building
+    if (!id) return;
+
+    switch (fullEventType) {
+      case 'building:updated':
+        // Refresh building data when updated remotely
+        if (eventId === id) {
+          fetchBuilding(id);
+          setRemoteNotification('Building information was updated');
+        }
+        break;
+
+      case 'floor_plan:uploaded':
+        // Floor plan added - the useWebSocket hook already handles adding it to the store
+        // Just show notification
+        setRemoteNotification('A new floor plan was uploaded');
+        break;
+
+      case 'floor_plan:updated':
+        // Floor plan updated - refresh floor plans
+        fetchFloorPlans(id);
+        setRemoteNotification('Floor plan was updated');
+        break;
+
+      case 'markers:updated':
+        // Markers updated - the useWebSocket hook handles this
+        setRemoteNotification('Floor plan markers were updated');
+        break;
+
+      case 'document:uploaded':
+      case 'document:updated':
+      case 'document:deleted':
+        // Refresh documents list if on documents tab
+        if (subTab === 'documents') {
+          fetchDocuments(id);
+        }
+        setRemoteNotification('Documents were updated');
+        break;
+
+      case 'photo:uploaded':
+      case 'photo:deleted':
+        // Refresh photos list if on photos tab
+        if (subTab === 'photos') {
+          fetchPhotos(id);
+        }
+        setRemoteNotification('Photos were updated');
+        break;
+
+      case 'inspection:created':
+      case 'inspection:updated':
+      case 'inspection:deleted':
+        // Refresh inspections list if on inspections tab
+        if (subTab === 'inspections') {
+          fetchBuildingInspections(id);
+        }
+        setRemoteNotification('Inspections were updated');
+        break;
+
+      default:
+        // Ignore other events
+        break;
+    }
+  }, [lastEvent, id, fetchBuilding, fetchFloorPlans, fetchDocuments, fetchPhotos, fetchBuildingInspections, subTab]);
 
   // Compute upcoming and overdue inspection counts
   const upcomingInspectionCount = inspections.filter((i) => {
@@ -257,7 +422,10 @@ export function BuildingDetailPage() {
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{building.name}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900">{building.name}</h1>
+            <ConnectionStatusIndicator isConnected={isConnected} />
+          </div>
           <p className="text-gray-500 mt-0.5">{building.full_address}</p>
           <div className="flex flex-wrap gap-2 mt-2">
             <Badge variant="secondary">{typeLabel}</Badge>
@@ -621,6 +789,14 @@ export function BuildingDetailPage() {
             </Suspense>
           </div>
         </div>
+      )}
+
+      {/* Remote Update Notification */}
+      {remoteNotification && (
+        <RemoteUpdateNotification
+          message={remoteNotification}
+          onDismiss={() => setRemoteNotification(null)}
+        />
       )}
     </div>
   );

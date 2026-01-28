@@ -1,6 +1,7 @@
 """Socket.IO Server for Real-time Updates."""
 
 import socketio
+from datetime import datetime
 from typing import Any
 import structlog
 
@@ -52,9 +53,14 @@ async def connect(sid: str, environ: dict[str, Any], auth: dict[str, Any] | None
 
     # TODO: Validate JWT token and extract user info
     # For now, accept all connections with a token
+    user_id = auth.get("user_id") if auth else None
+    user_name = auth.get("user_name") if auth else None
     connected_clients[sid] = {
         "token": token,
+        "user_id": user_id,
+        "user_name": user_name,
         "rooms": set(),
+        "current_floor_plan_id": None,
     }
 
     # Join default room for all authenticated users
@@ -160,6 +166,141 @@ async def leave_building(sid: str, building_id: str) -> None:
     logger.info("Client left building room", sid=sid, building_id=building_id)
 
 
+# Floor plan room management for real-time collaborative editing
+@sio.event
+async def join_floor_plan(sid, data):
+    """Join a floor plan editing session."""
+    floor_plan_id = data.get('floor_plan_id')
+    if not floor_plan_id:
+        return {'error': 'floor_plan_id required'}
+
+    room = f"floor_plan:{floor_plan_id}"
+    await sio.enter_room(sid, room)
+
+    # Track the floor plan
+    if sid in connected_clients:
+        connected_clients[sid]['current_floor_plan_id'] = floor_plan_id
+
+    logger.info(f"Client {sid} joined floor plan room {room}")
+    return {'status': 'joined', 'room': room}
+
+
+@sio.event
+async def leave_floor_plan(sid, data):
+    """Leave a floor plan editing session."""
+    floor_plan_id = data.get('floor_plan_id')
+    if not floor_plan_id:
+        return {'error': 'floor_plan_id required'}
+
+    room = f"floor_plan:{floor_plan_id}"
+    await sio.leave_room(sid, room)
+
+    # Clear tracking
+    if sid in connected_clients:
+        connected_clients[sid]['current_floor_plan_id'] = None
+
+    logger.info(f"Client {sid} left floor plan room {room}")
+    return {'status': 'left', 'room': room}
+
+
+@sio.event
+async def marker_added(sid, data):
+    """Handle marker added by client - broadcast to floor plan room."""
+    floor_plan_id = data.get('floor_plan_id')
+    marker = data.get('marker')
+    client_id = data.get('client_id')
+
+    if not floor_plan_id or not marker:
+        return {'error': 'floor_plan_id and marker required'}
+
+    room = f"floor_plan:{floor_plan_id}"
+    user_id = connected_clients.get(sid, {}).get('user_id')
+
+    # Broadcast to all in room except sender
+    await sio.emit('marker:added', {
+        'floor_plan_id': floor_plan_id,
+        'marker': marker,
+        'user_id': user_id,
+        'client_id': client_id,
+        'timestamp': datetime.utcnow().isoformat(),
+    }, room=room, skip_sid=sid)
+
+    return {'status': 'broadcast'}
+
+
+@sio.event
+async def marker_updated(sid, data):
+    """Handle marker updated by client - broadcast to floor plan room."""
+    floor_plan_id = data.get('floor_plan_id')
+    marker_id = data.get('marker_id')
+    updates = data.get('updates')
+    client_id = data.get('client_id')
+
+    if not floor_plan_id or not marker_id:
+        return {'error': 'floor_plan_id and marker_id required'}
+
+    room = f"floor_plan:{floor_plan_id}"
+    user_id = connected_clients.get(sid, {}).get('user_id')
+
+    await sio.emit('marker:updated', {
+        'floor_plan_id': floor_plan_id,
+        'marker_id': marker_id,
+        'updates': updates,
+        'user_id': user_id,
+        'client_id': client_id,
+        'timestamp': datetime.utcnow().isoformat(),
+    }, room=room, skip_sid=sid)
+
+    return {'status': 'broadcast'}
+
+
+@sio.event
+async def marker_deleted(sid, data):
+    """Handle marker deleted by client - broadcast to floor plan room."""
+    floor_plan_id = data.get('floor_plan_id')
+    marker_id = data.get('marker_id')
+
+    if not floor_plan_id or not marker_id:
+        return {'error': 'floor_plan_id and marker_id required'}
+
+    room = f"floor_plan:{floor_plan_id}"
+    user_id = connected_clients.get(sid, {}).get('user_id')
+
+    await sio.emit('marker:deleted', {
+        'floor_plan_id': floor_plan_id,
+        'marker_id': marker_id,
+        'user_id': user_id,
+        'timestamp': datetime.utcnow().isoformat(),
+    }, room=room, skip_sid=sid)
+
+    return {'status': 'broadcast'}
+
+
+@sio.event
+async def presence_editing(sid, data):
+    """Handle presence heartbeat / editing status update."""
+    floor_plan_id = data.get('floor_plan_id')
+    is_editing = data.get('is_editing', False)
+
+    if not floor_plan_id:
+        return {'error': 'floor_plan_id required'}
+
+    room = f"floor_plan:{floor_plan_id}"
+    client_data = connected_clients.get(sid, {})
+    user_id = client_data.get('user_id')
+    user_name = client_data.get('user_name', 'Unknown')
+
+    await sio.emit('presence:editing', {
+        'floor_plan_id': floor_plan_id,
+        'user_id': user_id,
+        'user_name': user_name,
+        'is_editing': is_editing,
+        'timestamp': datetime.utcnow().isoformat(),
+    }, room=room, skip_sid=sid)
+
+    return {'status': 'broadcast'}
+
+
 # Building emit functions for real-time building updates
 async def emit_building_created(building: dict) -> None:
     """Emit building created event to all authenticated users."""
@@ -213,3 +354,92 @@ async def emit_markers_updated(floor_plan_id: str, building_id: str) -> None:
         logger.info("Emitted markers:updated", building_id=building_id, floor_plan_id=floor_plan_id)
     except Exception as e:
         logger.error("Failed to emit markers:updated", building_id=building_id, floor_plan_id=floor_plan_id, error=str(e))
+
+
+# Sprint 7: Real-time Floor Plan Emit Functions
+
+async def emit_marker_added(floor_plan_id: str, marker: dict, user_id: str = None, client_id: str = None):
+    """Emit marker added event to floor plan room."""
+    room = f"floor_plan:{floor_plan_id}"
+    await sio.emit('marker:added', {
+        'floor_plan_id': floor_plan_id,
+        'marker': marker,
+        'user_id': user_id,
+        'client_id': client_id,
+        'timestamp': datetime.utcnow().isoformat(),
+    }, room=room)
+    logger.debug(f"Emitted marker:added to room {room}")
+
+
+async def emit_marker_updated(floor_plan_id: str, marker_id: str, updates: dict, user_id: str = None, client_id: str = None):
+    """Emit marker updated event to floor plan room."""
+    room = f"floor_plan:{floor_plan_id}"
+    await sio.emit('marker:updated', {
+        'floor_plan_id': floor_plan_id,
+        'marker_id': marker_id,
+        'updates': updates,
+        'user_id': user_id,
+        'client_id': client_id,
+        'timestamp': datetime.utcnow().isoformat(),
+    }, room=room)
+    logger.debug(f"Emitted marker:updated to room {room}")
+
+
+async def emit_marker_deleted(floor_plan_id: str, marker_id: str, user_id: str = None):
+    """Emit marker deleted event to floor plan room."""
+    room = f"floor_plan:{floor_plan_id}"
+    await sio.emit('marker:deleted', {
+        'floor_plan_id': floor_plan_id,
+        'marker_id': marker_id,
+        'user_id': user_id,
+        'timestamp': datetime.utcnow().isoformat(),
+    }, room=room)
+    logger.debug(f"Emitted marker:deleted to room {room}")
+
+
+async def emit_presence_joined(floor_plan_id: str, user_data: dict):
+    """Emit user joined floor plan event."""
+    room = f"floor_plan:{floor_plan_id}"
+    await sio.emit('presence:joined_floor_plan', {
+        'floor_plan_id': floor_plan_id,
+        'user_id': user_data.get('user_id'),
+        'user_name': user_data.get('user_name'),
+        'user_role': user_data.get('user_role'),
+        'timestamp': datetime.utcnow().isoformat(),
+    }, room=room)
+    logger.debug(f"Emitted presence:joined_floor_plan to room {room}")
+
+
+async def emit_presence_left(floor_plan_id: str, user_id: str):
+    """Emit user left floor plan event."""
+    room = f"floor_plan:{floor_plan_id}"
+    await sio.emit('presence:left_floor_plan', {
+        'floor_plan_id': floor_plan_id,
+        'user_id': user_id,
+        'timestamp': datetime.utcnow().isoformat(),
+    }, room=room)
+    logger.debug(f"Emitted presence:left_floor_plan to room {room}")
+
+
+async def emit_presence_list(floor_plan_id: str, active_users: list):
+    """Emit list of active users on floor plan."""
+    room = f"floor_plan:{floor_plan_id}"
+    await sio.emit('presence:list', {
+        'floor_plan_id': floor_plan_id,
+        'active_users': active_users,
+        'timestamp': datetime.utcnow().isoformat(),
+    }, room=room)
+    logger.debug(f"Emitted presence:list to room {room} with {len(active_users)} users")
+
+
+async def emit_device_position_updated(floor_plan_id: str, device_data: dict):
+    """Emit device position updated on floor plan."""
+    room = f"floor_plan:{floor_plan_id}"
+    await sio.emit('device:position_updated', {
+        'floor_plan_id': floor_plan_id,
+        'device_id': device_data.get('device_id'),
+        'position_x': device_data.get('position_x'),
+        'position_y': device_data.get('position_y'),
+        'timestamp': datetime.utcnow().isoformat(),
+    }, room=room)
+    logger.debug(f"Emitted device:position_updated to room {room}")

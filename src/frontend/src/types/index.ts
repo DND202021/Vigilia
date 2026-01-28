@@ -976,3 +976,108 @@ export interface InspectionUpdateRequest {
   follow_up_required?: boolean;
   follow_up_date?: string;
 }
+
+// ============================================================================
+// Real-time Collaboration Types (Sprint 7)
+// ============================================================================
+
+/**
+ * User presence on a floor plan for collaborative editing.
+ */
+export interface UserPresence {
+  user_id: string;
+  user_name: string;
+  user_role?: string;
+  is_editing: boolean;
+  joined_at: string;
+  last_heartbeat?: string;
+}
+
+/**
+ * Marker with optimistic update metadata.
+ */
+export interface OptimisticMarker extends FloorKeyLocation {
+  client_id: string;
+  is_optimistic: boolean;
+  timestamp: string;
+}
+
+/**
+ * Conflict detected when multiple users edit the same marker.
+ */
+export interface MarkerConflict {
+  marker_id: string;
+  floor_plan_id: string;
+  local_version: FloorKeyLocation;
+  server_version: FloorKeyLocation;
+  conflict_type: 'position' | 'properties' | 'deletion';
+  detected_at: string;
+  resolved?: boolean;
+}
+
+/**
+ * Strategy for resolving marker conflicts.
+ */
+export type ConflictResolutionStrategy =
+  | 'last_write_wins'
+  | 'server_authoritative'
+  | 'local_wins'
+  | 'manual';
+
+/**
+ * Device position on a floor plan with real-time status.
+ */
+export interface DeviceFloorPosition {
+  device_id: string;
+  floor_plan_id: string;
+  position_x: number;
+  position_y: number;
+  status: DeviceStatus;
+  last_seen?: string;
+  timestamp: string;
+}
+
+/**
+ * WebSocket event data for marker operations.
+ */
+export interface MarkerWebSocketEvent {
+  floor_plan_id: string;
+  marker_id?: string;
+  marker?: FloorKeyLocation;
+  updates?: Partial<FloorKeyLocation>;
+  user_id?: string;
+  client_id?: string;
+  timestamp: string;
+}
+
+/**
+ * WebSocket event data for presence updates.
+ */
+export interface PresenceWebSocketEvent {
+  floor_plan_id: string;
+  user_id: string;
+  user_name?: string;
+  user_role?: string;
+  is_editing?: boolean;
+  timestamp: string;
+}
+
+/**
+ * WebSocket event for presence list.
+ */
+export interface PresenceListEvent {
+  floor_plan_id: string;
+  active_users: UserPresence[];
+  timestamp: string;
+}
+
+/**
+ * WebSocket event for device position updates.
+ */
+export interface DevicePositionEvent {
+  floor_plan_id: string;
+  device_id: string;
+  position_x: number;
+  position_y: number;
+  timestamp: string;
+}
