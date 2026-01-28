@@ -221,6 +221,7 @@ async def list_incidents(
     status: Annotated[IncidentStatus | None, Query()] = None,
     priority: Annotated[IncidentPriority | None, Query()] = None,
     incident_type: Annotated[IncidentCategory | None, Query()] = None,
+    building_id: Annotated[uuid.UUID | None, Query(description="Filter incidents by building ID")] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 50,
     db: AsyncSession = Depends(get_db),
@@ -235,6 +236,8 @@ async def list_incidents(
         query = query.where(IncidentModel.priority == priority.value)
     if incident_type:
         query = query.where(IncidentModel.category == incident_type.value)
+    if building_id:
+        query = query.where(IncidentModel.building_id == building_id)
 
     # Get total count
     count_query = select(func.count()).select_from(query.subquery())

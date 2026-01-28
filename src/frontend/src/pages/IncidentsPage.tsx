@@ -16,6 +16,8 @@ import {
   Input,
   Spinner,
 } from '../components/ui';
+import { BuildingSelector } from '../components/incidents/BuildingSelector';
+import { BuildingInfoPanel } from '../components/incidents/BuildingInfoPanel';
 import {
   formatRelativeTime,
   getPriorityLabel,
@@ -26,7 +28,7 @@ import {
   getIncidentTypeLabel,
   cn,
 } from '../utils';
-import type { Incident, IncidentCreateRequest, IncidentType, IncidentPriority } from '../types';
+import type { Incident, IncidentCreateRequest, IncidentType, IncidentPriority, Building } from '../types';
 
 const POLL_INTERVAL = 15000;
 
@@ -259,9 +261,32 @@ function CreateIncidentModal({ isOpen, onClose, onCreate }: CreateIncidentModalP
     address: '',
     latitude: undefined,
     longitude: undefined,
+    building_id: undefined,
   });
+  const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(null);
+  const [isBuildingPanelExpanded, setIsBuildingPanelExpanded] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  // Handle building selection
+  const handleBuildingSelect = (building: Building | null) => {
+    setSelectedBuilding(building);
+    if (building) {
+      // Auto-fill address and coordinates from selected building
+      setFormData((prev) => ({
+        ...prev,
+        building_id: building.id,
+        address: building.full_address,
+        latitude: building.latitude,
+        longitude: building.longitude,
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        building_id: undefined,
+      }));
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -276,6 +301,7 @@ function CreateIncidentModal({ isOpen, onClose, onCreate }: CreateIncidentModalP
     try {
       await onCreate(formData);
       onClose();
+      // Reset form state
       setFormData({
         incident_type: 'other',
         priority: 3,
@@ -284,13 +310,35 @@ function CreateIncidentModal({ isOpen, onClose, onCreate }: CreateIncidentModalP
         address: '',
         latitude: undefined,
         longitude: undefined,
+        building_id: undefined,
       });
+      setSelectedBuilding(null);
+      setIsBuildingPanelExpanded(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create incident');
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // Reset form when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setFormData({
+        incident_type: 'other',
+        priority: 3,
+        title: '',
+        description: '',
+        address: '',
+        latitude: undefined,
+        longitude: undefined,
+        building_id: undefined,
+      });
+      setSelectedBuilding(null);
+      setIsBuildingPanelExpanded(false);
+      setError('');
+    }
+  }, [isOpen]);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Create New Incident" size="lg">
@@ -326,6 +374,25 @@ function CreateIncidentModal({ isOpen, onClose, onCreate }: CreateIncidentModalP
               setFormData({ ...formData, priority: Number(e.target.value) as IncidentPriority })
             }
           />
+        </div>
+
+        {/* Building Selector */}
+        <div className="space-y-2">
+          <BuildingSelector
+            label="Link Building (Optional)"
+            onSelect={handleBuildingSelect}
+            initialValue={selectedBuilding}
+          />
+
+          {/* Building Info Preview */}
+          {selectedBuilding && (
+            <BuildingInfoPanel
+              building={selectedBuilding}
+              isCollapsed={!isBuildingPanelExpanded}
+              onToggle={() => setIsBuildingPanelExpanded(!isBuildingPanelExpanded)}
+              className="mt-2"
+            />
+          )}
         </div>
 
         <Input

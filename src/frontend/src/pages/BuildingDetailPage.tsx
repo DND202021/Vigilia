@@ -20,8 +20,16 @@ import { FloorPlanUpload } from '../components/buildings';
 import { DeviceMonitoringPanel } from '../components/devices/DeviceMonitoringPanel';
 import { AlertsFloorTable } from '../components/alerts/AlertsFloorTable';
 import { Badge, Button, Spinner } from '../components/ui';
-import { cn } from '../utils';
-import type { HazardLevel } from '../types';
+import {
+  cn,
+  formatDate,
+  getIncidentTypeLabel,
+  getStatusLabel,
+  getStatusBgColor,
+  getStatusColor,
+} from '../utils';
+import { buildingsApi } from '../services/api';
+import type { HazardLevel, Incident, PaginatedResponse } from '../types';
 
 const buildingTypeLabels: Record<string, string> = {
   residential_single: 'Residential (Single)',
@@ -47,7 +55,7 @@ const hazardLevelConfig: Record<HazardLevel, { color: string; bgColor: string }>
   extreme: { color: 'text-red-700', bgColor: 'bg-red-100' },
 };
 
-type SubTab = 'alerts' | 'upload';
+type SubTab = 'alerts' | 'incidents' | 'upload';
 
 export function BuildingDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -81,12 +89,53 @@ export function BuildingDetailPage() {
 
   const [subTab, setSubTab] = useState<SubTab>('alerts');
 
+  // Incident history state
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [incidentsLoading, setIncidentsLoading] = useState(false);
+  const [incidentsError, setIncidentsError] = useState<string | null>(null);
+  const [incidentsPagination, setIncidentsPagination] = useState<{
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  }>({ page: 1, pageSize: 10, total: 0, totalPages: 0 });
+
+  // Fetch incidents for the building
+  const fetchIncidents = useCallback(
+    async (page = 1, pageSize = 10) => {
+      if (!id) return;
+      setIncidentsLoading(true);
+      setIncidentsError(null);
+      try {
+        const response: PaginatedResponse<Incident> = await buildingsApi.getIncidents(id, {
+          page,
+          page_size: pageSize,
+        });
+        setIncidents(response.items);
+        setIncidentsPagination({
+          page: response.page,
+          pageSize: response.page_size,
+          total: response.total,
+          totalPages: response.total_pages,
+        });
+      } catch (err) {
+        setIncidentsError(
+          err instanceof Error ? err.message : 'Failed to fetch incidents'
+        );
+      } finally {
+        setIncidentsLoading(false);
+      }
+    },
+    [id]
+  );
+
   // Load building data on mount
   useEffect(() => {
     if (!id) return;
     fetchBuilding(id);
     fetchFloorPlans(id);
     fetchBuildingAlerts(id);
+    fetchIncidents(1, 10);
 
     return () => {
       reset();
@@ -344,6 +393,22 @@ export function BuildingDetailPage() {
               )}
             </button>
             <button
+              onClick={() => setSubTab('incidents')}
+              className={cn(
+                'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                subTab === 'incidents'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              )}
+            >
+              Incidents
+              {incidentsPagination.total > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700">
+                  {incidentsPagination.total}
+                </span>
+              )}
+            </button>
+            <button
               onClick={() => setSubTab('upload')}
               className={cn(
                 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
@@ -364,6 +429,16 @@ export function BuildingDetailPage() {
             />
           )}
 
+          {subTab === 'incidents' && (
+            <IncidentHistoryTable
+              incidents={incidents}
+              isLoading={incidentsLoading}
+              error={incidentsError}
+              pagination={incidentsPagination}
+              onPageChange={(page) => fetchIncidents(page, incidentsPagination.pageSize)}
+            />
+          )}
+
           {subTab === 'upload' && (
             <FloorPlanUpload
               buildingId={building.id}
@@ -375,6 +450,217 @@ export function BuildingDetailPage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Incident History Table Component
+ * Displays a paginated list of incidents related to this building.
+ */
+interface IncidentHistoryTableProps {
+  incidents: Incident[];
+  isLoading: boolean;
+  error: string | null;
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+  onPageChange: (page: number) => void;
+}
+
+function IncidentHistoryTable({
+  incidents,
+  isLoading,
+  error,
+  pagination,
+  onPageChange,
+}: IncidentHistoryTableProps) {
+  const navigate = useNavigate();
+
+  // Get incident type badge styling
+  const getIncidentTypeBadgeClass = (type: string) => {
+    const typeColors: Record<string, string> = {
+      fire: 'bg-red-100 text-red-800 border-red-200',
+      medical: 'bg-pink-100 text-pink-800 border-pink-200',
+      police: 'bg-blue-100 text-blue-800 border-blue-200',
+      traffic: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      hazmat: 'bg-orange-100 text-orange-800 border-orange-200',
+      rescue: 'bg-purple-100 text-purple-800 border-purple-200',
+      other: 'bg-gray-100 text-gray-800 border-gray-200',
+    };
+    return typeColors[type] || typeColors.other;
+  };
+
+  if (isLoading) {
+    return (
+      <div className="bg-white rounded-lg border p-8 text-center">
+        <Spinner size="md" />
+        <p className="mt-2 text-gray-500">Loading incidents...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-white rounded-lg border p-8 text-center">
+        <p className="text-red-600">{error}</p>
+      </div>
+    );
+  }
+
+  if (incidents.length === 0) {
+    return (
+      <div className="bg-white rounded-lg border p-8 text-center text-gray-400">
+        <svg
+          className="w-12 h-12 mx-auto mb-3 text-gray-300"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+          />
+        </svg>
+        <p>No incidents found for this building</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-lg border overflow-hidden">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              Incident #
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              Type
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              Title
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              Status
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              Reported
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              Actions
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-200">
+          {incidents.map((incident) => (
+            <tr key={incident.id} className="hover:bg-gray-50">
+              <td className="px-4 py-3 text-sm font-medium text-blue-600">
+                <Link
+                  to={`/incidents/${incident.id}`}
+                  className="hover:text-blue-800 hover:underline"
+                >
+                  {incident.incident_number}
+                </Link>
+              </td>
+              <td className="px-4 py-3">
+                <span
+                  className={cn(
+                    'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border',
+                    getIncidentTypeBadgeClass(incident.incident_type)
+                  )}
+                >
+                  {getIncidentTypeLabel(incident.incident_type)}
+                </span>
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
+                {incident.title}
+              </td>
+              <td className="px-4 py-3">
+                <Badge
+                  className={cn(
+                    getStatusBgColor(incident.status),
+                    getStatusColor(incident.status)
+                  )}
+                >
+                  {getStatusLabel(incident.status)}
+                </Badge>
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-500">
+                {formatDate(incident.reported_at)}
+              </td>
+              <td className="px-4 py-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate(`/incidents/${incident.id}`)}
+                >
+                  View
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* Pagination */}
+      {pagination.totalPages > 1 && (
+        <div className="px-4 py-3 bg-gray-50 border-t flex items-center justify-between">
+          <p className="text-sm text-gray-500">
+            Showing {(pagination.page - 1) * pagination.pageSize + 1} to{' '}
+            {Math.min(pagination.page * pagination.pageSize, pagination.total)} of{' '}
+            {pagination.total} incidents
+          </p>
+          <div className="flex gap-1">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={pagination.page <= 1}
+              onClick={() => onPageChange(pagination.page - 1)}
+            >
+              Previous
+            </Button>
+            {/* Page numbers */}
+            {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+              // Show pages around current page
+              let pageNum: number;
+              if (pagination.totalPages <= 5) {
+                pageNum = i + 1;
+              } else if (pagination.page <= 3) {
+                pageNum = i + 1;
+              } else if (pagination.page >= pagination.totalPages - 2) {
+                pageNum = pagination.totalPages - 4 + i;
+              } else {
+                pageNum = pagination.page - 2 + i;
+              }
+              return (
+                <Button
+                  key={pageNum}
+                  variant={pageNum === pagination.page ? 'primary' : 'secondary'}
+                  size="sm"
+                  onClick={() => onPageChange(pageNum)}
+                  className="min-w-[36px]"
+                >
+                  {pageNum}
+                </Button>
+              );
+            })}
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={pagination.page >= pagination.totalPages}
+              onClick={() => onPageChange(pagination.page + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

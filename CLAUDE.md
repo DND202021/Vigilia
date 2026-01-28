@@ -333,6 +333,50 @@ docker exec -it eriop-backend alembic upgrade head
 - System roles (is_system_role=true) cannot be deleted, only display name/description edited
 - Frontend uses React.lazy() for code-splitting all pages
 
+## Workflow Instructions for Claude Code
+
+When working on sprints or multi-task implementations:
+
+1. **Use sub-agents extensively** - Divide work into sub-tasks that can be completed by specialized sub-agents to manage context window efficiently
+2. **Parallel execution** - Launch multiple independent sub-agents simultaneously when tasks have no dependencies
+3. **Wave-based execution** - Group tasks into waves based on dependencies:
+   - Wave 1: Independent foundational tasks (stores, utilities, independent components)
+   - Wave 2: Components that depend on Wave 1 outputs
+   - Wave 3: Integration tasks (page refactoring, tests)
+4. **Task tracking** - Use TaskCreate/TaskUpdate to track progress and dependencies
+5. **Verify before commit** - Run TypeScript build (`npx tsc --noEmit`) and tests before committing
+6. **Atomic commits** - Commit completed sprints with descriptive messages
+
+### Sub-agent Task Template
+When creating sub-agent tasks, provide:
+- Clear file path(s) to create/modify
+- Existing patterns to follow (reference similar files)
+- Type imports and dependencies
+- Expected exports (named + default)
+- Integration points with other components
+
+---
+
+## Phase 10: Building Information Management (In Progress)
+
+### Sprint 1: Floor Plan Management ✅ (January 2025)
+- FloorPlanViewer, UnifiedFloorPlanViewer, FloorPlanUpload components
+- Backend file upload with validation and thumbnails
+- BuildingDetailPage with floor plan tabs
+- 21 floor plan upload tests, 30 file storage tests
+
+### Sprint 2: Tactical Map Integration ✅ (January 2025)
+- buildingMapStore (Zustand) for map-specific state
+- BuildingLayer with marker clustering (leaflet.markercluster)
+- BuildingPopup, BuildingSearch, NearbyBuildingsPanel components
+- MapPage refactored with building search and incident proximity
+- 24 building API tests (4 new for nearby/search)
+
+### Sprint 3: Real-time Updates (Next)
+- WebSocket integration for building updates
+- Live floor plan annotations
+- Real-time device status on floor plans
+
 ---
 
 *Last Updated: January 2025*

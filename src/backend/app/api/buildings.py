@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db, get_current_active_user
 from app.models.user import User
 from app.models.alert import Alert as AlertModel, AlertStatus as AlertStatusModel
+from app.models.incident import Incident as IncidentModel
 from app.models.building import (
     Building as BuildingModel,
     BuildingType as BuildingTypeModel,
@@ -24,6 +25,12 @@ from app.models.building import (
 )
 from app.services.building_service import BuildingService, BuildingError
 from app.services.file_storage import get_file_storage, FileStorageError
+from app.services.socketio import (
+    emit_building_created,
+    emit_building_updated,
+    emit_floor_plan_uploaded,
+    emit_floor_plan_updated,
+)
 
 router = APIRouter()
 
@@ -642,7 +649,14 @@ async def create_building(
             detail=str(e),
         )
 
-    return building_to_response(building)
+    # Emit WebSocket event for real-time updates
+    building_response = building_to_response(building)
+    try:
+        await emit_building_created(building_response.model_dump())
+    except Exception:
+        pass  # Don't let emit failures break the API
+
+    return building_response
 
 
 @router.patch("/{building_id}", response_model=BuildingResponse)
@@ -698,7 +712,14 @@ async def update_building(
             detail=str(e),
         )
 
-    return building_to_response(building)
+    # Emit WebSocket event for real-time updates
+    building_response = building_to_response(building)
+    try:
+        await emit_building_updated(building_response.model_dump(), str(building.id))
+    except Exception:
+        pass  # Don't let emit failures break the API
+
+    return building_response
 
 
 @router.delete("/{building_id}", status_code=http_status.HTTP_204_NO_CONTENT)
@@ -850,7 +871,14 @@ async def add_floor_plan(
             detail=str(e),
         )
 
-    return floor_plan_to_response(floor_plan)
+    # Emit WebSocket event for real-time updates
+    floor_plan_response = floor_plan_to_response(floor_plan)
+    try:
+        await emit_floor_plan_uploaded(floor_plan_response.model_dump(), str(building_uuid))
+    except Exception:
+        pass  # Don't let emit failures break the API
+
+    return floor_plan_response
 
 
 @router.get("/{building_id}/floors/{floor_number}", response_model=FloorPlanResponse)
@@ -999,6 +1027,13 @@ async def upload_floor_plan(
             else:
                 raise
 
+        # Emit WebSocket event for real-time updates
+        floor_plan_dict = floor_plan_to_response(floor_plan).model_dump()
+        try:
+            await emit_floor_plan_uploaded(floor_plan_dict, str(building_uuid))
+        except Exception:
+            pass  # Don't let emit failures break the API
+
         return FloorPlanUploadResponse(
             id=str(floor_plan.id),
             floor_number=floor_plan.floor_number,
@@ -1109,7 +1144,14 @@ async def update_floor_plan(
             detail=str(e),
         )
 
-    return floor_plan_to_response(floor_plan)
+    # Emit WebSocket event for real-time updates
+    floor_plan_response = floor_plan_to_response(floor_plan)
+    try:
+        await emit_floor_plan_updated(floor_plan_response.model_dump(), str(floor_plan.building_id))
+    except Exception:
+        pass  # Don't let emit failures break the API
+
+    return floor_plan_response
 
 
 @router.patch("/floors/{floor_plan_id}/locations", response_model=FloorPlanResponse)
@@ -1324,6 +1366,107 @@ async def get_floor_plan_alerts(
 
     return PaginatedBuildingAlertResponse(
         items=[_alert_to_building_response(a) for a in alerts],
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
+
+
+# ==================== Building Incident Endpoints ====================
+
+class BuildingIncidentResponse(BaseModel):
+    """Incident response for building context."""
+
+    id: str
+    incident_number: str
+    category: str
+    priority: int
+    status: str
+    title: str
+    description: str | None = None
+    latitude: float
+    longitude: float
+    address: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class PaginatedBuildingIncidentResponse(BaseModel):
+    """Paginated building incident response."""
+
+    items: list[BuildingIncidentResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+def _incident_to_building_response(incident: IncidentModel) -> BuildingIncidentResponse:
+    """Convert incident model to building incident response."""
+    return BuildingIncidentResponse(
+        id=str(incident.id),
+        incident_number=incident.incident_number,
+        category=incident.category.value if hasattr(incident.category, 'value') else incident.category,
+        priority=incident.priority,
+        status=incident.status.value if hasattr(incident.status, 'value') else incident.status,
+        title=incident.title,
+        description=incident.description,
+        latitude=incident.latitude,
+        longitude=incident.longitude,
+        address=incident.address,
+        created_at=incident.created_at.isoformat() if incident.created_at else datetime.utcnow().isoformat(),
+        updated_at=incident.updated_at.isoformat() if incident.updated_at else datetime.utcnow().isoformat(),
+    )
+
+
+@router.get("/{building_id}/incidents", response_model=PaginatedBuildingIncidentResponse)
+async def get_building_incidents(
+    building_id: str,
+    status: str | None = None,
+    category: str | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> PaginatedBuildingIncidentResponse:
+    """Get incidents linked to a building."""
+    try:
+        building_uuid = uuid.UUID(building_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid building_id format",
+        )
+
+    # Verify building exists
+    service = BuildingService(db)
+    building = await service.get_building(building_uuid)
+    if not building:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Building not found",
+        )
+
+    query = select(IncidentModel).where(IncidentModel.building_id == building_uuid)
+
+    if status:
+        query = query.where(IncidentModel.status == status)
+    if category:
+        query = query.where(IncidentModel.category == category)
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    query = query.offset((page - 1) * page_size).limit(page_size).order_by(IncidentModel.created_at.desc())
+    result = await db.execute(query)
+    incidents = result.scalars().all()
+
+    total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+
+    return PaginatedBuildingIncidentResponse(
+        items=[_incident_to_building_response(inc) for inc in incidents],
         total=total,
         page=page,
         page_size=page_size,

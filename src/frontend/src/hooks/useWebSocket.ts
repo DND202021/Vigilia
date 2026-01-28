@@ -16,8 +16,10 @@ import { useAlertStore } from '../stores/alertStore';
 import { useResourceStore } from '../stores/resourceStore';
 import { useDeviceStore } from '../stores/deviceStore';
 import { useAudioStore } from '../stores/audioStore';
+import { useBuildingDetailStore } from '../stores/buildingDetailStore';
+import { useBuildingMapStore } from '../stores/buildingMapStore';
 import { tokenStorage } from '../services/api';
-import type { Incident, Alert, Resource, SoundAlert } from '../types';
+import type { Incident, Alert, Resource, SoundAlert, Building, FloorPlan } from '../types';
 
 // Feature flag to completely disable WebSocket (set via env or here)
 const WEBSOCKET_ENABLED = import.meta.env.VITE_WEBSOCKET_ENABLED !== 'false';
@@ -30,6 +32,8 @@ interface WebSocketHookResult {
   lastEvent: string | null;
   connect: () => void;
   disconnect: () => void;
+  joinBuilding: (buildingId: string) => void;
+  leaveBuilding: (buildingId: string) => void;
 }
 
 export function useWebSocket(): WebSocketHookResult {
@@ -43,6 +47,11 @@ export function useWebSocket(): WebSocketHookResult {
   const handleResourceUpdate = useResourceStore((state) => state.handleResourceUpdate);
   const handleDeviceStatusUpdate = useDeviceStore((state) => state.handleDeviceStatusUpdate);
   const handleNewSoundAlert = useAudioStore((state) => state.handleNewSoundAlert);
+
+  // Building store selectors
+  const currentBuilding = useBuildingDetailStore((state) => state.building);
+  const addFloorPlan = useBuildingDetailStore((state) => state.addFloorPlan);
+  const fetchMapBuildings = useBuildingMapStore((state) => state.fetchMapBuildings);
 
   const connect = useCallback(() => {
     // Skip if disabled or already connected
@@ -158,14 +167,55 @@ export function useWebSocket(): WebSocketHookResult {
       handleNewSoundAlert(data);
     });
 
+    // Building events
+    socket.on('building:created', (building: Building) => {
+      setLastEvent(`building:created:${building.id}`);
+      // Refresh map buildings list to include the new building
+      fetchMapBuildings();
+      console.log('Building created:', building.id);
+    });
+
+    socket.on('building:updated', (building: Building) => {
+      setLastEvent(`building:updated:${building.id}`);
+      // Refresh map buildings list to get updated data
+      fetchMapBuildings();
+      console.log('Building updated:', building.id);
+    });
+
+    socket.on('floor_plan:uploaded', (floorPlan: FloorPlan) => {
+      setLastEvent(`floor_plan:uploaded:${floorPlan.id}`);
+      // If this floor plan belongs to the currently viewed building, add it to the store
+      if (currentBuilding && floorPlan.building_id === currentBuilding.id) {
+        addFloorPlan(floorPlan);
+      }
+      console.log('Floor plan uploaded:', floorPlan.id);
+    });
+
+    socket.on('floor_plan:updated', (floorPlan: FloorPlan) => {
+      setLastEvent(`floor_plan:updated:${floorPlan.id}`);
+      console.log('Floor plan updated:', floorPlan.id);
+    });
+
     socketRef.current = socket;
-  }, [handleIncidentUpdate, handleAlertUpdate, handleResourceUpdate, handleDeviceStatusUpdate, handleNewSoundAlert]);
+  }, [handleIncidentUpdate, handleAlertUpdate, handleResourceUpdate, handleDeviceStatusUpdate, handleNewSoundAlert, fetchMapBuildings, currentBuilding, addFloorPlan]);
 
   const disconnect = useCallback(() => {
     if (socketRef.current) {
       socketRef.current.disconnect();
       socketRef.current = null;
       setIsConnected(false);
+    }
+  }, []);
+
+  const joinBuilding = useCallback((buildingId: string) => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('join_building', { building_id: buildingId });
+    }
+  }, []);
+
+  const leaveBuilding = useCallback((buildingId: string) => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('leave_building', { building_id: buildingId });
     }
   }, []);
 
@@ -180,5 +230,7 @@ export function useWebSocket(): WebSocketHookResult {
     lastEvent,
     connect,
     disconnect,
+    joinBuilding,
+    leaveBuilding,
   };
 }

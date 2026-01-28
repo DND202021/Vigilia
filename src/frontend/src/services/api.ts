@@ -212,7 +212,7 @@ export const incidentsApi = {
   create: async (data: IncidentCreateRequest): Promise<Incident> => {
     // Transform frontend request to backend schema
     // Backend expects 'category' and nested 'location' object
-    const backendData = {
+    const backendData: Record<string, unknown> = {
       category: data.incident_type, // Map incident_type to category
       priority: data.priority,
       title: data.title,
@@ -223,6 +223,10 @@ export const incidentsApi = {
         address: data.address,
       },
     };
+    // Include building_id if provided
+    if (data.building_id) {
+      backendData.building_id = data.building_id;
+    }
     const response = await api.post<ApiIncident>('/incidents', backendData);
     return transformIncident(response.data);
   },
@@ -484,6 +488,14 @@ export const buildingsApi = {
 
   getFloorPlanImageUrl: (buildingId: string, filename: string): string => {
     return `${API_BASE_URL}/buildings/${buildingId}/floor-plans/files/${filename}`;
+  },
+
+  getIncidents: async (buildingId: string, params?: { page?: number; page_size?: number }): Promise<PaginatedResponse<Incident>> => {
+    const response = await api.get<PaginatedResponse<ApiIncident>>(`/buildings/${buildingId}/incidents`, { params });
+    return {
+      ...response.data,
+      items: response.data.items.map(transformIncident),
+    };
   },
 };
 

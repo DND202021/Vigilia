@@ -159,6 +159,7 @@ export interface Incident {
   caller_phone?: string;
   agency_id: string;
   created_by_id?: string;
+  building_id?: string;
   assigned_units: string[];
   timeline_events: TimelineEvent[];
 }
@@ -184,6 +185,7 @@ export interface IncidentCreateRequest {
   longitude?: number;
   caller_name?: string;
   caller_phone?: string;
+  building_id?: string;
 }
 
 export interface IncidentUpdateRequest {

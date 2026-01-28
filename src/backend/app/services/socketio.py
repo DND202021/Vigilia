@@ -158,3 +158,41 @@ async def leave_building(sid: str, building_id: str) -> None:
     if sid in connected_clients:
         connected_clients[sid]["rooms"].discard(room)
     logger.info("Client left building room", sid=sid, building_id=building_id)
+
+
+# Building emit functions for real-time building updates
+async def emit_building_created(building: dict) -> None:
+    """Emit building created event to all authenticated users."""
+    try:
+        await sio.emit("building:created", building, room="authenticated")
+        logger.info("Emitted building:created", building_id=building.get("id"))
+    except Exception as e:
+        logger.error("Failed to emit building:created", building_id=building.get("id"), error=str(e))
+
+
+async def emit_building_updated(building: dict, building_id: str) -> None:
+    """Emit building updated event to authenticated users and building-specific room."""
+    try:
+        await sio.emit("building:updated", building, room="authenticated")
+        await sio.emit("building:updated", building, room=f"building:{building_id}")
+        logger.info("Emitted building:updated", building_id=building_id)
+    except Exception as e:
+        logger.error("Failed to emit building:updated", building_id=building_id, error=str(e))
+
+
+async def emit_floor_plan_uploaded(floor_plan: dict, building_id: str) -> None:
+    """Emit floor plan uploaded event to building-specific room."""
+    try:
+        await sio.emit("floor_plan:uploaded", floor_plan, room=f"building:{building_id}")
+        logger.info("Emitted floor_plan:uploaded", building_id=building_id, floor_plan_id=floor_plan.get("id"))
+    except Exception as e:
+        logger.error("Failed to emit floor_plan:uploaded", building_id=building_id, floor_plan_id=floor_plan.get("id"), error=str(e))
+
+
+async def emit_floor_plan_updated(floor_plan: dict, building_id: str) -> None:
+    """Emit floor plan updated event to building-specific room."""
+    try:
+        await sio.emit("floor_plan:updated", floor_plan, room=f"building:{building_id}")
+        logger.info("Emitted floor_plan:updated", building_id=building_id, floor_plan_id=floor_plan.get("id"))
+    except Exception as e:
+        logger.error("Failed to emit floor_plan:updated", building_id=building_id, floor_plan_id=floor_plan.get("id"), error=str(e))

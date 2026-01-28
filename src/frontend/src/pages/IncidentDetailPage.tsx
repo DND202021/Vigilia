@@ -6,6 +6,9 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useIncidentStore } from '../stores/incidentStore';
 import { useResourceStore } from '../stores/resourceStore';
+import { useWebSocket } from '../hooks/useWebSocket';
+import { buildingsApi } from '../services/api';
+import { BuildingInfoPanel } from '../components/incidents/BuildingInfoPanel';
 import {
   Card,
   CardHeader,
@@ -27,7 +30,7 @@ import {
   getIncidentTypeLabel,
   cn,
 } from '../utils';
-import type { IncidentStatus } from '../types';
+import type { IncidentStatus, Building } from '../types';
 
 const statusOptions = [
   { value: 'new', label: 'New' },
@@ -54,9 +57,12 @@ export function IncidentDetailPage() {
   } = useIncidentStore();
 
   const { availableResources, fetchAvailableResources } = useResourceStore();
+  const { joinBuilding, leaveBuilding } = useWebSocket();
 
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [linkedBuilding, setLinkedBuilding] = useState<Building | null>(null);
+  const [isBuildingLoading, setIsBuildingLoading] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -64,6 +70,32 @@ export function IncidentDetailPage() {
       fetchAvailableResources();
     }
   }, [id]);
+
+  // Fetch building data when incident has building_id
+  useEffect(() => {
+    if (incident?.building_id) {
+      setIsBuildingLoading(true);
+      buildingsApi
+        .get(incident.building_id)
+        .then(setLinkedBuilding)
+        .catch((err) => {
+          console.error('Failed to fetch linked building:', err);
+          setLinkedBuilding(null);
+        })
+        .finally(() => setIsBuildingLoading(false));
+    } else {
+      setLinkedBuilding(null);
+    }
+  }, [incident?.building_id]);
+
+  // Subscribe to building updates via WebSocket
+  useEffect(() => {
+    const buildingId = incident?.building_id;
+    if (buildingId) {
+      joinBuilding(buildingId);
+      return () => leaveBuilding(buildingId);
+    }
+  }, [incident?.building_id, joinBuilding, leaveBuilding]);
 
   if (isLoading && !incident) {
     return (
@@ -247,6 +279,35 @@ export function IncidentDetailPage() {
 
         {/* Right Column - Sidebar */}
         <div className="space-y-6">
+          {/* Linked Building Info */}
+          {isBuildingLoading && (
+            <Card>
+              <CardContent className="py-6">
+                <div className="flex items-center justify-center gap-2">
+                  <Spinner size="sm" />
+                  <span className="text-gray-500">Loading building info...</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {linkedBuilding && !isBuildingLoading && (
+            <div className="space-y-3">
+              <BuildingInfoPanel
+                building={linkedBuilding}
+                onViewFloorPlans={() =>
+                  navigate(`/buildings/${linkedBuilding.id}#floor-plans`)
+                }
+              />
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => navigate(`/buildings/${linkedBuilding.id}`)}
+              >
+                View Full Building Details
+              </Button>
+            </div>
+          )}
+
           {/* Timestamps */}
           <Card>
             <CardHeader>
