@@ -471,6 +471,24 @@ When creating sub-agent tasks, provide:
 - **BuildingDetailPage**: New Analytics tab
 - **Tests**: 30 new tests (12 service + 18 API)
 
+### Sprint 10: Emergency Response Planning ✅ (January 2025)
+- **Backend Models**:
+  - EmergencyProcedure with steps, contacts, equipment JSON fields
+  - EvacuationRoute with waypoints JSON for path drawing
+  - EmergencyCheckpoint for assembly points, command posts, etc.
+- **Migrations**: 009-011 for emergency planning tables
+- **API Endpoints**:
+  - 17 endpoints for procedures, routes, checkpoints CRUD
+  - GET /buildings/{id}/emergency-plan - Full plan overview
+  - GET /buildings/{id}/emergency-plan/export - JSON export with metadata
+- **Frontend Components**:
+  - EmergencyProcedureEditor: Step builder, contact management, equipment list
+  - EvacuationRouteDrawer: SVG-based path drawing with waypoints
+  - CheckpointManager: Drag-and-drop checkpoint placement with type icons
+  - EmergencyPlanViewer: Read-only plan view with print-friendly mode
+- **BuildingDetailPage**: New Emergency tab with view/edit modes
+- **Tests**: 49 new tests (18 model + 31 API)
+
 ---
 
 *Last Updated: January 2025*
