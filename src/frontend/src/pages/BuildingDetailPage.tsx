@@ -6,8 +6,8 @@
  * - Building info panel in sidebar
  * - Device monitoring panel in sidebar
  * - Floor selector strip
- * - Unified floor plan viewer with markers + devices + placement mode
- * - Sub-tabs for Alerts and Floor Plan Upload
+ * - FloorPlanEditor with marker editing capabilities (edit mode, drag-to-move, save)
+ * - Sub-tabs for Alerts, Incidents, and Floor Plan Upload
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -15,7 +15,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useBuildingDetailStore } from '../stores/buildingDetailStore';
 import { FloorSelector } from '../components/buildings/FloorSelector';
 import { BuildingInfoPanel } from '../components/buildings/BuildingInfoPanel';
-import { UnifiedFloorPlanViewer } from '../components/buildings/UnifiedFloorPlanViewer';
+import { FloorPlanEditor } from '../components/buildings/FloorPlanEditor';
 import { FloorPlanUpload } from '../components/buildings';
 import { DeviceMonitoringPanel } from '../components/devices/DeviceMonitoringPanel';
 import { AlertsFloorTable } from '../components/alerts/AlertsFloorTable';
@@ -29,7 +29,7 @@ import {
   getStatusColor,
 } from '../utils';
 import { buildingsApi } from '../services/api';
-import type { HazardLevel, Incident, PaginatedResponse } from '../types';
+import type { FloorKeyLocation, HazardLevel, Incident, PaginatedResponse } from '../types';
 
 const buildingTypeLabels: Record<string, string> = {
   residential_single: 'Residential (Single)',
@@ -81,7 +81,6 @@ export function BuildingDetailPage() {
     setSelectedDevice,
     enterPlacementMode,
     exitPlacementMode,
-    placeDevice,
     addFloorPlan,
     reset,
     clearError,
@@ -142,24 +141,10 @@ export function BuildingDetailPage() {
     };
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Handle placement click on floor plan
-  const handlePlaceDevice = useCallback(
-    (posX: number, posY: number) => {
-      if (!placementDeviceId || !selectedFloor) return;
-      placeDevice(placementDeviceId, posX, posY, selectedFloor.id);
-    },
-    [placementDeviceId, selectedFloor, placeDevice]
-  );
-
   // Get unplaced devices for the current floor's building
   const unplacedDevices = devices.filter(
     (d) => d.position_x == null || d.position_y == null
   );
-
-  // Get alerting device IDs
-  const alertingDeviceIds = devices
-    .filter((d) => d.status === 'alert')
-    .map((d) => d.id);
 
   // Handle floor plan upload complete
   const handleUploadComplete = useCallback(
@@ -168,6 +153,18 @@ export function BuildingDetailPage() {
       setSubTab('alerts');
     },
     [addFloorPlan]
+  );
+
+  // Handle markers saved in FloorPlanEditor
+  const handleMarkersSaved = useCallback(
+    (markers: FloorKeyLocation[]) => {
+      // Refresh building data to get updated markers
+      if (id) {
+        fetchFloorPlans(id);
+      }
+      console.log('Markers saved:', markers.length, 'markers');
+    },
+    [id, fetchFloorPlans]
   );
 
   if (isLoading && !building) {
@@ -327,23 +324,14 @@ export function BuildingDetailPage() {
             onSelectFloor={selectFloor}
           />
 
-          {/* Floor Plan Viewer */}
+          {/* Floor Plan Editor */}
           {selectedFloor ? (
             <div className="border rounded-lg overflow-hidden" style={{ height: '500px' }}>
-              <UnifiedFloorPlanViewer
+              <FloorPlanEditor
                 floorPlan={selectedFloor}
-                keyLocations={selectedFloor.key_locations || []}
-                emergencyExits={selectedFloor.emergency_exits || []}
-                fireEquipment={selectedFloor.fire_equipment || []}
-                hazards={selectedFloor.hazards || []}
-                devices={devices}
-                selectedDeviceId={selectedDevice?.id}
-                alertingDeviceIds={alertingDeviceIds}
-                onDeviceClick={setSelectedDevice}
-                isPlacementMode={isPlacementMode}
-                onPlaceDevice={handlePlaceDevice}
-                showControls
-                showLegend
+                building={building}
+                initialMarkers={selectedFloor.key_locations || []}
+                onSave={handleMarkersSaved}
               />
             </div>
           ) : (

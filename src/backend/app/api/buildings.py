@@ -30,6 +30,7 @@ from app.services.socketio import (
     emit_building_updated,
     emit_floor_plan_uploaded,
     emit_floor_plan_updated,
+    emit_markers_updated,
 )
 
 router = APIRouter()
@@ -1195,6 +1196,12 @@ async def update_floor_plan_locations(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
+
+    # Emit WebSocket event for real-time marker updates
+    try:
+        await emit_markers_updated(str(floor_plan.id), str(floor_plan.building_id))
+    except Exception:
+        pass  # Don't let emit failures break the API
 
     return floor_plan_to_response(floor_plan)
 

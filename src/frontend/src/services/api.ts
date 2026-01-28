@@ -469,6 +469,28 @@ export const buildingsApi = {
     return response.data;
   },
 
+  getFloorPlan: async (floorPlanId: string): Promise<FloorPlan> => {
+    const response = await api.get<FloorPlan>(`/buildings/floors/${floorPlanId}`);
+    return response.data;
+  },
+
+  updateFloorPlan: async (
+    floorPlanId: string,
+    data: {
+      floor_name?: string;
+      floor_area_sqm?: number;
+      ceiling_height_m?: number;
+      key_locations?: Array<{ type: string; name: string; x: number; y: number; description?: string }>;
+      emergency_exits?: Array<{ name: string; x: number; y: number; description?: string }>;
+      fire_equipment?: Array<{ type: string; name: string; x: number; y: number }>;
+      hazards?: Array<{ type: string; name: string; x: number; y: number; description?: string }>;
+      notes?: string;
+    },
+  ): Promise<FloorPlan> => {
+    const response = await api.patch<FloorPlan>(`/buildings/floors/${floorPlanId}`, data);
+    return response.data;
+  },
+
   updateFloorPlanLocations: async (
     floorPlanId: string,
     data: {

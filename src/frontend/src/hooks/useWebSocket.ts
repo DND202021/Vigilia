@@ -18,6 +18,7 @@ import { useDeviceStore } from '../stores/deviceStore';
 import { useAudioStore } from '../stores/audioStore';
 import { useBuildingDetailStore } from '../stores/buildingDetailStore';
 import { useBuildingMapStore } from '../stores/buildingMapStore';
+import { useMarkerStore, initializeMarkersFromFloorPlan } from '../stores/markerStore';
 import { tokenStorage } from '../services/api';
 import type { Incident, Alert, Resource, SoundAlert, Building, FloorPlan } from '../types';
 
@@ -51,7 +52,12 @@ export function useWebSocket(): WebSocketHookResult {
   // Building store selectors
   const currentBuilding = useBuildingDetailStore((state) => state.building);
   const addFloorPlan = useBuildingDetailStore((state) => state.addFloorPlan);
+  const fetchFloorPlans = useBuildingDetailStore((state) => state.fetchFloorPlans);
   const fetchMapBuildings = useBuildingMapStore((state) => state.fetchMapBuildings);
+
+  // Marker store selectors
+  const currentFloorPlanId = useMarkerStore((state) => state.currentFloorPlanId);
+  const isEditing = useMarkerStore((state) => state.isEditing);
 
   const connect = useCallback(() => {
     // Skip if disabled or already connected
@@ -196,8 +202,31 @@ export function useWebSocket(): WebSocketHookResult {
       console.log('Floor plan updated:', floorPlan.id);
     });
 
+    // Markers updated event - refresh markers if user is viewing the affected floor plan
+    socket.on('markers:updated', async (data: { floor_plan_id: string; building_id: string }) => {
+      setLastEvent(`markers:updated:${data.floor_plan_id}`);
+      console.log('Markers updated:', data.floor_plan_id);
+
+      // Only refresh if we're viewing this floor plan and not currently editing
+      // (to avoid overwriting the user's unsaved changes)
+      if (currentFloorPlanId === data.floor_plan_id && !isEditing) {
+        // Refresh floor plans to get the updated key_locations data
+        // The buildingDetailStore will update its state, and we'll reinitialize markers
+        // from the freshly fetched data
+        if (currentBuilding && currentBuilding.id === data.building_id) {
+          await fetchFloorPlans(data.building_id);
+          // After fetching, get the updated floor plan from the store and reinitialize markers
+          const updatedFloorPlans = useBuildingDetailStore.getState().floorPlans;
+          const updatedFloorPlan = updatedFloorPlans.find((fp) => fp.id === data.floor_plan_id);
+          if (updatedFloorPlan) {
+            initializeMarkersFromFloorPlan(data.floor_plan_id, updatedFloorPlan.key_locations);
+          }
+        }
+      }
+    });
+
     socketRef.current = socket;
-  }, [handleIncidentUpdate, handleAlertUpdate, handleResourceUpdate, handleDeviceStatusUpdate, handleNewSoundAlert, fetchMapBuildings, currentBuilding, addFloorPlan]);
+  }, [handleIncidentUpdate, handleAlertUpdate, handleResourceUpdate, handleDeviceStatusUpdate, handleNewSoundAlert, fetchMapBuildings, currentBuilding, addFloorPlan, fetchFloorPlans, currentFloorPlanId, isEditing]);
 
   const disconnect = useCallback(() => {
     if (socketRef.current) {

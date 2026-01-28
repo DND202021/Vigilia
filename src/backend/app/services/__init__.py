@@ -16,6 +16,7 @@ from app.services.socketio import (
     emit_building_updated,
     emit_floor_plan_uploaded,
     emit_floor_plan_updated,
+    emit_markers_updated,
 )
 from app.services.role_service import RoleService, RoleError, AVAILABLE_PERMISSIONS
 from app.services.user_service import UserService, UserError
@@ -44,6 +45,7 @@ __all__ = [
     "emit_building_updated",
     "emit_floor_plan_uploaded",
     "emit_floor_plan_updated",
+    "emit_markers_updated",
     "RoleService",
     "RoleError",
     "AVAILABLE_PERMISSIONS",

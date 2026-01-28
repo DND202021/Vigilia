@@ -1096,3 +1096,222 @@ class TestBuildingsAPI:
         data = response.json()
         assert data["page"] == 1
         assert data["page_size"] == 10
+
+    # ==================== Floor Plan Location Markers (Sprint 4) ====================
+
+    @pytest.mark.asyncio
+    async def test_update_floor_plan_locations(
+        self, client: AsyncClient, admin_user: User, test_agency: Agency
+    ):
+        """Test updating floor plan key_locations."""
+        token = await self.get_admin_token(client)
+
+        # Create a building
+        building_response = await client.post(
+            "/api/v1/buildings",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "name": "Marker Test Building",
+                "street_name": "Marker Avenue",
+                "city": "Montreal",
+                "province_state": "Quebec",
+                "latitude": 45.5080,
+                "longitude": -73.5680,
+            },
+        )
+        assert building_response.status_code == 201
+        building_id = building_response.json()["id"]
+
+        # Add a floor plan
+        floor_response = await client.post(
+            f"/api/v1/buildings/{building_id}/floors",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "floor_number": 1,
+                "floor_name": "Ground Floor",
+            },
+        )
+        assert floor_response.status_code == 201
+        floor_plan_id = floor_response.json()["id"]
+
+        # Update locations
+        locations = [
+            {"type": "fire_extinguisher", "name": "FE-101", "x": 25.5, "y": 30.0},
+            {"type": "stairwell", "name": "Stairwell A", "x": 10.0, "y": 50.0},
+        ]
+
+        response = await client.patch(
+            f"/api/v1/buildings/floors/{floor_plan_id}/locations",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"key_locations": locations},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "key_locations" in data
+        assert len(data["key_locations"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_update_floor_plan_locations_structure(
+        self, client: AsyncClient, admin_user: User, test_agency: Agency
+    ):
+        """Test that location data is properly structured with all fields."""
+        token = await self.get_admin_token(client)
+
+        # Create building and floor plan
+        building_response = await client.post(
+            "/api/v1/buildings",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "name": "Structure Test Building",
+                "street_name": "Structure Street",
+                "city": "Montreal",
+                "province_state": "Quebec",
+                "latitude": 45.5090,
+                "longitude": -73.5690,
+            },
+        )
+        building_id = building_response.json()["id"]
+
+        floor_response = await client.post(
+            f"/api/v1/buildings/{building_id}/floors",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"floor_number": 1, "floor_name": "Main Floor"},
+        )
+        floor_plan_id = floor_response.json()["id"]
+
+        # Update with full location structure
+        locations = [
+            {
+                "type": "aed",
+                "name": "AED Station 1",
+                "x": 45.5,
+                "y": 32.8,
+                "description": "Near main entrance",
+            }
+        ]
+
+        response = await client.patch(
+            f"/api/v1/buildings/floors/{floor_plan_id}/locations",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"key_locations": locations},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        saved_location = data["key_locations"][0]
+        assert saved_location["type"] == "aed"
+        assert saved_location["name"] == "AED Station 1"
+        assert saved_location["x"] == 45.5
+        assert saved_location["y"] == 32.8
+
+    @pytest.mark.asyncio
+    async def test_floor_plan_multiple_marker_types(
+        self, client: AsyncClient, admin_user: User, test_agency: Agency
+    ):
+        """Test floor plan with various marker types."""
+        token = await self.get_admin_token(client)
+
+        # Create building and floor plan
+        building_response = await client.post(
+            "/api/v1/buildings",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "name": "Multi Marker Building",
+                "street_name": "Multi Street",
+                "city": "Montreal",
+                "province_state": "Quebec",
+                "latitude": 45.5100,
+                "longitude": -73.5700,
+            },
+        )
+        building_id = building_response.json()["id"]
+
+        floor_response = await client.post(
+            f"/api/v1/buildings/{building_id}/floors",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"floor_number": 1},
+        )
+        floor_plan_id = floor_response.json()["id"]
+
+        # Add various marker types
+        locations = [
+            {"type": "fire_extinguisher", "name": "FE-1", "x": 10.0, "y": 10.0},
+            {"type": "stairwell", "name": "Stairs A", "x": 20.0, "y": 20.0},
+            {"type": "elevator", "name": "Elevator 1", "x": 30.0, "y": 30.0},
+            {"type": "aed", "name": "AED", "x": 40.0, "y": 40.0},
+            {"type": "electrical_panel", "name": "Panel A", "x": 50.0, "y": 50.0},
+            {"type": "emergency_exit", "name": "Exit 1", "x": 60.0, "y": 60.0},
+        ]
+
+        response = await client.patch(
+            f"/api/v1/buildings/floors/{floor_plan_id}/locations",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"key_locations": locations},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["key_locations"]) == 6
+
+        # Verify different types are preserved
+        types = [loc["type"] for loc in data["key_locations"]]
+        assert "fire_extinguisher" in types
+        assert "stairwell" in types
+        assert "aed" in types
+
+    @pytest.mark.asyncio
+    async def test_update_locations_preserves_other_fields(
+        self, client: AsyncClient, admin_user: User, test_agency: Agency
+    ):
+        """Test that updating locations doesn't affect other floor plan fields."""
+        token = await self.get_admin_token(client)
+
+        # Create building
+        building_response = await client.post(
+            "/api/v1/buildings",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "name": "Preserve Fields Building",
+                "street_name": "Preserve Street",
+                "city": "Montreal",
+                "province_state": "Quebec",
+                "latitude": 45.5110,
+                "longitude": -73.5710,
+            },
+        )
+        building_id = building_response.json()["id"]
+
+        # Create floor plan with notes
+        floor_response = await client.post(
+            f"/api/v1/buildings/{building_id}/floors",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "floor_number": 2,
+                "floor_name": "Second Floor",
+                "notes": "Important floor notes",
+            },
+        )
+        floor_plan_id = floor_response.json()["id"]
+        original_notes = floor_response.json().get("notes")
+
+        # Update only locations
+        response = await client.patch(
+            f"/api/v1/buildings/floors/{floor_plan_id}/locations",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "key_locations": [
+                    {"type": "stairwell", "name": "Stairs B", "x": 15.0, "y": 25.0}
+                ]
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify locations were updated
+        assert len(data["key_locations"]) == 1
+
+        # Verify other fields preserved
+        assert data["floor_name"] == "Second Floor"
+        assert data["floor_number"] == 2

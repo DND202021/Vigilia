@@ -196,3 +196,20 @@ async def emit_floor_plan_updated(floor_plan: dict, building_id: str) -> None:
         logger.info("Emitted floor_plan:updated", building_id=building_id, floor_plan_id=floor_plan.get("id"))
     except Exception as e:
         logger.error("Failed to emit floor_plan:updated", building_id=building_id, floor_plan_id=floor_plan.get("id"), error=str(e))
+
+
+async def emit_markers_updated(floor_plan_id: str, building_id: str) -> None:
+    """Emit markers updated event to building-specific room.
+
+    This event notifies clients that markers on a floor plan have been updated,
+    allowing other users viewing the same floor plan to refresh their markers.
+    """
+    try:
+        data = {
+            "floor_plan_id": floor_plan_id,
+            "building_id": building_id,
+        }
+        await sio.emit("markers:updated", data, room=f"building:{building_id}")
+        logger.info("Emitted markers:updated", building_id=building_id, floor_plan_id=floor_plan_id)
+    except Exception as e:
+        logger.error("Failed to emit markers:updated", building_id=building_id, floor_plan_id=floor_plan_id, error=str(e))

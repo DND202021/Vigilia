@@ -442,12 +442,172 @@ export interface FloorPlan {
   updated_at: string;
 }
 
+// ============================================================================
+// Location Marker Types
+// ============================================================================
+
+/**
+ * Location marker type categories for floor plan annotations.
+ * These represent various safety, access, utility, and hazard markers
+ * that can be placed on floor plans for emergency response.
+ */
+export type LocationMarkerType =
+  // Fire Equipment
+  | 'fire_extinguisher'
+  | 'fire_hose'
+  | 'alarm_pull'
+  | 'fire_alarm'        // Legacy alias for alarm_pull
+  | 'sprinkler_control'
+  // Access
+  | 'stairwell'
+  | 'elevator'
+  | 'emergency_exit'
+  | 'roof_access'
+  // Utilities
+  | 'electrical_panel'
+  | 'gas_shutoff'
+  | 'water_shutoff'
+  // Hazards
+  | 'hazmat'
+  | 'hazard'            // Legacy generic hazard type
+  | 'confined_space'
+  | 'high_voltage'
+  // Medical
+  | 'aed'
+  | 'first_aid'
+  | 'eyewash'
+  // Generic
+  | 'custom';
+
+/**
+ * Category groupings for UI organization and filtering.
+ * Each LocationMarkerType belongs to one of these categories.
+ */
+export type LocationMarkerCategory =
+  | 'fire_equipment'
+  | 'access'
+  | 'utilities'
+  | 'hazards'
+  | 'medical';
+
+/**
+ * Individual marker on a floor plan.
+ * Coordinates are optional for markers that haven't been placed yet.
+ */
 export interface FloorKeyLocation {
-  type: string;
+  id?: string;
+  type: LocationMarkerType | string; // Allow string for backwards compatibility
   name: string;
-  x?: number;
-  y?: number;
+  x?: number;  // percentage 0-100
+  y?: number;  // percentage 0-100
   description?: string;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Floor key location with required coordinates.
+ * Use this type for markers that have been placed on the floor plan.
+ * This is the format expected by the API when saving markers.
+ */
+export interface FloorKeyLocationWithCoords extends Omit<FloorKeyLocation, 'x' | 'y'> {
+  x: number;  // percentage 0-100 (required)
+  y: number;  // percentage 0-100 (required)
+}
+
+/**
+ * Marker type configuration for rendering.
+ * Defines how each marker type should be displayed on floor plans.
+ */
+export interface MarkerTypeConfig {
+  type: LocationMarkerType;
+  category: LocationMarkerCategory;
+  label: string;
+  icon: string;   // emoji or icon name
+  color: string;  // Tailwind color class or hex
+}
+
+/**
+ * Mapping of marker types to their categories.
+ * Used for filtering and grouping markers in the UI.
+ */
+export const MARKER_TYPE_CATEGORIES: Record<LocationMarkerType, LocationMarkerCategory> = {
+  // Fire Equipment
+  fire_extinguisher: 'fire_equipment',
+  fire_hose: 'fire_equipment',
+  alarm_pull: 'fire_equipment',
+  fire_alarm: 'fire_equipment',
+  sprinkler_control: 'fire_equipment',
+  // Access
+  stairwell: 'access',
+  elevator: 'access',
+  emergency_exit: 'access',
+  roof_access: 'access',
+  // Utilities
+  electrical_panel: 'utilities',
+  gas_shutoff: 'utilities',
+  water_shutoff: 'utilities',
+  // Hazards
+  hazmat: 'hazards',
+  hazard: 'hazards',
+  confined_space: 'hazards',
+  high_voltage: 'hazards',
+  // Medical
+  aed: 'medical',
+  first_aid: 'medical',
+  eyewash: 'medical',
+  // Generic
+  custom: 'access', // Default category for custom markers
+};
+
+/**
+ * Default marker type configurations for rendering.
+ * Provides icon, color, and label for each marker type.
+ */
+export const DEFAULT_MARKER_CONFIGS: MarkerTypeConfig[] = [
+  // Fire Equipment
+  { type: 'fire_extinguisher', category: 'fire_equipment', label: 'Fire Extinguisher', icon: '\u{1F9EF}', color: 'bg-red-500' },
+  { type: 'fire_hose', category: 'fire_equipment', label: 'Fire Hose', icon: '\u{1F6BF}', color: 'bg-red-600' },
+  { type: 'alarm_pull', category: 'fire_equipment', label: 'Alarm Pull Station', icon: '\u{1F514}', color: 'bg-red-400' },
+  { type: 'fire_alarm', category: 'fire_equipment', label: 'Fire Alarm Pull', icon: '\u{1F514}', color: 'bg-red-400' },
+  { type: 'sprinkler_control', category: 'fire_equipment', label: 'Sprinkler Control', icon: '\u{1F4A6}', color: 'bg-red-300' },
+  // Access
+  { type: 'stairwell', category: 'access', label: 'Stairwell', icon: '\u{1F6B6}', color: 'bg-blue-500' },
+  { type: 'elevator', category: 'access', label: 'Elevator', icon: '\u{1F6D7}', color: 'bg-blue-400' },
+  { type: 'emergency_exit', category: 'access', label: 'Emergency Exit', icon: '\u{1F6AA}', color: 'bg-green-500' },
+  { type: 'roof_access', category: 'access', label: 'Roof Access', icon: '\u{1F3E0}', color: 'bg-blue-600' },
+  // Utilities
+  { type: 'electrical_panel', category: 'utilities', label: 'Electrical Panel', icon: '\u26A1', color: 'bg-yellow-500' },
+  { type: 'gas_shutoff', category: 'utilities', label: 'Gas Shutoff', icon: '\u{1F525}', color: 'bg-orange-500' },
+  { type: 'water_shutoff', category: 'utilities', label: 'Water Shutoff', icon: '\u{1F4A7}', color: 'bg-cyan-500' },
+  // Hazards
+  { type: 'hazmat', category: 'hazards', label: 'Hazmat', icon: '\u2622\uFE0F', color: 'bg-purple-500' },
+  { type: 'hazard', category: 'hazards', label: 'Hazard', icon: '\u26A0\uFE0F', color: 'bg-amber-500' },
+  { type: 'confined_space', category: 'hazards', label: 'Confined Space', icon: '\u{1F6AB}', color: 'bg-amber-600' },
+  { type: 'high_voltage', category: 'hazards', label: 'High Voltage', icon: '\u26A1', color: 'bg-amber-400' },
+  // Medical
+  { type: 'aed', category: 'medical', label: 'AED', icon: '\u{1F493}', color: 'bg-pink-500' },
+  { type: 'first_aid', category: 'medical', label: 'First Aid Kit', icon: '\u2695\uFE0F', color: 'bg-pink-400' },
+  { type: 'eyewash', category: 'medical', label: 'Eyewash Station', icon: '\u{1F441}\uFE0F', color: 'bg-pink-300' },
+  // Generic
+  { type: 'custom', category: 'access', label: 'Location', icon: '\u{1F4CD}', color: 'bg-gray-500' },
+];
+
+/**
+ * Helper to get marker config by type.
+ */
+export function getMarkerConfig(type: LocationMarkerType | string): MarkerTypeConfig | undefined {
+  return DEFAULT_MARKER_CONFIGS.find(c => c.type === type);
+}
+
+/**
+ * Helper to get all marker types for a category.
+ */
+export function getMarkerTypesByCategory(category: LocationMarkerCategory): LocationMarkerType[] {
+  return (Object.entries(MARKER_TYPE_CATEGORIES) as [LocationMarkerType, LocationMarkerCategory][])
+    .filter(([, cat]) => cat === category)
+    .map(([type]) => type);
 }
 
 export interface BuildingCreateRequest {
