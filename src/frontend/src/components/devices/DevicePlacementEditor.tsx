@@ -9,9 +9,10 @@ import type { IoTDevice, DeviceType } from '../../types';
 
 interface DevicePlacementEditorProps {
   floorPlanUrl: string;
+  floorPlanId?: string;
   devices: IoTDevice[];
   unplacedDevices: IoTDevice[];
-  onSavePosition: (deviceId: string, positionX: number, positionY: number) => Promise<void>;
+  onSavePosition: (deviceId: string, positionX: number, positionY: number, floorPlanId: string) => Promise<void>;
   onCancel: () => void;
   className?: string;
 }
@@ -37,6 +38,7 @@ function getDeviceEmoji(type: DeviceType): string {
 
 export function DevicePlacementEditor({
   floorPlanUrl,
+  floorPlanId,
   devices,
   unplacedDevices,
   onSavePosition,
@@ -89,10 +91,11 @@ export function DevicePlacementEditor({
   }, []);
 
   const handleSave = async () => {
+    if (!floorPlanId) return;
     setSaving(true);
     try {
       for (const [deviceId, pos] of Object.entries(pendingPositions)) {
-        await onSavePosition(deviceId, pos.x, pos.y);
+        await onSavePosition(deviceId, pos.x, pos.y, floorPlanId);
       }
       setPendingPositions({});
     } finally {

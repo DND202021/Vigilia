@@ -147,15 +147,25 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
   clearError: () => set({ error: null }),
 
   handleDeviceStatusUpdate: (data) => {
+    const now = new Date().toISOString();
     set((state) => ({
       devices: state.devices.map((d) =>
         d.id === data.device_id
-          ? { ...d, status: data.status as IoTDevice['status'] }
+          ? {
+              ...d,
+              status: data.status as IoTDevice['status'],
+              // Update last_seen when device comes online or has activity
+              last_seen: data.status === 'online' || data.status === 'alert' ? now : d.last_seen,
+            }
           : d
       ),
       selectedDevice:
         state.selectedDevice?.id === data.device_id
-          ? { ...state.selectedDevice, status: data.status as IoTDevice['status'] }
+          ? {
+              ...state.selectedDevice,
+              status: data.status as IoTDevice['status'],
+              last_seen: data.status === 'online' || data.status === 'alert' ? now : state.selectedDevice.last_seen,
+            }
           : state.selectedDevice,
     }));
   },

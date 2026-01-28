@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.device import IoTDevice, DeviceType, DeviceStatus
+from app.models.device_status_history import DeviceStatusHistory
 from app.models.alert import Alert, AlertStatus
 
 
@@ -148,18 +149,53 @@ class DeviceService:
         await self.db.refresh(device)
         return device
 
+    async def _record_status_change(
+        self,
+        device_id: uuid.UUID,
+        old_status: str | None,
+        new_status: str,
+        connection_quality: int | None = None,
+        reason: str | None = None,
+    ) -> DeviceStatusHistory:
+        """Record a status change in the history table."""
+        history = DeviceStatusHistory(
+            id=uuid.uuid4(),
+            device_id=device_id,
+            old_status=old_status,
+            new_status=new_status,
+            changed_at=datetime.now(timezone.utc),
+            connection_quality=connection_quality,
+            reason=reason,
+        )
+        self.db.add(history)
+        return history
+
     async def update_status(
         self,
         device_id: uuid.UUID,
         status: DeviceStatus,
         connection_quality: int | None = None,
+        reason: str | None = None,
     ) -> IoTDevice:
         """Update device operational status."""
         device = await self.get_device(device_id)
         if not device:
             raise DeviceError(f"Device {device_id} not found")
 
-        device.status = status.value if hasattr(status, 'value') else status
+        old_status = device.status
+        new_status = status.value if hasattr(status, 'value') else status
+
+        # Only record history if status actually changed
+        if old_status != new_status:
+            await self._record_status_change(
+                device_id=device_id,
+                old_status=old_status,
+                new_status=new_status,
+                connection_quality=connection_quality,
+                reason=reason,
+            )
+
+        device.status = new_status
         device.last_seen = datetime.now(timezone.utc)
         if connection_quality is not None:
             device.connection_quality = connection_quality
@@ -258,3 +294,31 @@ class DeviceService:
             )
         )
         return result.scalar_one_or_none()
+
+    async def get_status_history(
+        self,
+        device_id: uuid.UUID,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[DeviceStatusHistory], int]:
+        """Get status history for a device with pagination."""
+        # Verify device exists
+        device = await self.get_device(device_id)
+        if not device:
+            raise DeviceError(f"Device {device_id} not found")
+
+        # Base query
+        query = select(DeviceStatusHistory).where(
+            DeviceStatusHistory.device_id == device_id
+        )
+
+        # Count total
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
+
+        # Apply pagination and order by most recent first
+        query = query.order_by(DeviceStatusHistory.changed_at.desc()).limit(limit).offset(offset)
+        result = await self.db.execute(query)
+
+        return list(result.scalars().all()), total

@@ -37,6 +37,7 @@ import type {
   IoTDeviceCreateRequest,
   IoTDeviceUpdateRequest,
   DevicePositionUpdate,
+  DeviceStatusHistory,
   AudioClip,
   SoundAlert,
   NotificationPreference,
@@ -684,6 +685,11 @@ export const iotDevicesApi = {
 
   getStatus: async (id: string): Promise<IoTDevice> => {
     const response = await api.get<IoTDevice>(`/iot-devices/${id}/status`);
+    return response.data;
+  },
+
+  getHistory: async (deviceId: string, params?: { page?: number; page_size?: number }): Promise<PaginatedResponse<DeviceStatusHistory>> => {
+    const response = await api.get<PaginatedResponse<DeviceStatusHistory>>(`/iot-devices/${deviceId}/history`, { params });
     return response.data;
   },
 };

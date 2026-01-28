@@ -175,11 +175,28 @@ export function useWebSocket(): WebSocketHookResult {
     socket.on('device:status', (data: { device_id: string; status: string; name?: string }) => {
       setLastEvent(`device:status:${data.device_id}`);
       handleDeviceStatusUpdate(data);
+      // Also update device position store for floor plan overlays
+      const timestamp = new Date().toISOString();
+      useDevicePositionStore.getState().handleRemoteStatusChange(
+        data.device_id,
+        data.status as any,
+        timestamp
+      );
     });
 
     socket.on('device:alert', (data: SoundAlert) => {
       setLastEvent(`device:alert:${data.device_id}`);
       handleNewSoundAlert(data);
+      // Update device status to 'alert' in both stores
+      if (data.device_id) {
+        const alertStatus = { device_id: data.device_id, status: 'alert' };
+        handleDeviceStatusUpdate(alertStatus);
+        useDevicePositionStore.getState().handleRemoteStatusChange(
+          data.device_id,
+          'alert',
+          new Date().toISOString()
+        );
+      }
     });
 
     // Building events

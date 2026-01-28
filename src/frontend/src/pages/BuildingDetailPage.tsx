@@ -22,7 +22,13 @@ import { BuildingInfoPanel } from '../components/buildings/BuildingInfoPanel';
 import { FloorPlanEditor } from '../components/buildings/FloorPlanEditor';
 import { FloorPlanUpload, BIMImport, BIMDataViewer } from '../components/buildings';
 import { DeviceMonitoringPanel } from '../components/devices/DeviceMonitoringPanel';
+import { DeviceDetailPanel } from '../components/devices/DeviceDetailPanel';
+import { DeviceConfigEditor } from '../components/devices/DeviceConfigEditor';
+import { DevicePlacementEditor } from '../components/devices/DevicePlacementEditor';
 import { AlertsFloorTable } from '../components/alerts/AlertsFloorTable';
+import { useDeviceStore } from '../stores/deviceStore';
+import { iotDevicesApi } from '../services/api';
+import type { IoTDevice } from '../types';
 import { Badge, Button, Spinner } from '../components/ui';
 import {
   cn,
@@ -33,7 +39,7 @@ import {
   getStatusColor,
 } from '../utils';
 import { buildingsApi } from '../services/api';
-import type { FloorKeyLocation, HazardLevel, Incident, PaginatedResponse, BIMImportResult } from '../types';
+import type { FloorKeyLocation, FloorPlan, HazardLevel, Incident, PaginatedResponse, BIMImportResult } from '../types';
 
 // Lazy load Sprint 6 components for code splitting
 const DocumentManager = React.lazy(() => import('../components/buildings/DocumentManager'));
@@ -65,7 +71,7 @@ const hazardLevelConfig: Record<HazardLevel, { color: string; bgColor: string }>
   extreme: { color: 'text-red-700', bgColor: 'bg-red-100' },
 };
 
-type SubTab = 'alerts' | 'incidents' | 'upload' | 'bim' | 'documents' | 'photos' | 'inspections';
+type SubTab = 'alerts' | 'incidents' | 'upload' | 'bim' | 'documents' | 'photos' | 'inspections' | 'devices';
 
 /**
  * ConnectionStatusIndicator
@@ -170,6 +176,21 @@ export function BuildingDetailPage() {
   // PhotoCapture modal state
   const [showPhotoCapture, setShowPhotoCapture] = useState(false);
 
+  // Device management state
+  const [selectedDeviceForPanel, setSelectedDeviceForPanel] = useState<IoTDevice | null>(null);
+  const [showDeviceConfig, setShowDeviceConfig] = useState(false);
+  const [showPlacementEditor, setShowPlacementEditor] = useState(false);
+
+  // Device store for the Devices tab
+  const {
+    devices: buildingDevices,
+    totalDevices: totalBuildingDevices,
+    isLoading: isLoadingDevices,
+    fetchDevices: fetchBuildingDevices,
+    deleteDevice,
+    updatePosition,
+  } = useDeviceStore();
+
   // Remote update notification state
   const [remoteNotification, setRemoteNotification] = useState<string | null>(null);
 
@@ -230,6 +251,7 @@ export function BuildingDetailPage() {
     fetchBuildingAlerts(id);
     fetchIncidents(1, 10);
     fetchBuildingInspections(id);
+    fetchBuildingDevices({ building_id: id });
 
     return () => {
       reset();
@@ -320,11 +342,21 @@ export function BuildingDetailPage() {
         setRemoteNotification('Inspections were updated');
         break;
 
+      case 'device:created':
+      case 'device:updated':
+      case 'device:deleted':
+        // Refresh devices list if on devices tab
+        if (subTab === 'devices') {
+          fetchBuildingDevices({ building_id: id });
+        }
+        setRemoteNotification('Devices were updated');
+        break;
+
       default:
         // Ignore other events
         break;
     }
-  }, [lastEvent, id, fetchBuilding, fetchFloorPlans, fetchDocuments, fetchPhotos, fetchBuildingInspections, subTab]);
+  }, [lastEvent, id, fetchBuilding, fetchFloorPlans, fetchDocuments, fetchPhotos, fetchBuildingInspections, fetchBuildingDevices, subTab]);
 
   // Compute upcoming and overdue inspection counts
   const upcomingInspectionCount = inspections.filter((i) => {
@@ -692,6 +724,22 @@ export function BuildingDetailPage() {
                 </span>
               )}
             </button>
+            <button
+              onClick={() => setSubTab('devices')}
+              className={cn(
+                'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                subTab === 'devices'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              )}
+            >
+              Devices
+              {totalBuildingDevices > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700">
+                  {totalBuildingDevices}
+                </span>
+              )}
+            </button>
           </div>
 
           {/* Sub-tab content */}
@@ -769,6 +817,37 @@ export function BuildingDetailPage() {
               <InspectionTracker buildingId={building.id} />
             </Suspense>
           )}
+
+          {subTab === 'devices' && (
+            <DevicesTabContent
+              devices={buildingDevices}
+              totalDevices={totalBuildingDevices}
+              isLoading={isLoadingDevices}
+              selectedDevice={selectedDeviceForPanel}
+              onSelectDevice={setSelectedDeviceForPanel}
+              onEditDevice={() => {
+                // Edit handled by DeviceDetailPanel's onEdit
+              }}
+              onConfigureDevice={() => setShowDeviceConfig(true)}
+              onDeleteDevice={async (deviceId: string) => {
+                if (window.confirm('Are you sure you want to delete this device?')) {
+                  await deleteDevice(deviceId);
+                  setSelectedDeviceForPanel(null);
+                }
+              }}
+              onCloseDetailPanel={() => setSelectedDeviceForPanel(null)}
+              showPlacementEditor={showPlacementEditor}
+              onTogglePlacementEditor={() => setShowPlacementEditor(!showPlacementEditor)}
+              selectedFloor={selectedFloor}
+              onSavePosition={async (deviceId: string, x: number, y: number, floorPlanId: string) => {
+                await updatePosition(deviceId, {
+                  floor_plan_id: floorPlanId,
+                  position_x: x,
+                  position_y: y,
+                });
+              }}
+            />
+          )}
         </div>
       </div>
 
@@ -787,6 +866,26 @@ export function BuildingDetailPage() {
                 }}
               />
             </Suspense>
+          </div>
+        </div>
+      )}
+
+      {/* DeviceConfigEditor Modal */}
+      {showDeviceConfig && selectedDeviceForPanel && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="max-w-xl w-full max-h-[90vh] overflow-y-auto">
+            <DeviceConfigEditor
+              device={selectedDeviceForPanel}
+              onSave={async (config) => {
+                await iotDevicesApi.updateConfig(selectedDeviceForPanel.id, config);
+                // Refresh device list
+                if (id) {
+                  fetchBuildingDevices({ building_id: id });
+                }
+                setShowDeviceConfig(false);
+              }}
+              onCancel={() => setShowDeviceConfig(false)}
+            />
           </div>
         </div>
       )}
@@ -1007,6 +1106,154 @@ function IncidentHistoryTable({
               Next
             </Button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Devices Tab Content Component
+ * Displays devices in the building with management capabilities.
+ */
+interface DevicesTabContentProps {
+  devices: IoTDevice[];
+  totalDevices: number;
+  isLoading: boolean;
+  selectedDevice: IoTDevice | null;
+  onSelectDevice: (device: IoTDevice | null) => void;
+  onEditDevice: () => void;
+  onConfigureDevice: () => void;
+  onDeleteDevice: (deviceId: string) => Promise<void>;
+  onCloseDetailPanel: () => void;
+  showPlacementEditor: boolean;
+  onTogglePlacementEditor: () => void;
+  selectedFloor: FloorPlan | null;
+  onSavePosition: (deviceId: string, x: number, y: number, floorPlanId: string) => Promise<void>;
+}
+
+function DevicesTabContent({
+  devices,
+  totalDevices,
+  isLoading,
+  selectedDevice,
+  onSelectDevice,
+  onEditDevice,
+  onConfigureDevice,
+  onDeleteDevice,
+  onCloseDetailPanel,
+  showPlacementEditor,
+  onTogglePlacementEditor,
+  selectedFloor,
+  onSavePosition,
+}: DevicesTabContentProps) {
+  // Filter devices by current floor plan
+  const floorDevices = selectedFloor
+    ? devices.filter((d) => d.floor_plan_id === selectedFloor.id)
+    : devices;
+
+  // Get unplaced devices (no position set)
+  const unplacedDevices = floorDevices.filter(
+    (d) => d.position_x == null || d.position_y == null
+  );
+
+  // Get placed devices
+  const placedDevices = floorDevices.filter(
+    (d) => d.position_x != null && d.position_y != null
+  );
+
+  if (isLoading) {
+    return (
+      <div className="bg-white rounded-lg border p-8 text-center">
+        <Spinner size="md" />
+        <p className="mt-2 text-gray-500">Loading devices...</p>
+      </div>
+    );
+  }
+
+  // Show placement editor if active
+  if (showPlacementEditor && selectedFloor && selectedFloor.plan_file_url) {
+    return (
+      <DevicePlacementEditor
+        floorPlanUrl={selectedFloor.plan_file_url}
+        floorPlanId={selectedFloor.id}
+        devices={placedDevices}
+        unplacedDevices={unplacedDevices}
+        onSavePosition={onSavePosition}
+        onCancel={onTogglePlacementEditor}
+      />
+    );
+  }
+
+  return (
+    <div className="flex gap-4">
+      {/* Main device list */}
+      <div className="flex-1">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">IoT Devices</h3>
+            <p className="text-sm text-gray-500">
+              {totalDevices} device{totalDevices !== 1 ? 's' : ''} in this building
+              {selectedFloor && ` (${floorDevices.length} on current floor)`}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            {selectedFloor && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onTogglePlacementEditor}
+              >
+                <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Edit Placement
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Device list or empty state */}
+        {devices.length === 0 ? (
+          <div className="bg-white rounded-lg border p-8 text-center text-gray-400">
+            <svg
+              className="w-12 h-12 mx-auto mb-3 text-gray-300"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"
+              />
+            </svg>
+            <p>No devices in this building</p>
+            <p className="text-sm mt-1">Add devices to monitor this building</p>
+          </div>
+        ) : (
+          <DeviceMonitoringPanel
+            devices={selectedFloor ? floorDevices : devices}
+            selectedDeviceId={selectedDevice?.id}
+            onDeviceClick={onSelectDevice}
+            className="border-0 shadow-none"
+          />
+        )}
+      </div>
+
+      {/* Device detail panel (sidebar) */}
+      {selectedDevice && (
+        <div className="w-96 flex-shrink-0">
+          <DeviceDetailPanel
+            device={selectedDevice}
+            onEdit={onEditDevice}
+            onConfigure={onConfigureDevice}
+            onDelete={() => onDeleteDevice(selectedDevice.id)}
+            onClose={onCloseDetailPanel}
+          />
         </div>
       )}
     </div>

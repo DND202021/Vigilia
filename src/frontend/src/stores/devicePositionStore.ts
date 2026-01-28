@@ -151,6 +151,8 @@ export const useDevicePositionStore = create<DevicePositionStore>((set, get) => 
           ...state.positions[deviceId],
           status,
           timestamp,
+          // Update last_seen when device comes online or has alert
+          last_seen: status === 'online' || status === 'alert' ? timestamp : state.positions[deviceId]?.last_seen,
         },
       },
     }));

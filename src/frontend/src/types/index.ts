@@ -735,6 +735,16 @@ export interface DevicePositionUpdate {
   floor_plan_id: string;
 }
 
+export interface DeviceStatusHistory {
+  id: string;
+  device_id: string;
+  old_status: string | null;
+  new_status: string;
+  changed_at: string;
+  reason: string | null;
+  connection_quality: number | null;
+}
+
 // Audio Clip Types
 export interface AudioClip {
   id: string;
