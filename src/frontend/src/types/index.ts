@@ -856,3 +856,123 @@ export interface BIMImportResult {
   floors_created?: number;
   locations_found?: number;
 }
+
+// ============================================================================
+// Document Management Types (Sprint 6)
+// ============================================================================
+
+export type DocumentCategory =
+  | 'pre_plan'
+  | 'floor_plan'
+  | 'permit'
+  | 'inspection'
+  | 'manual'
+  | 'other';
+
+export interface BuildingDocument {
+  id: string;
+  building_id: string;
+  category: DocumentCategory;
+  title: string;
+  description?: string;
+  file_url: string;
+  file_type: string;
+  file_size: number;
+  uploaded_by_id?: string;
+  uploaded_by_name?: string;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DocumentCreateRequest {
+  title: string;
+  description?: string;
+  category: DocumentCategory;
+}
+
+export interface DocumentUpdateRequest {
+  title?: string;
+  description?: string;
+  category?: DocumentCategory;
+}
+
+// ============================================================================
+// Photo Management Types (Sprint 6)
+// ============================================================================
+
+export interface BuildingPhoto {
+  id: string;
+  building_id: string;
+  floor_plan_id?: string;
+  title: string;
+  description?: string;
+  file_url: string;
+  thumbnail_url?: string;
+  latitude?: number;
+  longitude?: number;
+  taken_at?: string;
+  uploaded_by_id?: string;
+  uploaded_by_name?: string;
+  tags: string[];
+  created_at: string;
+}
+
+export interface PhotoCreateRequest {
+  title: string;
+  description?: string;
+  floor_plan_id?: string;
+  latitude?: number;
+  longitude?: number;
+  taken_at?: string;
+  tags?: string[];
+}
+
+// ============================================================================
+// Inspection Tracking Types (Sprint 6)
+// ============================================================================
+
+export type InspectionType =
+  | 'fire_safety'
+  | 'structural'
+  | 'hazmat'
+  | 'general';
+
+export type InspectionStatus =
+  | 'scheduled'
+  | 'in_progress'
+  | 'completed'
+  | 'failed'
+  | 'overdue';
+
+export interface Inspection {
+  id: string;
+  building_id: string;
+  inspection_type: InspectionType;
+  scheduled_date: string;
+  completed_date?: string;
+  status: InspectionStatus;
+  inspector_name: string;
+  findings?: string;
+  follow_up_required: boolean;
+  follow_up_date?: string;
+  created_by_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InspectionCreateRequest {
+  inspection_type: InspectionType;
+  scheduled_date: string;
+  inspector_name: string;
+}
+
+export interface InspectionUpdateRequest {
+  scheduled_date?: string;
+  completed_date?: string;
+  status?: InspectionStatus;
+  inspector_name?: string;
+  findings?: string;
+  follow_up_required?: boolean;
+  follow_up_date?: string;
+}

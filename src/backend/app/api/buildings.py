@@ -1,10 +1,10 @@
 """Building Information API endpoints."""
 
-from datetime import datetime
-from typing import Any
+from datetime import datetime, date
+from typing import Any, Optional
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from starlette import status as http_status
 from pydantic import BaseModel, Field
@@ -23,6 +23,9 @@ from app.models.building import (
     HazardLevel as HazardLevelModel,
     FloorPlan as FloorPlanModel,
 )
+from app.models.inspection import Inspection, InspectionType, InspectionStatus
+from app.models.photo import BuildingPhoto
+from app.models.document import BuildingDocument, DocumentCategory
 from app.services.building_service import BuildingService, BuildingError
 from app.services.file_storage import get_file_storage, FileStorageError
 from app.services.bim_parser import IFCParser, IFCParserError
@@ -1702,3 +1705,781 @@ async def get_building_incidents(
         page_size=page_size,
         total_pages=total_pages,
     )
+
+
+# ==================== Inspection Endpoints ====================
+
+@router.get("/{building_id}/inspections", response_model=dict)
+async def get_building_inspections(
+    building_id: str,
+    inspection_type: Optional[str] = None,
+    status: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get inspections for a building."""
+    try:
+        building_uuid = uuid.UUID(building_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid building_id format",
+        )
+
+    building = await db.get(BuildingModel, building_uuid)
+    if not building:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Building not found")
+
+    query = select(Inspection).where(Inspection.building_id == building_uuid)
+
+    if inspection_type:
+        try:
+            type_enum = InspectionType(inspection_type)
+            query = query.where(Inspection.inspection_type == type_enum)
+        except ValueError:
+            pass
+
+    if status:
+        try:
+            status_enum = InspectionStatus(status)
+            query = query.where(Inspection.status == status_enum)
+        except ValueError:
+            pass
+
+    query = query.order_by(Inspection.scheduled_date.desc())
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(count_query)).scalar() or 0
+
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    inspections = result.scalars().all()
+
+    return {
+        "items": [insp.to_dict() for insp in inspections],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size,
+    }
+
+
+@router.post("/{building_id}/inspections", response_model=dict)
+async def create_inspection(
+    building_id: str,
+    inspection_type: str,
+    scheduled_date: str,
+    inspector_name: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Create an inspection for a building."""
+    try:
+        building_uuid = uuid.UUID(building_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid building_id format",
+        )
+
+    building = await db.get(BuildingModel, building_uuid)
+    if not building:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Building not found")
+
+    try:
+        type_enum = InspectionType(inspection_type)
+    except ValueError:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail="Invalid inspection type")
+
+    try:
+        sched_date = date.fromisoformat(scheduled_date)
+    except ValueError:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail="Invalid date format")
+
+    inspection = Inspection(
+        building_id=building_uuid,
+        inspection_type=type_enum,
+        scheduled_date=sched_date,
+        inspector_name=inspector_name,
+        created_by_id=current_user.id if current_user else None,
+    )
+
+    db.add(inspection)
+    await db.commit()
+    await db.refresh(inspection)
+
+    return inspection.to_dict()
+
+
+@router.get("/inspections/upcoming", response_model=dict)
+async def get_upcoming_inspections(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get all upcoming inspections (scheduled, future date)."""
+    today = date.today()
+
+    query = select(Inspection).where(
+        Inspection.status == InspectionStatus.SCHEDULED,
+        Inspection.scheduled_date >= today,
+    ).order_by(Inspection.scheduled_date.asc())
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(count_query)).scalar() or 0
+
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    inspections = result.scalars().all()
+
+    return {
+        "items": [insp.to_dict() for insp in inspections],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size,
+    }
+
+
+@router.get("/inspections/overdue", response_model=dict)
+async def get_overdue_inspections(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get all overdue inspections (scheduled, past date)."""
+    today = date.today()
+
+    query = select(Inspection).where(
+        Inspection.status == InspectionStatus.SCHEDULED,
+        Inspection.scheduled_date < today,
+    ).order_by(Inspection.scheduled_date.asc())
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(count_query)).scalar() or 0
+
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    inspections = result.scalars().all()
+
+    return {
+        "items": [insp.to_dict() for insp in inspections],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size,
+    }
+
+
+@router.get("/inspections/{inspection_id}", response_model=dict)
+async def get_inspection(
+    inspection_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get an inspection by ID."""
+    try:
+        inspection_uuid = uuid.UUID(inspection_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid inspection_id format",
+        )
+
+    inspection = await db.get(Inspection, inspection_uuid)
+    if not inspection:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Inspection not found")
+    return inspection.to_dict()
+
+
+@router.patch("/inspections/{inspection_id}", response_model=dict)
+async def update_inspection(
+    inspection_id: str,
+    scheduled_date: Optional[str] = None,
+    completed_date: Optional[str] = None,
+    status: Optional[str] = None,
+    inspector_name: Optional[str] = None,
+    findings: Optional[str] = None,
+    follow_up_required: Optional[bool] = None,
+    follow_up_date: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Update an inspection."""
+    try:
+        inspection_uuid = uuid.UUID(inspection_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid inspection_id format",
+        )
+
+    inspection = await db.get(Inspection, inspection_uuid)
+    if not inspection:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Inspection not found")
+
+    if scheduled_date is not None:
+        try:
+            inspection.scheduled_date = date.fromisoformat(scheduled_date)
+        except ValueError:
+            pass
+
+    if completed_date is not None:
+        try:
+            inspection.completed_date = date.fromisoformat(completed_date)
+        except ValueError:
+            pass
+
+    if status is not None:
+        try:
+            inspection.status = InspectionStatus(status)
+        except ValueError:
+            pass
+
+    if inspector_name is not None:
+        inspection.inspector_name = inspector_name
+
+    if findings is not None:
+        inspection.findings = findings
+
+    if follow_up_required is not None:
+        inspection.follow_up_required = follow_up_required
+
+    if follow_up_date is not None:
+        try:
+            inspection.follow_up_date = date.fromisoformat(follow_up_date)
+        except ValueError:
+            pass
+
+    await db.commit()
+    await db.refresh(inspection)
+    return inspection.to_dict()
+
+
+@router.delete("/inspections/{inspection_id}")
+async def delete_inspection(
+    inspection_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Delete an inspection."""
+    try:
+        inspection_uuid = uuid.UUID(inspection_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid inspection_id format",
+        )
+
+    inspection = await db.get(Inspection, inspection_uuid)
+    if not inspection:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Inspection not found")
+
+    await db.delete(inspection)
+    await db.commit()
+
+    return {"message": "Inspection deleted"}
+
+
+# ==================== Document Endpoints ====================
+
+@router.get("/{building_id}/documents", response_model=dict)
+async def get_building_documents(
+    building_id: str,
+    category: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get documents for a building."""
+    try:
+        building_uuid = uuid.UUID(building_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid building_id format",
+        )
+
+    # Verify building exists
+    building = await db.get(BuildingModel, building_uuid)
+    if not building:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Building not found")
+
+    query = select(BuildingDocument).where(BuildingDocument.building_id == building_uuid)
+
+    if category:
+        try:
+            cat_enum = DocumentCategory(category)
+            query = query.where(BuildingDocument.category == cat_enum)
+        except ValueError:
+            pass
+
+    query = query.order_by(BuildingDocument.created_at.desc())
+
+    # Count total
+    count_query = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(count_query)).scalar() or 0
+
+    # Paginate
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    documents = result.scalars().all()
+
+    return {
+        "items": [doc.to_dict() for doc in documents],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size,
+    }
+
+
+@router.post("/{building_id}/documents/upload", response_model=dict)
+async def upload_document(
+    building_id: str,
+    file: UploadFile = File(...),
+    title: str = Form(...),
+    category: str = Form("other"),
+    description: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Upload a document for a building."""
+    try:
+        building_uuid = uuid.UUID(building_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid building_id format",
+        )
+
+    # Verify building exists
+    building = await db.get(BuildingModel, building_uuid)
+    if not building:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Building not found")
+
+    # Parse category
+    try:
+        cat_enum = DocumentCategory(category)
+    except ValueError:
+        cat_enum = DocumentCategory.OTHER
+
+    # Get file storage service
+    storage = get_file_storage()
+
+    # Read file content
+    content = await file.read()
+    file_size = len(content)
+
+    # Validate file size (50MB max)
+    max_size = 50 * 1024 * 1024
+    if file_size > max_size:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"File too large. Maximum size is {max_size / (1024*1024):.0f}MB",
+        )
+
+    # Save file
+    import uuid as uuid_module
+    file_ext = file.filename.split(".")[-1] if file.filename and "." in file.filename else "bin"
+    filename = f"doc_{uuid_module.uuid4().hex[:8]}.{file_ext}"
+
+    # Use building documents path
+    building_path = storage._get_building_path(building_uuid)
+    docs_path = building_path.parent / "documents"
+    docs_path.mkdir(parents=True, exist_ok=True)
+
+    file_path = docs_path / filename
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    file_url = f"/api/v1/buildings/{building_id}/documents/files/{filename}"
+
+    # Create document record
+    document = BuildingDocument(
+        building_id=building_uuid,
+        category=cat_enum,
+        title=title,
+        description=description,
+        file_url=file_url,
+        file_type=file_ext,
+        file_size=file_size,
+        uploaded_by_id=current_user.id if current_user else None,
+    )
+
+    db.add(document)
+    await db.commit()
+    await db.refresh(document)
+
+    return document.to_dict()
+
+
+@router.get("/{building_id}/documents/files/{filename}")
+async def serve_document_file(
+    building_id: str,
+    filename: str,
+    current_user: User = Depends(get_current_active_user),
+):
+    """Serve a document file."""
+    try:
+        building_uuid = uuid.UUID(building_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid building_id format",
+        )
+
+    storage = get_file_storage()
+    building_path = storage._get_building_path(building_uuid)
+    file_path = building_path.parent / "documents" / filename
+
+    if not file_path.exists():
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="File not found")
+
+    return FileResponse(
+        path=str(file_path),
+        filename=filename,
+        media_type=storage.get_content_type(filename),
+    )
+
+
+@router.get("/documents/{document_id}", response_model=dict)
+async def get_document(
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get a document by ID."""
+    try:
+        document_uuid = uuid.UUID(document_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid document_id format",
+        )
+
+    document = await db.get(BuildingDocument, document_uuid)
+    if not document:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Document not found")
+    return document.to_dict()
+
+
+@router.patch("/documents/{document_id}", response_model=dict)
+async def update_document(
+    document_id: str,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    category: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Update a document."""
+    try:
+        document_uuid = uuid.UUID(document_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid document_id format",
+        )
+
+    document = await db.get(BuildingDocument, document_uuid)
+    if not document:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    if title is not None:
+        document.title = title
+    if description is not None:
+        document.description = description
+    if category is not None:
+        try:
+            document.category = DocumentCategory(category)
+        except ValueError:
+            pass
+
+    await db.commit()
+    await db.refresh(document)
+    return document.to_dict()
+
+
+@router.delete("/documents/{document_id}")
+async def delete_document(
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Delete a document."""
+    try:
+        document_uuid = uuid.UUID(document_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid document_id format",
+        )
+
+    document = await db.get(BuildingDocument, document_uuid)
+    if not document:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    # Delete file
+    storage = get_file_storage()
+    building_path = storage._get_building_path(document.building_id)
+    filename = document.file_url.split("/")[-1]
+    file_path = building_path.parent / "documents" / filename
+    if file_path.exists():
+        file_path.unlink()
+
+    await db.delete(document)
+    await db.commit()
+
+    return {"message": "Document deleted"}
+
+
+# ==================== Building Photo Endpoints ====================
+
+@router.get("/{building_id}/photos", response_model=dict)
+async def get_building_photos(
+    building_id: str,
+    tags: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    floor_plan_id: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get photos for a building."""
+    try:
+        building_uuid = uuid.UUID(building_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid building_id format",
+        )
+
+    building = await db.get(BuildingModel, building_uuid)
+    if not building:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Building not found")
+
+    query = select(BuildingPhoto).where(BuildingPhoto.building_id == building_uuid)
+
+    if floor_plan_id:
+        try:
+            floor_uuid = uuid.UUID(floor_plan_id)
+            query = query.where(BuildingPhoto.floor_plan_id == floor_uuid)
+        except ValueError:
+            pass
+
+    # Tag filtering would require JSON operations - simplified for now
+
+    query = query.order_by(BuildingPhoto.created_at.desc())
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(count_query)).scalar() or 0
+
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    photos = result.scalars().all()
+
+    return {
+        "items": [photo.to_dict() for photo in photos],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size,
+    }
+
+
+@router.post("/{building_id}/photos/upload", response_model=dict)
+async def upload_photo(
+    building_id: str,
+    file: UploadFile = File(...),
+    title: str = Form(...),
+    description: Optional[str] = Form(None),
+    floor_plan_id: Optional[str] = Form(None),
+    latitude: Optional[float] = Form(None),
+    longitude: Optional[float] = Form(None),
+    tags: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Upload a photo for a building."""
+    try:
+        building_uuid = uuid.UUID(building_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid building_id format",
+        )
+
+    building = await db.get(BuildingModel, building_uuid)
+    if not building:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Building not found")
+
+    # Validate content type
+    content_type = file.content_type or ""
+    if not content_type.startswith("image/"):
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail="File must be an image")
+
+    storage = get_file_storage()
+
+    content = await file.read()
+    file_size = len(content)
+
+    import uuid as uuid_module
+    file_ext = file.filename.split(".")[-1] if file.filename and "." in file.filename else "jpg"
+    filename = f"photo_{uuid_module.uuid4().hex[:8]}.{file_ext}"
+    thumb_filename = f"photo_{uuid_module.uuid4().hex[:8]}_thumb.{file_ext}"
+
+    # Save to photos directory
+    building_path = storage._get_building_path(building_uuid)
+    photos_path = building_path.parent / "photos"
+    photos_path.mkdir(parents=True, exist_ok=True)
+
+    file_path = photos_path / filename
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    file_url = f"/api/v1/buildings/{building_id}/photos/files/{filename}"
+    thumbnail_url = None
+
+    # Generate thumbnail
+    try:
+        from PIL import Image
+        import io
+
+        img = Image.open(io.BytesIO(content))
+        img.thumbnail((300, 300))
+
+        thumb_path = photos_path / thumb_filename
+        img.save(thumb_path, quality=85)
+        thumbnail_url = f"/api/v1/buildings/{building_id}/photos/files/{thumb_filename}"
+    except Exception:
+        pass  # Thumbnail generation failed, continue without
+
+    # Parse tags
+    tag_list = []
+    if tags:
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+
+    # Parse floor_plan_id
+    floor_plan_uuid = None
+    if floor_plan_id:
+        try:
+            floor_plan_uuid = uuid.UUID(floor_plan_id)
+        except ValueError:
+            pass
+
+    photo = BuildingPhoto(
+        building_id=building_uuid,
+        floor_plan_id=floor_plan_uuid,
+        title=title,
+        description=description,
+        file_url=file_url,
+        thumbnail_url=thumbnail_url,
+        latitude=latitude,
+        longitude=longitude,
+        uploaded_by_id=current_user.id if current_user else None,
+        tags=tag_list,
+    )
+
+    db.add(photo)
+    await db.commit()
+    await db.refresh(photo)
+
+    return photo.to_dict()
+
+
+@router.get("/{building_id}/photos/files/{filename}")
+async def serve_photo_file(
+    building_id: str,
+    filename: str,
+    current_user: User = Depends(get_current_active_user),
+):
+    """Serve a photo file."""
+    try:
+        building_uuid = uuid.UUID(building_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid building_id format",
+        )
+
+    storage = get_file_storage()
+    building_path = storage._get_building_path(building_uuid)
+    file_path = building_path.parent / "photos" / filename
+
+    if not file_path.exists():
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="File not found")
+
+    return FileResponse(
+        path=str(file_path),
+        filename=filename,
+        media_type=storage.get_content_type(filename),
+    )
+
+
+@router.get("/photos/{photo_id}", response_model=dict)
+async def get_photo(
+    photo_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get a photo by ID."""
+    try:
+        photo_uuid = uuid.UUID(photo_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid photo_id format",
+        )
+
+    photo = await db.get(BuildingPhoto, photo_uuid)
+    if not photo:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Photo not found")
+    return photo.to_dict()
+
+
+@router.delete("/photos/{photo_id}")
+async def delete_photo(
+    photo_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Delete a photo."""
+    try:
+        photo_uuid = uuid.UUID(photo_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid photo_id format",
+        )
+
+    photo = await db.get(BuildingPhoto, photo_uuid)
+    if not photo:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Photo not found")
+
+    # Delete files
+    storage = get_file_storage()
+    building_path = storage._get_building_path(photo.building_id)
+
+    filename = photo.file_url.split("/")[-1]
+    file_path = building_path.parent / "photos" / filename
+    if file_path.exists():
+        file_path.unlink()
+
+    if photo.thumbnail_url:
+        thumb_filename = photo.thumbnail_url.split("/")[-1]
+        thumb_path = building_path.parent / "photos" / thumb_filename
+        if thumb_path.exists():
+            thumb_path.unlink()
+
+    await db.delete(photo)
+    await db.commit()
+
+    return {"message": "Photo deleted"}

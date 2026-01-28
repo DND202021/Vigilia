@@ -15,3 +15,8 @@ export { BIMDataViewer } from './BIMDataViewer';
 export type { BIMData, BIMFloor, BIMMaterial, BIMKeyLocations } from './BIMDataViewer';
 
 export { BIMImport } from './BIMImport';
+
+export { DocumentManager } from './DocumentManager';
+export { PhotoGallery } from './PhotoGallery';
+export { PhotoCapture } from './PhotoCapture';
+export { InspectionTracker } from './InspectionTracker';

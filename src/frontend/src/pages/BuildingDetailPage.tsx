@@ -10,9 +10,10 @@
  * - Sub-tabs for Alerts, Incidents, and Floor Plan Upload
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useBuildingDetailStore } from '../stores/buildingDetailStore';
+import { useInspectionStore } from '../stores/inspectionStore';
 import { FloorSelector } from '../components/buildings/FloorSelector';
 import { BuildingInfoPanel } from '../components/buildings/BuildingInfoPanel';
 import { FloorPlanEditor } from '../components/buildings/FloorPlanEditor';
@@ -30,6 +31,12 @@ import {
 } from '../utils';
 import { buildingsApi } from '../services/api';
 import type { FloorKeyLocation, HazardLevel, Incident, PaginatedResponse, BIMImportResult } from '../types';
+
+// Lazy load Sprint 6 components for code splitting
+const DocumentManager = React.lazy(() => import('../components/buildings/DocumentManager'));
+const PhotoGallery = React.lazy(() => import('../components/buildings/PhotoGallery'));
+const PhotoCapture = React.lazy(() => import('../components/buildings/PhotoCapture'));
+const InspectionTracker = React.lazy(() => import('../components/buildings/InspectionTracker'));
 
 const buildingTypeLabels: Record<string, string> = {
   residential_single: 'Residential (Single)',
@@ -55,7 +62,7 @@ const hazardLevelConfig: Record<HazardLevel, { color: string; bgColor: string }>
   extreme: { color: 'text-red-700', bgColor: 'bg-red-100' },
 };
 
-type SubTab = 'alerts' | 'incidents' | 'upload' | 'bim';
+type SubTab = 'alerts' | 'incidents' | 'upload' | 'bim' | 'documents' | 'photos' | 'inspections';
 
 export function BuildingDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -90,6 +97,15 @@ export function BuildingDetailPage() {
 
   // BIM tab state - track whether showing import form vs viewer
   const [showBIMImport, setShowBIMImport] = useState(false);
+
+  // PhotoCapture modal state
+  const [showPhotoCapture, setShowPhotoCapture] = useState(false);
+
+  // Get inspection counts for alert badges
+  const {
+    inspections,
+    fetchInspections: fetchBuildingInspections,
+  } = useInspectionStore();
 
   // Incident history state
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -138,11 +154,26 @@ export function BuildingDetailPage() {
     fetchFloorPlans(id);
     fetchBuildingAlerts(id);
     fetchIncidents(1, 10);
+    fetchBuildingInspections(id);
 
     return () => {
       reset();
     };
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Compute upcoming and overdue inspection counts
+  const upcomingInspectionCount = inspections.filter((i) => {
+    if (i.status === 'completed' || i.status === 'failed') return false;
+    const scheduledDate = new Date(i.scheduled_date);
+    const today = new Date();
+    const sevenDaysFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+    return scheduledDate >= today && scheduledDate <= sevenDaysFromNow;
+  }).length;
+
+  const overdueInspectionCount = inspections.filter((i) => {
+    if (i.status === 'completed' || i.status === 'failed') return false;
+    return new Date(i.scheduled_date) < new Date();
+  }).length;
 
   // Get unplaced devices for the current floor's building
   const unplacedDevices = devices.filter(
@@ -241,6 +272,16 @@ export function BuildingDetailPage() {
             {alertCount > 0 && (
               <Badge className="bg-red-100 text-red-700">
                 {alertCount} active alert{alertCount !== 1 ? 's' : ''}
+              </Badge>
+            )}
+            {overdueInspectionCount > 0 && (
+              <Badge className="bg-red-100 text-red-700 animate-pulse">
+                {overdueInspectionCount} overdue inspection{overdueInspectionCount !== 1 ? 's' : ''}
+              </Badge>
+            )}
+            {upcomingInspectionCount > 0 && (
+              <Badge className="bg-amber-100 text-amber-700">
+                {upcomingInspectionCount} upcoming inspection{upcomingInspectionCount !== 1 ? 's' : ''}
               </Badge>
             )}
           </div>
@@ -442,6 +483,47 @@ export function BuildingDetailPage() {
                 </span>
               )}
             </button>
+            <button
+              onClick={() => setSubTab('documents')}
+              className={cn(
+                'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                subTab === 'documents'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              )}
+            >
+              Documents
+            </button>
+            <button
+              onClick={() => setSubTab('photos')}
+              className={cn(
+                'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                subTab === 'photos'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              )}
+            >
+              Photos
+            </button>
+            <button
+              onClick={() => setSubTab('inspections')}
+              className={cn(
+                'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                subTab === 'inspections'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              )}
+            >
+              Inspections
+              {(overdueInspectionCount > 0 || upcomingInspectionCount > 0) && (
+                <span className={cn(
+                  'ml-1.5 px-1.5 py-0.5 text-xs rounded-full',
+                  overdueInspectionCount > 0 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                )}>
+                  {overdueInspectionCount > 0 ? overdueInspectionCount : upcomingInspectionCount}
+                </span>
+              )}
+            </button>
           </div>
 
           {/* Sub-tab content */}
@@ -497,8 +579,49 @@ export function BuildingDetailPage() {
               )}
             </div>
           )}
+
+          {subTab === 'documents' && (
+            <Suspense fallback={<div className="flex items-center justify-center py-12"><Spinner size="md" /></div>}>
+              <DocumentManager buildingId={building.id} />
+            </Suspense>
+          )}
+
+          {subTab === 'photos' && (
+            <Suspense fallback={<div className="flex items-center justify-center py-12"><Spinner size="md" /></div>}>
+              <PhotoGallery
+                buildingId={building.id}
+                floorPlanId={selectedFloor?.id}
+                onCaptureClick={() => setShowPhotoCapture(true)}
+              />
+            </Suspense>
+          )}
+
+          {subTab === 'inspections' && (
+            <Suspense fallback={<div className="flex items-center justify-center py-12"><Spinner size="md" /></div>}>
+              <InspectionTracker buildingId={building.id} />
+            </Suspense>
+          )}
         </div>
       </div>
+
+      {/* PhotoCapture Modal */}
+      {showPhotoCapture && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="max-w-2xl w-full">
+            <Suspense fallback={<div className="bg-white rounded-lg p-8 flex items-center justify-center"><Spinner size="md" /></div>}>
+              <PhotoCapture
+                buildingId={building.id}
+                floorPlanId={selectedFloor?.id}
+                onClose={() => setShowPhotoCapture(false)}
+                onCapture={() => {
+                  setShowPhotoCapture(false);
+                  // The photo store will automatically refresh the photos list
+                }}
+              />
+            </Suspense>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

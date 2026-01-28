@@ -15,6 +15,9 @@ from app.models.base import Base, TimestampMixin, SoftDeleteMixin
 if TYPE_CHECKING:
     from app.models.agency import Agency
     from app.models.incident import Incident
+    from app.models.inspection import Inspection
+    from app.models.photo import BuildingPhoto
+    from app.models.document import BuildingDocument
 
 
 class BuildingType(str, Enum):
@@ -205,6 +208,21 @@ class Building(Base, TimestampMixin, SoftDeleteMixin):
         nullable=False,
     )
     agency: Mapped["Agency"] = relationship("Agency", back_populates="buildings")
+
+    # Inspections
+    inspections: Mapped[list["Inspection"]] = relationship(
+        "Inspection", back_populates="building", cascade="all, delete-orphan"
+    )
+
+    # Photos (BuildingPhoto model)
+    building_photos: Mapped[list["BuildingPhoto"]] = relationship(
+        "BuildingPhoto", back_populates="building", cascade="all, delete-orphan"
+    )
+
+    # Documents (BuildingDocument model)
+    building_documents: Mapped[list["BuildingDocument"]] = relationship(
+        "BuildingDocument", back_populates="building", cascade="all, delete-orphan"
+    )
 
     # Verification status
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)

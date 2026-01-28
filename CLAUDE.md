@@ -372,10 +372,48 @@ When creating sub-agent tasks, provide:
 - MapPage refactored with building search and incident proximity
 - 24 building API tests (4 new for nearby/search)
 
-### Sprint 3: Real-time Updates (Next)
-- WebSocket integration for building updates
-- Live floor plan annotations
+### Sprint 3: Incident-Building Integration ✅ (January 2025)
+- WebSocket integration for building updates (emit_building_created/updated, emit_floor_plan_uploaded/updated)
+- BuildingSelector component for incident forms
+- BuildingInfoPanel for incident detail sidebar
+- Building incidents endpoint GET /buildings/{id}/incidents
+- useWebSocket hook with joinBuilding/leaveBuilding
+- 13 incident API tests
+
+### Sprint 4: Key Location Marking Tool ✅ (January 2025)
+- LocationMarker component with draggable markers and type icons
+- markerStore (Zustand) for marker editing state
+- FloorPlanEditor with toolbar, click-to-place, drag support
+- MarkerPropertiesModal for editing marker metadata
+- FloorPlanPrint for print-optimized view
+- 20+ LocationMarkerType types with category groupings
+
+### Sprint 5: BIM Import ✅ (January 2025)
+- IFCParser service for parsing Industry Foundation Classes files
+- BIMImport component with drag-drop file upload
+- BIMDataViewer component for displaying imported metadata
+- POST /buildings/{id}/import-bim endpoint
+- BIMData, BIMImportResult, BIMFloorInfo types
+
+### Sprint 6: Document & Photo Management ✅ (January 2025)
+- **Backend Models**: BuildingDocument, BuildingPhoto, Inspection with relationships
+- **API Endpoints**:
+  - Documents: GET/POST /buildings/{id}/documents, PATCH/DELETE /documents/{id}
+  - Photos: GET/POST /buildings/{id}/photos, DELETE /photos/{id}
+  - Inspections: GET/POST /buildings/{id}/inspections, GET /inspections/upcoming|overdue, PATCH/DELETE /inspections/{id}
+- **Frontend Stores**: documentStore, photoStore, inspectionStore (Zustand)
+- **Components**:
+  - DocumentManager: Document list, upload, category filtering, version tracking
+  - PhotoGallery: Responsive grid, lightbox, tag filtering, upload
+  - PhotoCapture: Camera access with geolocation, file fallback
+  - InspectionTracker: Inspection list, create/edit forms, status management
+- **BuildingDetailPage**: New tabs for Documents, Photos, Inspections with lazy loading
+- **Tests**: 57 new tests (16 documents, 17 photos, 24 inspections)
+
+### Sprint 7: Real-time Updates (Next)
+- Live floor plan annotations via WebSocket
 - Real-time device status on floor plans
+- Collaborative editing indicators
 
 ---
 

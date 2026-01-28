@@ -16,9 +16,12 @@ from app.models.building import (
     HazardLevel,
     FloorPlan,
 )
+from app.models.inspection import Inspection, InspectionType, InspectionStatus
+from app.models.photo import BuildingPhoto
 from app.models.device import IoTDevice, DeviceType, DeviceStatus
 from app.models.audio_clip import AudioClip
 from app.models.notification_preference import NotificationPreference
+from app.models.document import BuildingDocument, DocumentCategory
 
 __all__ = [
     "Base",
@@ -50,9 +53,15 @@ __all__ = [
     "ConstructionType",
     "HazardLevel",
     "FloorPlan",
+    "Inspection",
+    "InspectionType",
+    "InspectionStatus",
+    "BuildingPhoto",
     "IoTDevice",
     "DeviceType",
     "DeviceStatus",
     "AudioClip",
     "NotificationPreference",
+    "BuildingDocument",
+    "DocumentCategory",
 ]

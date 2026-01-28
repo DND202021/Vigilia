@@ -44,6 +44,13 @@ import type {
   AlertHistoryPoint,
   BuildingAlertCount,
   BIMImportResult,
+  BuildingDocument,
+  DocumentCreateRequest,
+  DocumentUpdateRequest,
+  BuildingPhoto,
+  Inspection,
+  InspectionCreateRequest,
+  InspectionUpdateRequest,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
@@ -795,6 +802,181 @@ export const notificationPrefsApi = {
 
   getBuildingContacts: async (buildingId: string): Promise<unknown[]> => {
     const response = await api.get(`/buildings/${buildingId}/notification-contacts`);
+    return response.data;
+  },
+};
+
+// Documents API
+export const documentsApi = {
+  list: async (buildingId: string, params?: {
+    category?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<PaginatedResponse<BuildingDocument>> => {
+    const response = await api.get<PaginatedResponse<BuildingDocument>>(`/buildings/${buildingId}/documents`, { params });
+    return response.data;
+  },
+
+  get: async (id: string): Promise<BuildingDocument> => {
+    const response = await api.get<BuildingDocument>(`/documents/${id}`);
+    return response.data;
+  },
+
+  upload: async (
+    buildingId: string,
+    file: File,
+    metadata: DocumentCreateRequest,
+    onProgress?: (progress: number) => void
+  ): Promise<BuildingDocument> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('title', metadata.title);
+    formData.append('category', metadata.category);
+    if (metadata.description) {
+      formData.append('description', metadata.description);
+    }
+
+    const response = await api.post<BuildingDocument>(
+      `/buildings/${buildingId}/documents/upload`,
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (progressEvent) => {
+          if (onProgress && progressEvent.total) {
+            const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            onProgress(percent);
+          }
+        },
+      }
+    );
+    return response.data;
+  },
+
+  update: async (id: string, data: DocumentUpdateRequest): Promise<BuildingDocument> => {
+    const response = await api.patch<BuildingDocument>(`/documents/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/documents/${id}`);
+  },
+
+  getDownloadUrl: (id: string): string => {
+    return `${API_BASE_URL}/documents/${id}/download`;
+  },
+};
+
+// Photos API
+export const photosApi = {
+  list: async (buildingId: string, params?: {
+    tags?: string;
+    date_from?: string;
+    date_to?: string;
+    floor_plan_id?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<PaginatedResponse<BuildingPhoto>> => {
+    const response = await api.get<PaginatedResponse<BuildingPhoto>>(`/buildings/${buildingId}/photos`, { params });
+    return response.data;
+  },
+
+  get: async (id: string): Promise<BuildingPhoto> => {
+    const response = await api.get<BuildingPhoto>(`/photos/${id}`);
+    return response.data;
+  },
+
+  upload: async (
+    buildingId: string,
+    file: File,
+    metadata: { title: string; description?: string; floorPlanId?: string; latitude?: number; longitude?: number; tags?: string[] },
+    onProgress?: (progress: number) => void
+  ): Promise<BuildingPhoto> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('title', metadata.title);
+    if (metadata.description) {
+      formData.append('description', metadata.description);
+    }
+    if (metadata.floorPlanId) {
+      formData.append('floor_plan_id', metadata.floorPlanId);
+    }
+    if (metadata.latitude !== undefined) {
+      formData.append('latitude', metadata.latitude.toString());
+    }
+    if (metadata.longitude !== undefined) {
+      formData.append('longitude', metadata.longitude.toString());
+    }
+    if (metadata.tags && metadata.tags.length > 0) {
+      formData.append('tags', metadata.tags.join(','));
+    }
+
+    const response = await api.post<BuildingPhoto>(
+      `/buildings/${buildingId}/photos/upload`,
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (progressEvent) => {
+          if (onProgress && progressEvent.total) {
+            const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            onProgress(percent);
+          }
+        },
+      }
+    );
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/photos/${id}`);
+  },
+
+  getThumbnailUrl: (id: string): string => {
+    return `${API_BASE_URL}/photos/${id}/thumbnail`;
+  },
+
+  getImageUrl: (id: string): string => {
+    return `${API_BASE_URL}/photos/${id}/image`;
+  },
+};
+
+// Inspections API
+export const inspectionsApi = {
+  list: async (buildingId: string, params?: {
+    inspection_type?: string;
+    status?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<PaginatedResponse<Inspection>> => {
+    const response = await api.get<PaginatedResponse<Inspection>>(`/buildings/${buildingId}/inspections`, { params });
+    return response.data;
+  },
+
+  get: async (id: string): Promise<Inspection> => {
+    const response = await api.get<Inspection>(`/inspections/${id}`);
+    return response.data;
+  },
+
+  create: async (buildingId: string, data: InspectionCreateRequest): Promise<Inspection> => {
+    const response = await api.post<Inspection>(`/buildings/${buildingId}/inspections`, data);
+    return response.data;
+  },
+
+  update: async (id: string, data: InspectionUpdateRequest): Promise<Inspection> => {
+    const response = await api.patch<Inspection>(`/inspections/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/inspections/${id}`);
+  },
+
+  getUpcoming: async (params?: { page?: number; page_size?: number }): Promise<PaginatedResponse<Inspection>> => {
+    const response = await api.get<PaginatedResponse<Inspection>>('/inspections/upcoming', { params });
+    return response.data;
+  },
+
+  getOverdue: async (params?: { page?: number; page_size?: number }): Promise<PaginatedResponse<Inspection>> => {
+    const response = await api.get<PaginatedResponse<Inspection>>('/inspections/overdue', { params });
     return response.data;
   },
 };
