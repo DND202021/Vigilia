@@ -293,9 +293,11 @@ git remote set-url origin git@github.com:DND202021/Vigilia.git
 
 The application is deployed locally via Docker on a server at **http://10.0.0.13:83/**
 
+**Note**: SSH to the server (port 22) is not accessible from the Claude Code environment due to firewall restrictions. Deployment must be done manually from a machine with SSH access.
+
 ### Deployment Commands (on server)
 ```bash
-cd /path/to/Vigilia
+cd /home/vigilia/Vigilia
 git pull origin main
 docker compose -f docker-compose.local.yml down
 docker compose -f docker-compose.local.yml build --no-cache
