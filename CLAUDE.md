@@ -438,6 +438,21 @@ When creating sub-agent tasks, provide:
 - **Integration**: FloorPlanEditor and BuildingDetailPage with real-time features
 - **Tests**: 14 presence service tests
 
+### Sprint 8: IoT Device Management Enhancement ✅ (January 2025)
+- **Backend Models**: DeviceStatusHistory for tracking status changes
+- **Migration**: 008_add_device_status_history table
+- **API Endpoints**:
+  - GET /iot-devices/{id}/alerts - Device alerts with filters
+  - GET /iot-devices/{id}/history - Status change history
+- **Frontend Components**:
+  - DeviceConfigEditor: Type-specific config UI (mic, camera, sensor, gateway)
+  - DeviceDetailPanel: Full device info display with actions
+  - DeviceHistoryList: Status change timeline with colored badges
+- **BuildingDetailPage**: New Devices tab with device management
+- **DevicePlacementEditor**: Enhanced with floor plan ID support
+- **WebSocket Integration**: device:status and device:alert handlers
+- **Tests**: 43 new tests (20 device service + 23 API)
+
 ---
 
 *Last Updated: January 2025*
