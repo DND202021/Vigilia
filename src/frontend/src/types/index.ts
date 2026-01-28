@@ -808,3 +808,51 @@ export interface BuildingAlertCount {
   building_id: string;
   active_alert_count: number;
 }
+
+// BIM Import types
+export interface BIMFloorInfo {
+  floor_number: number;
+  floor_name: string;
+  elevation?: number;
+  area_sqm?: number;
+  ceiling_height_m?: number;
+  spaces?: BIMSpaceInfo[];
+}
+
+export interface BIMSpaceInfo {
+  name: string;
+  type: string; // room, corridor, stairwell, etc.
+  area_sqm?: number;
+  x?: number;
+  y?: number;
+}
+
+export interface BIMKeyLocation {
+  type: string; // door, stairwell, elevator, fire_extinguisher
+  name: string;
+  floor_number: number;
+  x: number;
+  y: number;
+}
+
+export interface BIMData {
+  source_file?: string;
+  import_date?: string;
+  building_name?: string;
+  construction_type?: string;
+  construction_year?: number;
+  total_area_sqm?: number;
+  building_height_m?: number;
+  floors: BIMFloorInfo[];
+  key_locations?: BIMKeyLocation[];
+  materials?: string[];
+  raw_properties?: Record<string, any>;
+}
+
+export interface BIMImportResult {
+  success: boolean;
+  message?: string;
+  bim_data?: BIMData;
+  floors_created?: number;
+  locations_found?: number;
+}

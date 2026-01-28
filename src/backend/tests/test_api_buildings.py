@@ -1315,3 +1315,98 @@ class TestBuildingsAPI:
         # Verify other fields preserved
         assert data["floor_name"] == "Second Floor"
         assert data["floor_number"] == 2
+
+    # ==================== BIM Import (Sprint 5) ====================
+
+    @pytest.mark.asyncio
+    async def test_import_bim_endpoint_requires_file(
+        self, client: AsyncClient, admin_user: User, test_agency: Agency
+    ):
+        """Test that BIM import endpoint requires a file."""
+        token = await self.get_admin_token(client)
+
+        # Create building first
+        building_response = await client.post(
+            "/api/v1/buildings",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "name": "BIM Test Building",
+                "street_name": "BIM Street",
+                "city": "Montreal",
+                "province_state": "Quebec",
+                "latitude": 45.51,
+                "longitude": -73.57,
+            },
+        )
+        building_id = building_response.json()["id"]
+
+        # Try to import without file - should fail
+        response = await client.post(
+            f"/api/v1/buildings/{building_id}/import-bim",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 422  # Validation error - missing file
+
+    @pytest.mark.asyncio
+    async def test_import_bim_rejects_non_ifc(
+        self, client: AsyncClient, admin_user: User, test_agency: Agency
+    ):
+        """Test that BIM import rejects non-IFC files."""
+        token = await self.get_admin_token(client)
+
+        # Create building
+        building_response = await client.post(
+            "/api/v1/buildings",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "name": "BIM Reject Test Building",
+                "street_name": "BIM Reject Street",
+                "city": "Montreal",
+                "province_state": "Quebec",
+                "latitude": 45.52,
+                "longitude": -73.58,
+            },
+        )
+        building_id = building_response.json()["id"]
+
+        # Upload non-IFC file
+        files = {"file": ("test.txt", b"not an ifc file", "text/plain")}
+        response = await client.post(
+            f"/api/v1/buildings/{building_id}/import-bim",
+            headers={"Authorization": f"Bearer {token}"},
+            files=files,
+        )
+        assert response.status_code == 400
+        assert "IFC" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_import_bim_invalid_file_content(
+        self, client: AsyncClient, admin_user: User, test_agency: Agency
+    ):
+        """Test BIM import returns 400 for invalid IFC file content."""
+        token = await self.get_admin_token(client)
+
+        # Create building first
+        building_response = await client.post(
+            "/api/v1/buildings",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "name": "BIM Invalid Content Building",
+                "street_name": "Invalid Street",
+                "city": "Montreal",
+                "province_state": "Quebec",
+                "latitude": 45.53,
+                "longitude": -73.59,
+            },
+        )
+        building_id = building_response.json()["id"]
+
+        # Upload .ifc file with invalid/dummy content
+        files = {"file": ("test.ifc", b"dummy content - not valid IFC", "application/octet-stream")}
+        response = await client.post(
+            f"/api/v1/buildings/{building_id}/import-bim",
+            headers={"Authorization": f"Bearer {token}"},
+            files=files,
+        )
+        # Parser will fail on invalid content
+        assert response.status_code == 400

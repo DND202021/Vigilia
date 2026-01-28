@@ -25,6 +25,7 @@ from app.models.building import (
 )
 from app.services.building_service import BuildingService, BuildingError
 from app.services.file_storage import get_file_storage, FileStorageError
+from app.services.bim_parser import IFCParser, IFCParserError
 from app.services.socketio import (
     emit_building_created,
     emit_building_updated,
@@ -810,6 +811,228 @@ async def import_bim_data(
         )
 
     return building_to_response(building)
+
+
+# ==================== BIM File Import Endpoint ====================
+
+# Maximum IFC file size (100MB)
+MAX_IFC_FILE_SIZE = 100 * 1024 * 1024
+
+
+class BIMImportResponse(BaseModel):
+    """Response from BIM file import."""
+
+    success: bool
+    message: str
+    building_id: str
+    bim_data: dict
+    floors_created: int
+    floors_updated: int
+    locations_found: int
+    ifc_schema: str | None = None
+
+
+@router.post("/{building_id}/import-bim", response_model=BIMImportResponse)
+async def import_bim_file(
+    building_id: str,
+    file: UploadFile = File(..., description="IFC file to import (.ifc)"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> BIMImportResponse:
+    """Import BIM data from an IFC file.
+
+    Accepts IFC2x3 and IFC4 format files. Extracts building information,
+    floor data, and key locations (doors, stairs, elevators, fire equipment).
+
+    The imported data will:
+    - Update the building's bim_data field
+    - Create FloorPlan records for each floor found in the IFC file
+    - Extract key locations for emergency response planning
+
+    Maximum file size: 100MB
+    """
+    import os
+    import tempfile
+
+    # Validate building_id format
+    try:
+        building_uuid = uuid.UUID(building_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid building_id format",
+        )
+
+    # Validate file extension
+    if not file.filename or not file.filename.lower().endswith('.ifc'):
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="File must be an IFC file (.ifc)",
+        )
+
+    # Read file content with size limit check
+    content = await file.read()
+    file_size = len(content)
+
+    if file_size > MAX_IFC_FILE_SIZE:
+        max_mb = MAX_IFC_FILE_SIZE / (1024 * 1024)
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"File too large. Maximum size is {max_mb:.0f}MB",
+        )
+
+    if file_size == 0:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="File is empty",
+        )
+
+    # Save file temporarily for parsing
+    temp_path = None
+    try:
+        # Create temp file with proper extension for ifcopenshell
+        with tempfile.NamedTemporaryFile(
+            mode='wb',
+            suffix='.ifc',
+            delete=False,
+        ) as temp_file:
+            temp_file.write(content)
+            temp_path = temp_file.name
+
+        # Parse IFC file
+        parser = IFCParser()
+        try:
+            bim_data = parser.parse_file(temp_path)
+        except IFCParserError as e:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to parse IFC file: {str(e)}",
+            )
+
+        # Get building service
+        service = BuildingService(db)
+
+        # Verify building exists and user has access
+        building = await service.get_building(building_uuid)
+        if not building:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail="Building not found",
+            )
+
+        # Update building with BIM data
+        try:
+            building = await service.import_bim_data(
+                building_uuid,
+                bim_data=bim_data.to_dict(),
+                bim_file_url=None,  # File stored temporarily, not persisted
+            )
+        except BuildingError as e:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            )
+
+        # Create or update floor plans from BIM floor data
+        floors_created = 0
+        floors_updated = 0
+
+        # Get existing floor plans for the building
+        existing_floors = await service.get_building_floor_plans(building_uuid)
+        existing_floor_numbers = {fp.floor_number for fp in existing_floors}
+
+        for floor_info in bim_data.floors:
+            # Find key locations for this floor
+            floor_key_locations = [
+                loc.to_dict()
+                for loc in bim_data.key_locations
+                if loc.floor_number == floor_info.floor_number
+            ]
+
+            # Separate emergency exits from other locations
+            emergency_exits = [
+                loc for loc in floor_key_locations
+                if loc.get('type') == 'door' and loc.get('properties', {}).get('is_emergency_exit')
+            ]
+
+            # Separate fire equipment
+            fire_equipment = [
+                loc for loc in floor_key_locations
+                if loc.get('type') in ('fire_extinguisher', 'aed')
+            ]
+
+            # Other key locations (stairs, elevators, electrical panels)
+            other_locations = [
+                loc for loc in floor_key_locations
+                if loc.get('type') in ('stairwell', 'elevator', 'electrical_panel', 'door')
+                and not loc.get('properties', {}).get('is_emergency_exit')
+            ]
+
+            if floor_info.floor_number in existing_floor_numbers:
+                # Update existing floor plan
+                existing_fp = next(
+                    fp for fp in existing_floors
+                    if fp.floor_number == floor_info.floor_number
+                )
+                try:
+                    await service.update_floor_plan(
+                        floor_plan_id=existing_fp.id,
+                        floor_name=floor_info.floor_name or existing_fp.floor_name,
+                        floor_area_sqm=floor_info.area_sqm or existing_fp.floor_area_sqm,
+                        ceiling_height_m=floor_info.ceiling_height_m or existing_fp.ceiling_height_m,
+                        key_locations=other_locations or existing_fp.key_locations,
+                        emergency_exits=emergency_exits or existing_fp.emergency_exits,
+                        fire_equipment=fire_equipment or existing_fp.fire_equipment,
+                        bim_floor_data=floor_info.to_dict(),
+                    )
+                    floors_updated += 1
+                except BuildingError:
+                    pass  # Skip if update fails
+            else:
+                # Create new floor plan
+                try:
+                    await service.add_floor_plan(
+                        building_id=building_uuid,
+                        floor_number=floor_info.floor_number,
+                        floor_name=floor_info.floor_name,
+                        floor_area_sqm=floor_info.area_sqm,
+                        ceiling_height_m=floor_info.ceiling_height_m,
+                        key_locations=other_locations if other_locations else None,
+                        emergency_exits=emergency_exits if emergency_exits else None,
+                        fire_equipment=fire_equipment if fire_equipment else None,
+                        bim_floor_data=floor_info.to_dict(),
+                    )
+                    floors_created += 1
+                except BuildingError:
+                    pass  # Skip if floor already exists (race condition)
+
+        await db.commit()
+
+        # Emit WebSocket events for real-time updates
+        building_response = building_to_response(building)
+        try:
+            await emit_building_updated(building_response.model_dump(), str(building.id))
+        except Exception:
+            pass  # Don't let emit failures break the API
+
+        return BIMImportResponse(
+            success=True,
+            message=f"BIM data imported successfully from {file.filename}",
+            building_id=str(building_uuid),
+            bim_data=bim_data.to_dict(),
+            floors_created=floors_created,
+            floors_updated=floors_updated,
+            locations_found=len(bim_data.key_locations),
+            ifc_schema=bim_data.ifc_schema,
+        )
+
+    finally:
+        # Clean up temp file
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass  # Ignore cleanup errors
 
 
 # ==================== Floor Plan Endpoints ====================

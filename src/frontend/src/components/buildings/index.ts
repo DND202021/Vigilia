@@ -11,3 +11,7 @@ export { FloorPlanUpload } from './FloorPlanUpload';
 export { FloorSelector } from './FloorSelector';
 export { BuildingInfoPanel } from './BuildingInfoPanel';
 export { UnifiedFloorPlanViewer } from './UnifiedFloorPlanViewer';
+export { BIMDataViewer } from './BIMDataViewer';
+export type { BIMData, BIMFloor, BIMMaterial, BIMKeyLocations } from './BIMDataViewer';
+
+export { BIMImport } from './BIMImport';

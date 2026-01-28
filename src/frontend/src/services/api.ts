@@ -43,6 +43,7 @@ import type {
   NotificationPreferenceUpdate,
   AlertHistoryPoint,
   BuildingAlertCount,
+  BIMImportResult,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
@@ -429,11 +430,22 @@ export const buildingsApi = {
     return response.data;
   },
 
-  importBIM: async (buildingId: string, bimData: Record<string, unknown>, bimFileUrl?: string): Promise<Building> => {
+  importBIMData: async (buildingId: string, bimData: Record<string, unknown>, bimFileUrl?: string): Promise<Building> => {
     const response = await api.post<Building>(`/buildings/${buildingId}/bim`, {
       bim_data: bimData,
       bim_file_url: bimFileUrl,
     });
+    return response.data;
+  },
+
+  importBIM: async (buildingId: string, file: File): Promise<BIMImportResult> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post<BIMImportResult>(
+      `/buildings/${buildingId}/import-bim`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
     return response.data;
   },
 

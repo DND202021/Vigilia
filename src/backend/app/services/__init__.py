@@ -24,6 +24,13 @@ from app.services.file_storage import FileStorageService, FileStorageError, get_
 from app.services.device_service import DeviceService, DeviceError
 from app.services.audio_storage_service import AudioStorageService, AudioStorageError
 from app.services.notification_service import NotificationService
+from app.services.bim_parser import (
+    IFCParser,
+    IFCParserError,
+    BIMData,
+    BIMFloorInfo,
+    BIMKeyLocation,
+)
 
 __all__ = [
     "AuthService",
@@ -59,4 +66,9 @@ __all__ = [
     "AudioStorageService",
     "AudioStorageError",
     "NotificationService",
+    "IFCParser",
+    "IFCParserError",
+    "BIMData",
+    "BIMFloorInfo",
+    "BIMKeyLocation",
 ]

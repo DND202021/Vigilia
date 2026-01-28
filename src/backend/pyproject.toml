@@ -24,6 +24,7 @@ dependencies = [
     "python-socketio>=5.10.0",
     "pyotp>=2.9.0",
     "qrcode[pil]>=7.4.0",
+    "ifcopenshell>=0.8.0",
 ]
 
 [project.optional-dependencies]

@@ -16,7 +16,7 @@ import { useBuildingDetailStore } from '../stores/buildingDetailStore';
 import { FloorSelector } from '../components/buildings/FloorSelector';
 import { BuildingInfoPanel } from '../components/buildings/BuildingInfoPanel';
 import { FloorPlanEditor } from '../components/buildings/FloorPlanEditor';
-import { FloorPlanUpload } from '../components/buildings';
+import { FloorPlanUpload, BIMImport, BIMDataViewer } from '../components/buildings';
 import { DeviceMonitoringPanel } from '../components/devices/DeviceMonitoringPanel';
 import { AlertsFloorTable } from '../components/alerts/AlertsFloorTable';
 import { Badge, Button, Spinner } from '../components/ui';
@@ -29,7 +29,7 @@ import {
   getStatusColor,
 } from '../utils';
 import { buildingsApi } from '../services/api';
-import type { FloorKeyLocation, HazardLevel, Incident, PaginatedResponse } from '../types';
+import type { FloorKeyLocation, HazardLevel, Incident, PaginatedResponse, BIMImportResult } from '../types';
 
 const buildingTypeLabels: Record<string, string> = {
   residential_single: 'Residential (Single)',
@@ -55,7 +55,7 @@ const hazardLevelConfig: Record<HazardLevel, { color: string; bgColor: string }>
   extreme: { color: 'text-red-700', bgColor: 'bg-red-100' },
 };
 
-type SubTab = 'alerts' | 'incidents' | 'upload';
+type SubTab = 'alerts' | 'incidents' | 'upload' | 'bim';
 
 export function BuildingDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -87,6 +87,9 @@ export function BuildingDetailPage() {
   } = useBuildingDetailStore();
 
   const [subTab, setSubTab] = useState<SubTab>('alerts');
+
+  // BIM tab state - track whether showing import form vs viewer
+  const [showBIMImport, setShowBIMImport] = useState(false);
 
   // Incident history state
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -165,6 +168,22 @@ export function BuildingDetailPage() {
       console.log('Markers saved:', markers.length, 'markers');
     },
     [id, fetchFloorPlans]
+  );
+
+  // Handle BIM import completion
+  const handleBIMImportComplete = useCallback(
+    (result: BIMImportResult) => {
+      // Refresh building data to get updated BIM data
+      if (id) {
+        fetchBuilding(id);
+        // BIM import may create floor plans, so refresh those too
+        fetchFloorPlans(id);
+      }
+      // Switch to showing BIMDataViewer instead of import form
+      setShowBIMImport(false);
+      console.log('BIM import complete:', result.floors_created, 'floors created');
+    },
+    [id, fetchBuilding, fetchFloorPlans]
   );
 
   if (isLoading && !building) {
@@ -407,6 +426,22 @@ export function BuildingDetailPage() {
             >
               Upload Plan
             </button>
+            <button
+              onClick={() => setSubTab('bim')}
+              className={cn(
+                'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                subTab === 'bim'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              )}
+            >
+              BIM Data
+              {building.has_bim_data && (
+                <span className="ml-1.5 px-1.5 py-0.5 text-xs rounded-full bg-green-100 text-green-700">
+                  Imported
+                </span>
+              )}
+            </button>
           </div>
 
           {/* Sub-tab content */}
@@ -435,6 +470,32 @@ export function BuildingDetailPage() {
               existingFloorPlans={floorPlans}
               onUploadComplete={handleUploadComplete}
             />
+          )}
+
+          {subTab === 'bim' && (
+            <div className="space-y-4">
+              {/* Show BIMDataViewer if building has BIM data and not in import mode */}
+              {building.has_bim_data && !showBIMImport ? (
+                <>
+                  <BIMDataViewer building={building} />
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => setShowBIMImport(true)}
+                      className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      Re-import BIM Data
+                    </button>
+                  </div>
+                </>
+              ) : (
+                /* Show BIMImport if no BIM data or user requested re-import */
+                <BIMImport
+                  buildingId={building.id}
+                  onImportComplete={handleBIMImportComplete}
+                  onCancel={building.has_bim_data ? () => setShowBIMImport(false) : undefined}
+                />
+              )}
+            </div>
           )}
         </div>
       </div>
