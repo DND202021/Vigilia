@@ -410,10 +410,22 @@ When creating sub-agent tasks, provide:
 - **BuildingDetailPage**: New tabs for Documents, Photos, Inspections with lazy loading
 - **Tests**: 57 new tests (16 documents, 17 photos, 24 inspections)
 
-### Sprint 7: Real-time Updates (Next)
-- Live floor plan annotations via WebSocket
-- Real-time device status on floor plans
-- Collaborative editing indicators
+### Sprint 7: Real-time Updates ✅ (January 2025)
+- **Backend**: PresenceService for tracking users on floor plans
+- **WebSocket Events**: Floor plan room management (join/leave/heartbeat)
+- **Marker Sync**: marker:added/updated/deleted events with optimistic updates
+- **Presence Tracking**: presence:joined/left/list/editing events
+- **Device Status**: Real-time device position and status updates
+- **Frontend Stores**:
+  - presenceStore: User presence tracking with heartbeat
+  - devicePositionStore: Real-time device position sync
+  - markerStore: Extended with optimistic updates and conflict detection
+- **Components**:
+  - PresenceIndicator: Shows active users with avatars and editing state
+  - DeviceStatusOverlay: Real-time device icons on floor plans
+- **Hooks**: useFloorPlanSync orchestrates all real-time synchronization
+- **Integration**: FloorPlanEditor and BuildingDetailPage with real-time features
+- **Tests**: 14 presence service tests
 
 ---
 
