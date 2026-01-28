@@ -453,6 +453,24 @@ When creating sub-agent tasks, provide:
 - **WebSocket Integration**: device:status and device:alert handlers
 - **Tests**: 43 new tests (20 device service + 23 API)
 
+### Sprint 9: Building Analytics Dashboard ✅ (January 2025)
+- **Backend Service**: BuildingAnalyticsService with aggregation methods
+- **API Endpoints**:
+  - GET /buildings/{id}/analytics - Full dashboard overview
+  - GET /buildings/{id}/analytics/devices - Device health stats
+  - GET /buildings/{id}/analytics/incidents - Incident stats with trend
+  - GET /buildings/{id}/analytics/alerts - Alert breakdown
+  - GET /buildings/{id}/analytics/inspections - Compliance metrics
+- **Frontend Components**:
+  - BuildingStatsCards: 4-card KPI grid (devices, incidents, alerts, inspections)
+  - DeviceHealthChart: SVG donut chart with status distribution
+  - IncidentTrendChart: Bar chart with time range selector
+  - InspectionComplianceWidget: Compliance rate with upcoming/overdue
+  - AlertSeverityChart: Horizontal bar chart with severity breakdown
+  - BuildingAnalyticsDashboard: Combines all widgets
+- **BuildingDetailPage**: New Analytics tab
+- **Tests**: 30 new tests (12 service + 18 API)
+
 ---
 
 *Last Updated: January 2025*
