@@ -31,6 +31,7 @@ from app.services.bim_parser import (
     BIMFloorInfo,
     BIMKeyLocation,
 )
+from app.services.building_analytics_service import BuildingAnalyticsService, BuildingAnalyticsError
 
 __all__ = [
     "AuthService",
@@ -71,4 +72,6 @@ __all__ = [
     "BIMData",
     "BIMFloorInfo",
     "BIMKeyLocation",
+    "BuildingAnalyticsService",
+    "BuildingAnalyticsError",
 ]

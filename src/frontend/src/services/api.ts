@@ -987,4 +987,35 @@ export const inspectionsApi = {
   },
 };
 
+// Building Analytics API
+export const buildingAnalyticsApi = {
+  getOverview: async (buildingId: string, days?: number) => {
+    const params = days ? { days } : undefined;
+    const response = await api.get(`/buildings/${buildingId}/analytics`, { params });
+    return response.data;
+  },
+
+  getDeviceHealth: async (buildingId: string) => {
+    const response = await api.get(`/buildings/${buildingId}/analytics/devices`);
+    return response.data;
+  },
+
+  getIncidentStats: async (buildingId: string, days?: number) => {
+    const params = days ? { days } : undefined;
+    const response = await api.get(`/buildings/${buildingId}/analytics/incidents`, { params });
+    return response.data;
+  },
+
+  getAlertBreakdown: async (buildingId: string, days?: number) => {
+    const params = days ? { days } : undefined;
+    const response = await api.get(`/buildings/${buildingId}/analytics/alerts`, { params });
+    return response.data;
+  },
+
+  getInspectionCompliance: async (buildingId: string) => {
+    const response = await api.get(`/buildings/${buildingId}/analytics/inspections`);
+    return response.data;
+  },
+};
+
 export default api;

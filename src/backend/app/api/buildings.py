@@ -27,6 +27,7 @@ from app.models.inspection import Inspection, InspectionType, InspectionStatus
 from app.models.photo import BuildingPhoto
 from app.models.document import BuildingDocument, DocumentCategory
 from app.services.building_service import BuildingService, BuildingError
+from app.services.building_analytics_service import BuildingAnalyticsService, BuildingAnalyticsError
 from app.services.file_storage import get_file_storage, FileStorageError
 from app.services.bim_parser import IFCParser, IFCParserError
 from app.services.socketio import (
@@ -2483,3 +2484,177 @@ async def delete_photo(
     await db.commit()
 
     return {"message": "Photo deleted"}
+
+
+# ==================== Building Analytics Endpoints ====================
+
+@router.get("/{building_id}/analytics")
+async def get_building_analytics(
+    building_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """Get complete analytics dashboard for a building."""
+    try:
+        building_uuid = uuid.UUID(building_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid building_id format",
+        )
+
+    # Verify building exists
+    service = BuildingService(db)
+    building = await service.get_building(building_uuid)
+    if not building:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Building not found",
+        )
+
+    try:
+        analytics_service = BuildingAnalyticsService(db)
+        return await analytics_service.get_building_overview(building_uuid)
+    except BuildingAnalyticsError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.get("/{building_id}/analytics/devices")
+async def get_device_analytics(
+    building_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """Get device health analytics for a building."""
+    try:
+        building_uuid = uuid.UUID(building_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid building_id format",
+        )
+
+    # Verify building exists
+    service = BuildingService(db)
+    building = await service.get_building(building_uuid)
+    if not building:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Building not found",
+        )
+
+    try:
+        analytics_service = BuildingAnalyticsService(db)
+        return await analytics_service.get_device_health(building_uuid)
+    except BuildingAnalyticsError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.get("/{building_id}/analytics/incidents")
+async def get_incident_analytics(
+    building_id: str,
+    days: int = Query(30, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """Get incident statistics for a building."""
+    try:
+        building_uuid = uuid.UUID(building_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid building_id format",
+        )
+
+    # Verify building exists
+    service = BuildingService(db)
+    building = await service.get_building(building_uuid)
+    if not building:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Building not found",
+        )
+
+    try:
+        analytics_service = BuildingAnalyticsService(db)
+        return await analytics_service.get_incident_stats(building_uuid, days=days)
+    except BuildingAnalyticsError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.get("/{building_id}/analytics/alerts")
+async def get_alert_analytics(
+    building_id: str,
+    days: int = Query(30, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """Get alert breakdown for a building."""
+    try:
+        building_uuid = uuid.UUID(building_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid building_id format",
+        )
+
+    # Verify building exists
+    service = BuildingService(db)
+    building = await service.get_building(building_uuid)
+    if not building:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Building not found",
+        )
+
+    try:
+        analytics_service = BuildingAnalyticsService(db)
+        return await analytics_service.get_alert_breakdown(building_uuid, days=days)
+    except BuildingAnalyticsError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.get("/{building_id}/analytics/inspections")
+async def get_inspection_analytics(
+    building_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """Get inspection compliance metrics for a building."""
+    try:
+        building_uuid = uuid.UUID(building_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid building_id format",
+        )
+
+    # Verify building exists
+    service = BuildingService(db)
+    building = await service.get_building(building_uuid)
+    if not building:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Building not found",
+        )
+
+    try:
+        analytics_service = BuildingAnalyticsService(db)
+        return await analytics_service.get_inspection_compliance(building_uuid)
+    except BuildingAnalyticsError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )

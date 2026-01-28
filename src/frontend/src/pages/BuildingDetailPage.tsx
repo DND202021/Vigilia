@@ -21,6 +21,7 @@ import { FloorSelector } from '../components/buildings/FloorSelector';
 import { BuildingInfoPanel } from '../components/buildings/BuildingInfoPanel';
 import { FloorPlanEditor } from '../components/buildings/FloorPlanEditor';
 import { FloorPlanUpload, BIMImport, BIMDataViewer } from '../components/buildings';
+import { BuildingAnalyticsDashboard } from '../components/analytics';
 import { DeviceMonitoringPanel } from '../components/devices/DeviceMonitoringPanel';
 import { DeviceDetailPanel } from '../components/devices/DeviceDetailPanel';
 import { DeviceConfigEditor } from '../components/devices/DeviceConfigEditor';
@@ -71,7 +72,7 @@ const hazardLevelConfig: Record<HazardLevel, { color: string; bgColor: string }>
   extreme: { color: 'text-red-700', bgColor: 'bg-red-100' },
 };
 
-type SubTab = 'alerts' | 'incidents' | 'upload' | 'bim' | 'documents' | 'photos' | 'inspections' | 'devices';
+type SubTab = 'alerts' | 'incidents' | 'upload' | 'bim' | 'documents' | 'photos' | 'inspections' | 'devices' | 'analytics';
 
 /**
  * ConnectionStatusIndicator
@@ -740,6 +741,17 @@ export function BuildingDetailPage() {
                 </span>
               )}
             </button>
+            <button
+              onClick={() => setSubTab('analytics')}
+              className={cn(
+                'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                subTab === 'analytics'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              )}
+            >
+              Analytics
+            </button>
           </div>
 
           {/* Sub-tab content */}
@@ -847,6 +859,10 @@ export function BuildingDetailPage() {
                 });
               }}
             />
+          )}
+
+          {subTab === 'analytics' && id && (
+            <BuildingAnalyticsDashboard buildingId={id} />
           )}
         </div>
       </div>
