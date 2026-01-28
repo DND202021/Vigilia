@@ -24,6 +24,7 @@ from app.api import (
     iot_devices,
     audio_clips,
     notification_preferences,
+    emergency_planning,
 )
 
 router = APIRouter()
@@ -49,3 +50,4 @@ router.include_router(analytics.router, prefix="/analytics", tags=["Analytics & 
 router.include_router(iot_devices.router, prefix="/iot-devices", tags=["IoT Devices"])
 router.include_router(audio_clips.router, prefix="/audio-clips", tags=["Audio Clips"])
 router.include_router(notification_preferences.router, tags=["Notification Preferences"])
+router.include_router(emergency_planning.router, prefix="/emergency-planning", tags=["Emergency Planning"])

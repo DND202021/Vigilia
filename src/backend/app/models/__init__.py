@@ -23,6 +23,9 @@ from app.models.device_status_history import DeviceStatusHistory
 from app.models.audio_clip import AudioClip
 from app.models.notification_preference import NotificationPreference
 from app.models.document import BuildingDocument, DocumentCategory
+from app.models.emergency_procedure import EmergencyProcedure, ProcedureType
+from app.models.evacuation_route import EvacuationRoute, RouteType
+from app.models.emergency_checkpoint import EmergencyCheckpoint, CheckpointType
 
 __all__ = [
     "Base",
@@ -66,4 +69,10 @@ __all__ = [
     "NotificationPreference",
     "BuildingDocument",
     "DocumentCategory",
+    "EmergencyProcedure",
+    "ProcedureType",
+    "EvacuationRoute",
+    "RouteType",
+    "EmergencyCheckpoint",
+    "CheckpointType",
 ]

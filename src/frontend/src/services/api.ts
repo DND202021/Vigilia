@@ -52,6 +52,10 @@ import type {
   Inspection,
   InspectionCreateRequest,
   InspectionUpdateRequest,
+  EmergencyProcedure,
+  EvacuationRoute,
+  EmergencyCheckpoint,
+  EmergencyPlanOverview,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
@@ -1014,6 +1018,95 @@ export const buildingAnalyticsApi = {
 
   getInspectionCompliance: async (buildingId: string) => {
     const response = await api.get(`/buildings/${buildingId}/analytics/inspections`);
+    return response.data;
+  },
+};
+
+// Emergency Planning API
+export const emergencyPlanningApi = {
+  // Procedures
+  getProcedures: async (buildingId: string, params?: { procedure_type?: string; is_active?: boolean }): Promise<EmergencyProcedure[]> => {
+    const response = await api.get(`/buildings/${buildingId}/procedures`, { params });
+    return response.data;
+  },
+
+  getProcedure: async (id: string): Promise<EmergencyProcedure> => {
+    const response = await api.get(`/procedures/${id}`);
+    return response.data;
+  },
+
+  createProcedure: async (buildingId: string, data: Omit<EmergencyProcedure, 'id' | 'created_at' | 'updated_at'>): Promise<EmergencyProcedure> => {
+    const response = await api.post(`/buildings/${buildingId}/procedures`, data);
+    return response.data;
+  },
+
+  updateProcedure: async (id: string, data: Partial<EmergencyProcedure>): Promise<EmergencyProcedure> => {
+    const response = await api.patch(`/procedures/${id}`, data);
+    return response.data;
+  },
+
+  deleteProcedure: async (id: string): Promise<void> => {
+    await api.delete(`/procedures/${id}`);
+  },
+
+  // Routes
+  getRoutes: async (buildingId: string, params?: { floor_plan_id?: string; route_type?: string; is_active?: boolean }): Promise<EvacuationRoute[]> => {
+    const response = await api.get(`/buildings/${buildingId}/routes`, { params });
+    return response.data;
+  },
+
+  getRoute: async (id: string): Promise<EvacuationRoute> => {
+    const response = await api.get(`/routes/${id}`);
+    return response.data;
+  },
+
+  createRoute: async (buildingId: string, data: Omit<EvacuationRoute, 'id' | 'created_at' | 'updated_at'>): Promise<EvacuationRoute> => {
+    const response = await api.post(`/buildings/${buildingId}/routes`, data);
+    return response.data;
+  },
+
+  updateRoute: async (id: string, data: Partial<EvacuationRoute>): Promise<EvacuationRoute> => {
+    const response = await api.patch(`/routes/${id}`, data);
+    return response.data;
+  },
+
+  deleteRoute: async (id: string): Promise<void> => {
+    await api.delete(`/routes/${id}`);
+  },
+
+  // Checkpoints
+  getCheckpoints: async (buildingId: string, params?: { floor_plan_id?: string; checkpoint_type?: string; is_active?: boolean }): Promise<EmergencyCheckpoint[]> => {
+    const response = await api.get(`/buildings/${buildingId}/checkpoints`, { params });
+    return response.data;
+  },
+
+  getCheckpoint: async (id: string): Promise<EmergencyCheckpoint> => {
+    const response = await api.get(`/checkpoints/${id}`);
+    return response.data;
+  },
+
+  createCheckpoint: async (buildingId: string, data: Omit<EmergencyCheckpoint, 'id' | 'created_at' | 'updated_at'>): Promise<EmergencyCheckpoint> => {
+    const response = await api.post(`/buildings/${buildingId}/checkpoints`, data);
+    return response.data;
+  },
+
+  updateCheckpoint: async (id: string, data: Partial<EmergencyCheckpoint>): Promise<EmergencyCheckpoint> => {
+    const response = await api.patch(`/checkpoints/${id}`, data);
+    return response.data;
+  },
+
+  deleteCheckpoint: async (id: string): Promise<void> => {
+    await api.delete(`/checkpoints/${id}`);
+  },
+
+  // Combined
+  getEmergencyPlan: async (buildingId: string): Promise<EmergencyPlanOverview> => {
+    const response = await api.get(`/buildings/${buildingId}/emergency-plan`);
+    return response.data;
+  },
+
+  exportEmergencyPlan: async (buildingId: string): Promise<Blob> => {
+    const response = await api.get(`/buildings/${buildingId}/emergency-plan/export`, { responseType: 'blob' });
     return response.data;
   },
 };

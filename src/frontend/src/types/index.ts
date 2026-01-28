@@ -1091,3 +1091,124 @@ export interface DevicePositionEvent {
   position_y: number;
   timestamp: string;
 }
+
+// ============================================================================
+// Emergency Planning Types
+// ============================================================================
+
+export type EmergencyProcedureType =
+  | 'evacuation'
+  | 'fire'
+  | 'medical'
+  | 'hazmat'
+  | 'lockdown'
+  | 'active_shooter'
+  | 'weather'
+  | 'utility_failure';
+
+export interface ProcedureStep {
+  order: number;
+  title: string;
+  description: string;
+  responsible_role?: string;
+  duration_minutes?: number;
+}
+
+export interface ProcedureContact {
+  name: string;
+  role: string;
+  phone?: string;
+  email?: string;
+}
+
+export interface EmergencyProcedure {
+  id: string;
+  building_id: string;
+  name: string;
+  description?: string;
+  procedure_type: EmergencyProcedureType;
+  priority: number;
+  steps: ProcedureStep[];
+  contacts: ProcedureContact[];
+  equipment_needed: string[];
+  estimated_duration_minutes?: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type RouteType = 'primary' | 'secondary' | 'accessible' | 'emergency_vehicle';
+
+export interface RouteWaypoint {
+  order: number;
+  x: number;
+  y: number;
+  floor_plan_id?: string;
+  label?: string;
+}
+
+export interface EvacuationRoute {
+  id: string;
+  building_id: string;
+  floor_plan_id?: string;
+  name: string;
+  description?: string;
+  route_type: RouteType;
+  waypoints: RouteWaypoint[];
+  color: string;
+  line_width: number;
+  is_active: boolean;
+  capacity?: number;
+  estimated_time_seconds?: number;
+  accessibility_features: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export type CheckpointType =
+  | 'assembly_point'
+  | 'muster_station'
+  | 'first_aid'
+  | 'command_post'
+  | 'triage_area'
+  | 'decontamination'
+  | 'staging_area'
+  | 'media_point';
+
+export interface CheckpointEquipment {
+  name: string;
+  quantity: number;
+  location?: string;
+}
+
+export interface CheckpointContactInfo {
+  phone?: string;
+  email?: string;
+  radio_channel?: string;
+}
+
+export interface EmergencyCheckpoint {
+  id: string;
+  building_id: string;
+  floor_plan_id?: string;
+  name: string;
+  checkpoint_type: CheckpointType;
+  position_x: number;
+  position_y: number;
+  capacity?: number;
+  equipment: CheckpointEquipment[];
+  responsible_person?: string;
+  contact_info?: CheckpointContactInfo;
+  instructions?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Emergency Plan Overview (combined response)
+export interface EmergencyPlanOverview {
+  building_id: string;
+  procedures: EmergencyProcedure[];
+  routes: EvacuationRoute[];
+  checkpoints: EmergencyCheckpoint[];
+}

@@ -27,9 +27,15 @@ import { DeviceDetailPanel } from '../components/devices/DeviceDetailPanel';
 import { DeviceConfigEditor } from '../components/devices/DeviceConfigEditor';
 import { DevicePlacementEditor } from '../components/devices/DevicePlacementEditor';
 import { AlertsFloorTable } from '../components/alerts/AlertsFloorTable';
+import {
+  EmergencyPlanViewer,
+  EmergencyProcedureEditor,
+  EvacuationRouteDrawer,
+  CheckpointManager
+} from '../components/emergency';
 import { useDeviceStore } from '../stores/deviceStore';
-import { iotDevicesApi } from '../services/api';
-import type { IoTDevice } from '../types';
+import { iotDevicesApi, emergencyPlanningApi } from '../services/api';
+import type { IoTDevice, EmergencyPlanOverview, EmergencyProcedure, EmergencyCheckpoint, RouteWaypoint } from '../types';
 import { Badge, Button, Spinner } from '../components/ui';
 import {
   cn,
@@ -72,7 +78,7 @@ const hazardLevelConfig: Record<HazardLevel, { color: string; bgColor: string }>
   extreme: { color: 'text-red-700', bgColor: 'bg-red-100' },
 };
 
-type SubTab = 'alerts' | 'incidents' | 'upload' | 'bim' | 'documents' | 'photos' | 'inspections' | 'devices' | 'analytics';
+type SubTab = 'alerts' | 'incidents' | 'upload' | 'bim' | 'documents' | 'photos' | 'inspections' | 'devices' | 'analytics' | 'emergency';
 
 /**
  * ConnectionStatusIndicator
@@ -182,6 +188,15 @@ export function BuildingDetailPage() {
   const [showDeviceConfig, setShowDeviceConfig] = useState(false);
   const [showPlacementEditor, setShowPlacementEditor] = useState(false);
 
+  // Emergency planning state
+  const [emergencyPlan, setEmergencyPlan] = useState<EmergencyPlanOverview | null>(null);
+  const [emergencyPlanLoading, setEmergencyPlanLoading] = useState(false);
+  const [isEditingEmergencyPlan, setIsEditingEmergencyPlan] = useState(false);
+  const [editingProcedure, setEditingProcedure] = useState<EmergencyProcedure | undefined>();
+  const [emergencyEditMode, setEmergencyEditMode] = useState<'view' | 'procedures' | 'routes' | 'checkpoints'>('view');
+  const [selectedRouteId, setSelectedRouteId] = useState<string | undefined>();
+  const [selectedCheckpointId, setSelectedCheckpointId] = useState<string | undefined>();
+
   // Device store for the Devices tab
   const {
     devices: buildingDevices,
@@ -244,6 +259,20 @@ export function BuildingDetailPage() {
     [id]
   );
 
+  // Fetch emergency plan data for the building
+  const fetchEmergencyPlan = useCallback(async () => {
+    if (!building?.id) return;
+    setEmergencyPlanLoading(true);
+    try {
+      const plan = await emergencyPlanningApi.getEmergencyPlan(building.id);
+      setEmergencyPlan(plan);
+    } catch (error) {
+      console.error('Failed to fetch emergency plan:', error);
+    } finally {
+      setEmergencyPlanLoading(false);
+    }
+  }, [building?.id]);
+
   // Load building data on mount
   useEffect(() => {
     if (!id) return;
@@ -275,6 +304,13 @@ export function BuildingDetailPage() {
       }
     };
   }, [id, isConnected, joinBuilding, leaveBuilding]);
+
+  // Lazy load emergency plan data when tab is active
+  useEffect(() => {
+    if (subTab === 'emergency' && building?.id && !emergencyPlan && !emergencyPlanLoading) {
+      fetchEmergencyPlan();
+    }
+  }, [subTab, building?.id, emergencyPlan, emergencyPlanLoading, fetchEmergencyPlan]);
 
   // Handle incoming WebSocket events for this building
   useEffect(() => {
@@ -353,11 +389,27 @@ export function BuildingDetailPage() {
         setRemoteNotification('Devices were updated');
         break;
 
+      case 'procedure:created':
+      case 'procedure:updated':
+      case 'procedure:deleted':
+      case 'route:created':
+      case 'route:updated':
+      case 'route:deleted':
+      case 'checkpoint:created':
+      case 'checkpoint:updated':
+      case 'checkpoint:deleted':
+        // Refresh emergency plan if on emergency tab
+        if (subTab === 'emergency') {
+          fetchEmergencyPlan();
+        }
+        setRemoteNotification('Emergency plan was updated');
+        break;
+
       default:
         // Ignore other events
         break;
     }
-  }, [lastEvent, id, fetchBuilding, fetchFloorPlans, fetchDocuments, fetchPhotos, fetchBuildingInspections, fetchBuildingDevices, subTab]);
+  }, [lastEvent, id, fetchBuilding, fetchFloorPlans, fetchDocuments, fetchPhotos, fetchBuildingInspections, fetchBuildingDevices, fetchEmergencyPlan, subTab]);
 
   // Compute upcoming and overdue inspection counts
   const upcomingInspectionCount = inspections.filter((i) => {
@@ -414,6 +466,122 @@ export function BuildingDetailPage() {
     },
     [id, fetchBuilding, fetchFloorPlans]
   );
+
+  // ========== Emergency Plan CRUD Handlers ==========
+
+  // Handle procedure save (create or update)
+  const handleProcedureSave = useCallback(async (procedure: EmergencyProcedure) => {
+    if (!building?.id) return;
+    try {
+      if (procedure.id) {
+        // Update existing
+        await emergencyPlanningApi.updateProcedure(procedure.id, procedure);
+      } else {
+        // Create new
+        await emergencyPlanningApi.createProcedure(building.id, procedure);
+      }
+      await fetchEmergencyPlan();
+      setEditingProcedure(undefined);
+      setEmergencyEditMode('view');
+    } catch (error) {
+      console.error('Failed to save procedure:', error);
+    }
+  }, [building?.id, fetchEmergencyPlan]);
+
+  // Handle procedure delete
+  const handleProcedureDelete = useCallback(async (procedureId: string) => {
+    if (!window.confirm('Are you sure you want to delete this procedure?')) return;
+    try {
+      await emergencyPlanningApi.deleteProcedure(procedureId);
+      await fetchEmergencyPlan();
+    } catch (error) {
+      console.error('Failed to delete procedure:', error);
+    }
+  }, [fetchEmergencyPlan]);
+
+  // Handle route create from waypoints
+  const handleRouteCreate = useCallback(async (waypoints: RouteWaypoint[]) => {
+    if (!building?.id || !selectedFloor?.id) return;
+    try {
+      await emergencyPlanningApi.createRoute(building.id, {
+        building_id: building.id,
+        floor_plan_id: selectedFloor.id,
+        name: `Route ${(emergencyPlan?.routes.length || 0) + 1}`,
+        route_type: 'primary',
+        waypoints,
+        color: '#dc2626', // Default red color for primary routes
+        line_width: 3,
+        accessibility_features: [],
+        is_active: true,
+      });
+      await fetchEmergencyPlan();
+    } catch (error) {
+      console.error('Failed to create route:', error);
+    }
+  }, [building?.id, selectedFloor?.id, emergencyPlan?.routes.length, fetchEmergencyPlan]);
+
+  // Handle route update
+  const handleRouteUpdate = useCallback(async (routeId: string, waypoints: RouteWaypoint[]) => {
+    try {
+      await emergencyPlanningApi.updateRoute(routeId, { waypoints });
+      await fetchEmergencyPlan();
+    } catch (error) {
+      console.error('Failed to update route:', error);
+    }
+  }, [fetchEmergencyPlan]);
+
+  // Handle route delete
+  const handleRouteDelete = useCallback(async (routeId: string) => {
+    if (!window.confirm('Are you sure you want to delete this route?')) return;
+    try {
+      await emergencyPlanningApi.deleteRoute(routeId);
+      await fetchEmergencyPlan();
+      setSelectedRouteId(undefined);
+    } catch (error) {
+      console.error('Failed to delete route:', error);
+    }
+  }, [fetchEmergencyPlan]);
+
+  // Handle checkpoint create
+  const handleCheckpointCreate = useCallback(async (checkpoint: Omit<EmergencyCheckpoint, 'id' | 'created_at' | 'updated_at'>) => {
+    if (!building?.id) return;
+    try {
+      await emergencyPlanningApi.createCheckpoint(building.id, {
+        ...checkpoint,
+        building_id: building.id,
+      });
+      await fetchEmergencyPlan();
+    } catch (error) {
+      console.error('Failed to create checkpoint:', error);
+    }
+  }, [building?.id, fetchEmergencyPlan]);
+
+  // Handle checkpoint update
+  const handleCheckpointUpdate = useCallback(async (checkpointId: string, data: Partial<EmergencyCheckpoint>) => {
+    try {
+      await emergencyPlanningApi.updateCheckpoint(checkpointId, data);
+      await fetchEmergencyPlan();
+    } catch (error) {
+      console.error('Failed to update checkpoint:', error);
+    }
+  }, [fetchEmergencyPlan]);
+
+  // Handle checkpoint delete
+  const handleCheckpointDelete = useCallback(async (checkpointId: string) => {
+    if (!window.confirm('Are you sure you want to delete this checkpoint?')) return;
+    try {
+      await emergencyPlanningApi.deleteCheckpoint(checkpointId);
+      await fetchEmergencyPlan();
+      setSelectedCheckpointId(undefined);
+    } catch (error) {
+      console.error('Failed to delete checkpoint:', error);
+    }
+  }, [fetchEmergencyPlan]);
+
+  // Handle emergency plan print
+  const handleEmergencyPlanPrint = useCallback(() => {
+    console.log('Printing emergency plan...');
+  }, []);
 
   if (isLoading && !building) {
     return (
@@ -752,6 +920,25 @@ export function BuildingDetailPage() {
             >
               Analytics
             </button>
+            <button
+              onClick={() => setSubTab('emergency')}
+              className={cn(
+                'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-1.5',
+                subTab === 'emergency'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              )}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              Emergency
+              {emergencyPlan && (emergencyPlan.procedures.length > 0 || emergencyPlan.routes.length > 0) && (
+                <span className="px-1.5 py-0.5 text-xs rounded-full bg-green-100 text-green-700">
+                  {emergencyPlan.procedures.length + emergencyPlan.routes.length}
+                </span>
+              )}
+            </button>
           </div>
 
           {/* Sub-tab content */}
@@ -863,6 +1050,44 @@ export function BuildingDetailPage() {
 
           {subTab === 'analytics' && id && (
             <BuildingAnalyticsDashboard buildingId={id} />
+          )}
+
+          {subTab === 'emergency' && (
+            <EmergencyTabContent
+              buildingId={building.id}
+              buildingName={building.name}
+              floorPlans={floorPlans}
+              selectedFloor={selectedFloor}
+              emergencyPlan={emergencyPlan}
+              isLoading={emergencyPlanLoading}
+              isEditing={isEditingEmergencyPlan}
+              editMode={emergencyEditMode}
+              editingProcedure={editingProcedure}
+              selectedRouteId={selectedRouteId}
+              selectedCheckpointId={selectedCheckpointId}
+              onEditToggle={() => setIsEditingEmergencyPlan(!isEditingEmergencyPlan)}
+              onEditModeChange={setEmergencyEditMode}
+              onProcedureEdit={(procedure) => {
+                setEditingProcedure(procedure);
+                setEmergencyEditMode('procedures');
+              }}
+              onProcedureSave={handleProcedureSave}
+              onProcedureCancel={() => {
+                setEditingProcedure(undefined);
+                setEmergencyEditMode('view');
+              }}
+              onProcedureDelete={handleProcedureDelete}
+              onRouteCreate={handleRouteCreate}
+              onRouteUpdate={handleRouteUpdate}
+              onRouteDelete={handleRouteDelete}
+              onRouteSelect={setSelectedRouteId}
+              onCheckpointCreate={handleCheckpointCreate}
+              onCheckpointUpdate={handleCheckpointUpdate}
+              onCheckpointDelete={handleCheckpointDelete}
+              onCheckpointSelect={setSelectedCheckpointId}
+              onPrint={handleEmergencyPlanPrint}
+              onRefresh={fetchEmergencyPlan}
+            />
           )}
         </div>
       </div>
@@ -1270,6 +1495,354 @@ function DevicesTabContent({
             onDelete={() => onDeleteDevice(selectedDevice.id)}
             onClose={onCloseDetailPanel}
           />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Emergency Tab Content Component
+ * Displays and manages emergency planning information for a building.
+ */
+interface EmergencyTabContentProps {
+  buildingId: string;
+  buildingName: string;
+  floorPlans: FloorPlan[];
+  selectedFloor: FloorPlan | null;
+  emergencyPlan: EmergencyPlanOverview | null;
+  isLoading: boolean;
+  isEditing: boolean;
+  editMode: 'view' | 'procedures' | 'routes' | 'checkpoints';
+  editingProcedure: EmergencyProcedure | undefined;
+  selectedRouteId: string | undefined;
+  selectedCheckpointId: string | undefined;
+  onEditToggle: () => void;
+  onEditModeChange: (mode: 'view' | 'procedures' | 'routes' | 'checkpoints') => void;
+  onProcedureEdit: (procedure: EmergencyProcedure) => void;
+  onProcedureSave: (procedure: EmergencyProcedure) => void;
+  onProcedureCancel: () => void;
+  onProcedureDelete: (procedureId: string) => void;
+  onRouteCreate: (waypoints: RouteWaypoint[]) => void;
+  onRouteUpdate: (routeId: string, waypoints: RouteWaypoint[]) => void;
+  onRouteDelete: (routeId: string) => void;
+  onRouteSelect: (routeId: string | undefined) => void;
+  onCheckpointCreate: (checkpoint: Omit<EmergencyCheckpoint, 'id' | 'created_at' | 'updated_at'>) => void;
+  onCheckpointUpdate: (checkpointId: string, data: Partial<EmergencyCheckpoint>) => void;
+  onCheckpointDelete: (checkpointId: string) => void;
+  onCheckpointSelect: (checkpointId: string | undefined) => void;
+  onPrint: () => void;
+  onRefresh: () => void;
+}
+
+function EmergencyTabContent({
+  buildingId,
+  buildingName,
+  floorPlans,
+  selectedFloor,
+  emergencyPlan,
+  isLoading,
+  isEditing,
+  editMode,
+  editingProcedure,
+  selectedRouteId,
+  selectedCheckpointId,
+  onEditToggle,
+  onEditModeChange,
+  onProcedureEdit,
+  onProcedureSave,
+  onProcedureCancel,
+  onProcedureDelete,
+  onRouteCreate,
+  onRouteUpdate,
+  onRouteDelete,
+  onRouteSelect,
+  onCheckpointCreate,
+  onCheckpointUpdate,
+  onCheckpointDelete,
+  onCheckpointSelect,
+  onPrint,
+  onRefresh,
+}: EmergencyTabContentProps) {
+  // Reference for floor plan container dimensions
+  const floorPlanContainerRef = useRef<HTMLDivElement>(null);
+  const [containerDimensions, setContainerDimensions] = useState({ width: 0, height: 0 });
+
+  // Update container dimensions when floor changes
+  useEffect(() => {
+    const updateDimensions = () => {
+      if (floorPlanContainerRef.current) {
+        setContainerDimensions({
+          width: floorPlanContainerRef.current.offsetWidth,
+          height: floorPlanContainerRef.current.offsetHeight,
+        });
+      }
+    };
+
+    updateDimensions();
+    window.addEventListener('resize', updateDimensions);
+    return () => window.removeEventListener('resize', updateDimensions);
+  }, [selectedFloor]);
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="bg-white rounded-lg border p-8 text-center">
+        <Spinner size="md" />
+        <p className="mt-2 text-gray-500">Loading emergency plan...</p>
+      </div>
+    );
+  }
+
+  // Empty state
+  if (!emergencyPlan || (emergencyPlan.procedures.length === 0 && emergencyPlan.routes.length === 0 && emergencyPlan.checkpoints.length === 0)) {
+    return (
+      <div className="bg-white rounded-lg border p-8 text-center">
+        <svg
+          className="w-16 h-16 mx-auto mb-4 text-gray-300"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+            d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+          />
+        </svg>
+        <h3 className="text-lg font-medium text-gray-900 mb-2">No Emergency Plan</h3>
+        <p className="text-gray-500 mb-4">
+          This building doesn't have an emergency plan yet. Start by adding procedures, evacuation routes, or checkpoints.
+        </p>
+        <Button onClick={onEditToggle}>
+          Create Emergency Plan
+        </Button>
+      </div>
+    );
+  }
+
+  // Prepare floor plan info for viewer
+  const floorPlanInfo = floorPlans.map(fp => ({
+    id: fp.id,
+    name: fp.floor_name || `Floor ${fp.floor_number}`,
+    floor_number: fp.floor_number,
+    image_url: fp.plan_file_url || '',
+  }));
+
+  // View mode - show the viewer
+  if (!isEditing) {
+    return (
+      <EmergencyPlanViewer
+        buildingId={buildingId}
+        buildingName={buildingName}
+        floorPlans={floorPlanInfo}
+        plan={emergencyPlan}
+        onEdit={onEditToggle}
+        onPrint={onPrint}
+      />
+    );
+  }
+
+  // Edit mode - show editing interface
+  return (
+    <div className="space-y-4">
+      {/* Edit mode toolbar */}
+      <div className="bg-white rounded-lg border p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-gray-900">Edit Emergency Plan</h3>
+            <Badge className="bg-orange-100 text-orange-700">Editing</Badge>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={onRefresh}>
+              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refresh
+            </Button>
+            <Button variant="secondary" onClick={onEditToggle}>
+              Done Editing
+            </Button>
+          </div>
+        </div>
+
+        {/* Edit mode sub-tabs */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => onEditModeChange('procedures')}
+            className={cn(
+              'px-4 py-2 text-sm font-medium rounded-lg transition-colors',
+              editMode === 'procedures'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            )}
+          >
+            Procedures ({emergencyPlan.procedures.length})
+          </button>
+          <button
+            onClick={() => onEditModeChange('routes')}
+            className={cn(
+              'px-4 py-2 text-sm font-medium rounded-lg transition-colors',
+              editMode === 'routes'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            )}
+          >
+            Routes ({emergencyPlan.routes.length})
+          </button>
+          <button
+            onClick={() => onEditModeChange('checkpoints')}
+            className={cn(
+              'px-4 py-2 text-sm font-medium rounded-lg transition-colors',
+              editMode === 'checkpoints'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            )}
+          >
+            Checkpoints ({emergencyPlan.checkpoints.length})
+          </button>
+        </div>
+      </div>
+
+      {/* Procedures edit mode */}
+      {editMode === 'procedures' && (
+        <div className="space-y-4">
+          {editingProcedure !== undefined ? (
+            <EmergencyProcedureEditor
+              buildingId={buildingId}
+              procedure={editingProcedure}
+              onSave={onProcedureSave}
+              onCancel={onProcedureCancel}
+            />
+          ) : (
+            <>
+              <div className="flex justify-between items-center">
+                <h4 className="text-md font-medium text-gray-800">Emergency Procedures</h4>
+                <Button
+                  size="sm"
+                  onClick={() => onProcedureEdit({
+                    id: '',
+                    building_id: buildingId,
+                    name: '',
+                    procedure_type: 'evacuation',
+                    priority: 3,
+                    is_active: true,
+                    steps: [],
+                    contacts: [],
+                    equipment_needed: [],
+                    created_at: '',
+                    updated_at: '',
+                  })}
+                >
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add Procedure
+                </Button>
+              </div>
+
+              {emergencyPlan.procedures.length === 0 ? (
+                <div className="bg-gray-50 rounded-lg p-8 text-center text-gray-500">
+                  No procedures defined. Click "Add Procedure" to create one.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {emergencyPlan.procedures.map((procedure) => (
+                    <div
+                      key={procedure.id}
+                      className="bg-white rounded-lg border p-4 flex items-center justify-between"
+                    >
+                      <div>
+                        <h5 className="font-medium text-gray-900">{procedure.name}</h5>
+                        <p className="text-sm text-gray-500">
+                          {procedure.procedure_type} - Priority {procedure.priority}
+                          {procedure.steps.length > 0 && ` - ${procedure.steps.length} steps`}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onProcedureEdit(procedure)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600 hover:text-red-700"
+                          onClick={() => onProcedureDelete(procedure.id)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Routes edit mode */}
+      {editMode === 'routes' && selectedFloor && selectedFloor.plan_file_url && (
+        <div className="bg-white rounded-lg border overflow-hidden">
+          <div
+            ref={floorPlanContainerRef}
+            style={{ height: '500px' }}
+          >
+            <EvacuationRouteDrawer
+              floorPlanId={selectedFloor.id}
+              floorPlanUrl={selectedFloor.plan_file_url}
+              containerWidth={containerDimensions.width || 800}
+              containerHeight={containerDimensions.height || 500}
+              routes={emergencyPlan.routes.filter(r => r.floor_plan_id === selectedFloor.id)}
+              selectedRouteId={selectedRouteId}
+              onRouteSelect={onRouteSelect}
+              onRouteCreate={onRouteCreate}
+              onRouteUpdate={onRouteUpdate}
+              onRouteDelete={onRouteDelete}
+              isEditing={true}
+            />
+          </div>
+        </div>
+      )}
+
+      {editMode === 'routes' && (!selectedFloor || !selectedFloor.plan_file_url) && (
+        <div className="bg-gray-50 rounded-lg p-8 text-center text-gray-500">
+          Select a floor plan above to edit evacuation routes.
+        </div>
+      )}
+
+      {/* Checkpoints edit mode */}
+      {editMode === 'checkpoints' && selectedFloor && selectedFloor.plan_file_url && (
+        <div className="bg-white rounded-lg border overflow-hidden">
+          <div
+            ref={floorPlanContainerRef}
+            style={{ height: '500px' }}
+          >
+            <CheckpointManager
+              floorPlanId={selectedFloor.id}
+              floorPlanUrl={selectedFloor.plan_file_url}
+              containerWidth={containerDimensions.width || 800}
+              containerHeight={containerDimensions.height || 500}
+              checkpoints={emergencyPlan.checkpoints.filter(c => c.floor_plan_id === selectedFloor.id)}
+              selectedCheckpointId={selectedCheckpointId}
+              onCheckpointSelect={onCheckpointSelect}
+              onCheckpointCreate={onCheckpointCreate}
+              onCheckpointUpdate={onCheckpointUpdate}
+              onCheckpointDelete={onCheckpointDelete}
+              isEditing={true}
+            />
+          </div>
+        </div>
+      )}
+
+      {editMode === 'checkpoints' && (!selectedFloor || !selectedFloor.plan_file_url) && (
+        <div className="bg-gray-50 rounded-lg p-8 text-center text-gray-500">
+          Select a floor plan above to edit emergency checkpoints.
         </div>
       )}
     </div>
