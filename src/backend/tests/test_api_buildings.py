@@ -729,3 +729,178 @@ class TestBuildingsAPI:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert len(floors_response.json()) == 2
+
+    # ==================== Nearby / Proximity ====================
+
+    @pytest.mark.asyncio
+    async def test_get_buildings_near_location_with_radius(
+        self, client: AsyncClient, admin_user: User, test_agency: Agency
+    ):
+        """Getting buildings near a location with a specific radius should
+        return only buildings within that radius."""
+        token = await self.get_admin_token(client)
+
+        # Create a building close to the search point (~0.03 km away)
+        await client.post(
+            "/api/v1/buildings",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "name": "Close Radius Building",
+                "street_name": "Close Street",
+                "city": "Montreal",
+                "province_state": "Quebec",
+                "latitude": 45.5018,
+                "longitude": -73.5674,
+            },
+        )
+
+        # Create a building farther away (~15 km away in Laval)
+        await client.post(
+            "/api/v1/buildings",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "name": "Far Radius Building",
+                "street_name": "Far Street",
+                "city": "Laval",
+                "province_state": "Quebec",
+                "latitude": 45.6000,
+                "longitude": -73.7000,
+            },
+        )
+
+        # Search with a small 2km radius -- should find only the close building
+        response = await client.get(
+            "/api/v1/buildings/near/45.5017/-73.5673?radius_km=2",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        names = [b["name"] for b in data]
+        assert "Close Radius Building" in names
+        assert "Far Radius Building" not in names
+
+    @pytest.mark.asyncio
+    async def test_get_buildings_near_location_empty(
+        self, client: AsyncClient, admin_user: User, test_agency: Agency
+    ):
+        """Getting buildings near a remote location should return an empty list
+        when no buildings exist within the search radius."""
+        token = await self.get_admin_token(client)
+
+        # Create a building in Montreal
+        await client.post(
+            "/api/v1/buildings",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "name": "Montreal Only Building",
+                "street_name": "Local Street",
+                "city": "Montreal",
+                "province_state": "Quebec",
+                "latitude": 45.5017,
+                "longitude": -73.5673,
+            },
+        )
+
+        # Search near a location far away (Toronto area) with a small radius
+        response = await client.get(
+            "/api/v1/buildings/near/43.6532/-79.3832?radius_km=1",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        assert len(data) == 0
+
+    # ==================== Search by Name ====================
+
+    @pytest.mark.asyncio
+    async def test_search_buildings_by_name(
+        self, client: AsyncClient, admin_user: User, test_agency: Agency
+    ):
+        """Searching buildings by name via the /search endpoint should return
+        matching buildings."""
+        token = await self.get_admin_token(client)
+
+        # Create buildings with distinctive names
+        await client.post(
+            "/api/v1/buildings",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "name": "Xylocarpa Community Center",
+                "street_name": "Elm Street",
+                "city": "Montreal",
+                "province_state": "Quebec",
+                "latitude": 45.5100,
+                "longitude": -73.5700,
+            },
+        )
+        await client.post(
+            "/api/v1/buildings",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "name": "Downtown Office Tower",
+                "street_name": "King Street",
+                "city": "Montreal",
+                "province_state": "Quebec",
+                "latitude": 45.5050,
+                "longitude": -73.5650,
+            },
+        )
+
+        # Search for the distinctive name
+        response = await client.get(
+            "/api/v1/buildings/search?q=Xylocarpa",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        assert len(data) >= 1
+        assert any("Xylocarpa" in b["name"] for b in data)
+        # The unrelated building should not appear
+        assert not any("Downtown Office Tower" in b["name"] for b in data)
+
+    @pytest.mark.asyncio
+    async def test_search_buildings_empty_query(
+        self, client: AsyncClient, admin_user: User, test_agency: Agency
+    ):
+        """Searching with a query that matches nothing should return an empty
+        list, and searching with a missing query should return 422."""
+        token = await self.get_admin_token(client)
+
+        # Create a building so the database is not empty
+        await client.post(
+            "/api/v1/buildings",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "name": "Normal Building",
+                "street_name": "Normal Street",
+                "city": "Montreal",
+                "province_state": "Quebec",
+                "latitude": 45.5017,
+                "longitude": -73.5673,
+            },
+        )
+
+        # Search with a query that will match nothing
+        response = await client.get(
+            "/api/v1/buildings/search?q=ZzNonExistent999",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        assert len(data) == 0
+
+        # Search with no query parameter at all -- should be rejected (422)
+        response_no_q = await client.get(
+            "/api/v1/buildings/search",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response_no_q.status_code == 422

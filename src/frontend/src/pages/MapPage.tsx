@@ -3,16 +3,19 @@
  */
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useIncidentStore } from '../stores/incidentStore';
 import { useResourceStore } from '../stores/resourceStore';
 import { useAlertStore } from '../stores/alertStore';
+import { useBuildingMapStore } from '../stores/buildingMapStore';
 import { usePolling } from '../hooks/useInterval';
 import { buildingsApi } from '../services/api';
 import { Badge, Modal, Spinner } from '../components/ui';
 import { FloorPlanViewer } from '../components/buildings';
+import { BuildingLayer, BuildingSearch, NearbyBuildingsPanel } from '../components/map';
 import type { LocationMarker } from '../components/buildings';
 import {
   getPriorityLabel,
@@ -50,8 +53,6 @@ const createIcon = (color: string, size: number = 24) => {
 const incidentIcon = createIcon('#EF4444', 28); // Red
 const resourceIcon = createIcon('#10B981', 24); // Green
 const alertIcon = createIcon('#F59E0B', 26); // Yellow
-const buildingIcon = createIcon('#8B5CF6', 22); // Purple
-
 // Priority-based incident icons
 const incidentIcons: Record<number, L.DivIcon> = {
   1: createIcon('#DC2626', 32), // Critical - larger
@@ -61,18 +62,22 @@ const incidentIcons: Record<number, L.DivIcon> = {
   5: createIcon('#6B7280', 22), // Info
 };
 
-// Hazard level building icons
-const buildingIcons: Record<string, L.DivIcon> = {
-  low: createIcon('#8B5CF6', 20), // Purple
-  moderate: createIcon('#F59E0B', 22), // Yellow
-  high: createIcon('#F97316', 24), // Orange
-  extreme: createIcon('#DC2626', 26), // Red
-};
-
 export function MapPage() {
+  const navigate = useNavigate();
   const { activeIncidents, fetchActiveIncidents } = useIncidentStore();
   const { resources, fetchResources } = useResourceStore();
   const { pendingAlerts, fetchPendingAlerts } = useAlertStore();
+  const {
+    mapBuildings,
+    selectedBuilding: selectedMapBuilding,
+    nearbyBuildings,
+    isLoadingNearby,
+    showClustering,
+    fetchMapBuildings,
+    fetchNearbyBuildings,
+    selectBuilding: selectMapBuilding,
+    clearNearby,
+  } = useBuildingMapStore();
 
   const [showIncidents, setShowIncidents] = useState(true);
   const [showResources, setShowResources] = useState(true);
@@ -104,7 +109,8 @@ export function MapPage() {
   // Initial fetch
   useEffect(() => {
     fetchBuildings();
-  }, [fetchBuildings]);
+    fetchMapBuildings();
+  }, [fetchBuildings, fetchMapBuildings]);
 
   // Fetch data
   usePolling(fetchActiveIncidents, POLL_INTERVAL);
@@ -131,6 +137,16 @@ export function MapPage() {
     () => buildings.filter((b) => b.latitude && b.longitude),
     [buildings]
   );
+
+  // Fetch nearby buildings when an incident is selected
+  useEffect(() => {
+    if (selectedItem?.type === 'incident') {
+      const incident = selectedItem.item as Incident;
+      if (incident.latitude && incident.longitude) {
+        fetchNearbyBuildings(incident.latitude, incident.longitude, 2);
+      }
+    }
+  }, [selectedItem, fetchNearbyBuildings]);
 
   // Handle building click for floor plans
   const handleBuildingClick = useCallback(async (building: Building) => {
@@ -189,6 +205,20 @@ export function MapPage() {
           </div>
         </div>
 
+        {/* Building Search */}
+        <div className="p-4 border-b border-gray-200">
+          <BuildingSearch
+            className="mb-0"
+            onSelectBuilding={(building) => {
+              selectMapBuilding(building);
+              setSelectedItem({ type: 'building', item: building });
+            }}
+            onZoomToBuilding={(_building) => {
+              // Zoom handled via map ref if available
+            }}
+          />
+        </div>
+
         {/* Selected Item Detail */}
         {selectedItem && (
           <div className="p-4 border-b border-gray-200 bg-gray-50">
@@ -208,6 +238,24 @@ export function MapPage() {
             <SelectedItemDetail
               item={selectedItem}
               onViewBuildingDetails={handleViewBuildingDetails}
+            />
+          </div>
+        )}
+
+        {/* Nearby Buildings Panel (shown when an incident is selected) */}
+        {selectedItem?.type === 'incident' && nearbyBuildings.length > 0 && (
+          <div className="p-4 border-b border-gray-200">
+            <NearbyBuildingsPanel
+              incident={selectedItem.item as Incident}
+              buildings={nearbyBuildings}
+              isLoading={isLoadingNearby}
+              onBuildingSelect={(building) => {
+                selectMapBuilding(building);
+                setSelectedItem({ type: 'building', item: building });
+              }}
+              onViewDetails={(building) => navigate(`/buildings/${building.id}`)}
+              onClose={clearNearby}
+              className="mt-0"
             />
           </div>
         )}
@@ -368,53 +416,21 @@ export function MapPage() {
             ))}
 
           {/* Buildings */}
-          {showBuildings &&
-            buildingsWithCoords.map((building) => (
-              <Marker
-                key={`building-${building.id}`}
-                position={[building.latitude, building.longitude]}
-                icon={buildingIcons[building.hazard_level] || buildingIcon}
-                eventHandlers={{
-                  click: () => handleBuildingClick(building),
-                }}
-              >
-                <Popup>
-                  <div className="min-w-48">
-                    <p className="font-semibold">{building.name}</p>
-                    <p className="text-sm text-gray-600">{building.full_address}</p>
-                    <div className="mt-2 flex gap-2 flex-wrap">
-                      <Badge size="sm" variant="secondary">
-                        {building.building_type.replace('_', ' ')}
-                      </Badge>
-                      <Badge
-                        size="sm"
-                        className={cn(
-                          building.hazard_level === 'extreme' && 'bg-red-100 text-red-700',
-                          building.hazard_level === 'high' && 'bg-orange-100 text-orange-700',
-                          building.hazard_level === 'moderate' && 'bg-yellow-100 text-yellow-700',
-                          building.hazard_level === 'low' && 'bg-green-100 text-green-700'
-                        )}
-                      >
-                        {building.hazard_level}
-                      </Badge>
-                    </div>
-                    <div className="mt-2 text-xs text-gray-500">
-                      {building.total_floors} floor{building.total_floors !== 1 && 's'}
-                      {building.has_hazmat && ' | HAZMAT'}
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleViewBuildingDetails(building);
-                      }}
-                      className="mt-2 text-sm text-blue-600 hover:underline"
-                    >
-                      View Details & Floor Plans
-                    </button>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
+          {showBuildings && (
+            <BuildingLayer
+              buildings={mapBuildings.length > 0 ? mapBuildings : buildings}
+              selectedBuildingId={selectedMapBuilding?.id || (selectedItem?.type === 'building' ? (selectedItem.item as Building).id : null)}
+              onBuildingSelect={(building) => {
+                selectMapBuilding(building);
+                setSelectedItem({ type: 'building', item: building });
+              }}
+              onViewDetails={(building) => navigate(`/buildings/${building.id}`)}
+              onViewFloorPlans={(building) => {
+                handleBuildingClick(building);
+              }}
+              enableClustering={showClustering}
+            />
+          )}
 
           <MapControls />
         </MapContainer>

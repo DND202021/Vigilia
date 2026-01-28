@@ -377,9 +377,9 @@ class TestFloorPlanUploadAPI:
             files={"file": ("floor_plan.png", io.BytesIO(png_data), "image/png")},
         )
 
-        assert response.status_code == 200, f"Upload failed: {response.json()}"
+        assert response.status_code == 201, f"Upload failed: {response.json()}"
         data = response.json()
-        assert "file_url" in data
+        assert "plan_file_url" in data
         assert data["file_type"] == "png"
 
     @pytest.mark.asyncio
@@ -398,9 +398,9 @@ class TestFloorPlanUploadAPI:
             files={"file": ("floor_plan.pdf", io.BytesIO(pdf_data), "application/pdf")},
         )
 
-        assert response.status_code == 200, f"Upload failed: {response.json()}"
+        assert response.status_code == 201, f"Upload failed: {response.json()}"
         data = response.json()
-        assert "file_url" in data
+        assert "plan_file_url" in data
         assert data["file_type"] == "pdf"
 
     @pytest.mark.asyncio
@@ -472,10 +472,10 @@ class TestFloorPlanUploadAPI:
             params={"floor_number": 0},
             files={"file": ("floor.png", io.BytesIO(png_data), "image/png")},
         )
-        assert upload_response.status_code == 200
+        assert upload_response.status_code == 201
 
         # Get the filename from the URL
-        file_url = upload_response.json()["file_url"]
+        file_url = upload_response.json()["plan_file_url"]
         filename = file_url.split("/")[-1]
 
         # Retrieve the file
@@ -490,7 +490,7 @@ class TestFloorPlanUploadAPI:
 
     @pytest.mark.asyncio
     async def test_delete_floor_plan_file(self, client: AsyncClient, admin_user: User, test_agency: Agency):
-        """Test deleting an uploaded floor plan file."""
+        """Test deleting an uploaded floor plan via floor plan ID."""
         token = await self.get_admin_token(client)
         building_id = await self.create_test_building(client, token)
 
@@ -503,22 +503,21 @@ class TestFloorPlanUploadAPI:
             params={"floor_number": 0},
             files={"file": ("floor.png", io.BytesIO(png_data), "image/png")},
         )
-        assert upload_response.status_code == 200
+        assert upload_response.status_code == 201
 
-        file_url = upload_response.json()["file_url"]
-        filename = file_url.split("/")[-1]
+        floor_plan_id = upload_response.json()["id"]
 
-        # Delete the file
+        # Delete the floor plan record
         delete_response = await client.delete(
-            f"/api/v1/buildings/{building_id}/floor-plans/files/{filename}",
+            f"/api/v1/buildings/floors/{floor_plan_id}",
             headers={"Authorization": f"Bearer {token}"},
         )
 
         assert delete_response.status_code == 204
 
-        # Verify file is deleted
+        # Verify floor plan is deleted
         get_response = await client.get(
-            f"/api/v1/buildings/{building_id}/floor-plans/files/{filename}",
+            f"/api/v1/buildings/{building_id}/floors/0",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert get_response.status_code == 404

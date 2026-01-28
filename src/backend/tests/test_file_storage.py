@@ -322,9 +322,12 @@ class TestFileStoragePermissions:
             assert building_path.exists()
             assert os.access(building_path, os.W_OK)
 
+    @pytest.mark.skipif(
+        os.getuid() == 0,
+        reason="Permission tests don't work as root"
+    )
     def test_storage_directory_creation_fails_gracefully(self):
         """Test that we get a clear error when directory creation fails."""
-        import os
         import stat
         import tempfile
 
@@ -344,10 +347,13 @@ class TestFileStoragePermissions:
                 # Restore permissions for cleanup
                 os.chmod(readonly_dir, stat.S_IRWXU)
 
+    @pytest.mark.skipif(
+        os.getuid() == 0,
+        reason="Permission tests don't work as root"
+    )
     @pytest.mark.asyncio
     async def test_save_file_permission_error(self):
         """Test that save_floor_plan handles permission errors gracefully."""
-        import os
         import stat
         import tempfile
 
