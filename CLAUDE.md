@@ -280,6 +280,15 @@ See `.env.example` for all configuration options.
 - [Functional Requirements](docs/requirements/FUNCTIONAL_REQUIREMENTS.md)
 - [Security Requirements](docs/requirements/SECURITY_REQUIREMENTS.md)
 
+## Git Configuration
+
+**Remote URL**: Use SSH for pushing (HTTPS doesn't have credentials configured):
+```bash
+git remote set-url origin git@github.com:DND202021/Vigilia.git
+```
+
+**Push command**: Just use `git push` after setting SSH URL.
+
 ## Local Deployment
 
 The application is deployed locally via Docker on a server at **http://10.0.0.13:83/**
