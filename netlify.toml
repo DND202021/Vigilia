@@ -1,0 +1,42 @@
+# Netlify configuration for ERIOP Frontend
+
+[build]
+  # Base directory where frontend lives
+  base = "src/frontend"
+  # Build command
+  command = "npm run build"
+  # Directory to publish (relative to the base directory)
+  publish = "dist"
+
+[build.environment]
+  # Node version
+  NODE_VERSION = "20"
+  # API URL - set this in Netlify UI or override here
+  # VITE_API_URL = "https://your-backend-url.com/api/v1"
+
+# SPA redirect - all routes go to index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Security headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Cache static assets
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Don't cache the index.html
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
