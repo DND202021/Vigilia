@@ -90,7 +90,7 @@ services:
     container_name: eriop-proxy
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "83:80"
     volumes:
       - ./infrastructure/nginx/nginx.local.conf:/etc/nginx/nginx.conf:ro
     depends_on:
