@@ -3,17 +3,29 @@
 ## Accès
 - **Serveur**: 10.0.0.13
 - **User SSH**: dnoiseux
+- **Password SSH**: 4541linux
 - **Chemin projet**: `/home/dnoiseux/projects/Vigilia/Vigilia`
 
 ## URLs
 - **Local**: http://10.0.0.13:83
 - **Externe**: https://vigilia.4541f.duckdns.org
-- **NPM**: http://10.0.0.13:81/nginx/proxy
+- **NPM**: http://10.0.0.13:81
+- **Portainer**: http://10.0.0.13:9000
+- **n8n**: https://n8n.4541f.duckdns.org
 - **Swagger**: https://vigilia.4541f.duckdns.org/api/docs
 
-## Credentials Admin
+## Credentials Vigilia Admin
 - **Email**: admin@vigilia.com
 - **Password**: Admin123Strong
+
+## Credentials NPM (Nginx Proxy Manager)
+- **Email**: noiseux@gmail.com
+- **Password**: 4541linux
+
+## Credentials n8n
+- **URL**: https://n8n.4541f.duckdns.org
+- **Email**: (set during owner setup)
+- **Password**: (set during owner setup)
 
 ## Conteneurs Docker
 - `eriop-postgres` - Base de données PostgreSQL/TimescaleDB

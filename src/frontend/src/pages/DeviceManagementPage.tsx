@@ -168,7 +168,9 @@ export function DeviceManagementPage() {
                       <span className="text-xl mr-3">{getDeviceTypeIcon(device.device_type)}</span>
                       <div>
                         <div className="font-medium text-gray-900">{device.name}</div>
-                        <div className="text-sm text-gray-500">{device.serial_number || device.ip_address || 'No ID'}</div>
+                        {(device.serial_number || device.ip_address) && (
+                          <div className="text-sm text-gray-500">{device.serial_number || device.ip_address}</div>
+                        )}
                       </div>
                     </div>
                   </td>

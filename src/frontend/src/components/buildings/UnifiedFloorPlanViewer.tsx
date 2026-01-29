@@ -512,8 +512,8 @@ export function UnifiedFloorPlanViewer({
             </div>
           )}
 
-          {/* Error state */}
-          {imageError && (
+          {/* Error state - only show if there was a URL to load that failed */}
+          {imageError && rawImgSrc && (
             <div className="text-center text-red-500 p-8">
               <svg
                 className="w-16 h-16 mx-auto mb-4"
