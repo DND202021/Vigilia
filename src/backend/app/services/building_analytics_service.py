@@ -412,10 +412,11 @@ class BuildingAnalyticsService:
         total = total_result.scalar() or 0
 
         # Get completed count
+        # Use .value to get lowercase string for PostgreSQL enum comparison
         completed_query = select(func.count(Inspection.id)).where(
             and_(
                 Inspection.building_id == building_id,
-                Inspection.status == InspectionStatus.COMPLETED,
+                Inspection.status == InspectionStatus.COMPLETED.value,
             )
         )
         completed_result = await self.db.execute(completed_query)
@@ -425,7 +426,7 @@ class BuildingAnalyticsService:
         scheduled_query = select(func.count(Inspection.id)).where(
             and_(
                 Inspection.building_id == building_id,
-                Inspection.status == InspectionStatus.SCHEDULED,
+                Inspection.status == InspectionStatus.SCHEDULED.value,
                 Inspection.scheduled_date >= today,
             )
         )
@@ -436,7 +437,7 @@ class BuildingAnalyticsService:
         overdue_query = select(func.count(Inspection.id)).where(
             and_(
                 Inspection.building_id == building_id,
-                Inspection.status.in_([InspectionStatus.SCHEDULED, InspectionStatus.OVERDUE]),
+                Inspection.status.in_([InspectionStatus.SCHEDULED.value, InspectionStatus.OVERDUE.value]),
                 Inspection.scheduled_date < today,
             )
         )
@@ -454,7 +455,7 @@ class BuildingAnalyticsService:
             .where(
                 and_(
                     Inspection.building_id == building_id,
-                    Inspection.status == InspectionStatus.SCHEDULED,
+                    Inspection.status == InspectionStatus.SCHEDULED.value,
                     Inspection.scheduled_date >= today,
                 )
             )
@@ -479,7 +480,7 @@ class BuildingAnalyticsService:
             .where(
                 and_(
                     Inspection.building_id == building_id,
-                    Inspection.status.in_([InspectionStatus.SCHEDULED, InspectionStatus.OVERDUE]),
+                    Inspection.status.in_([InspectionStatus.SCHEDULED.value, InspectionStatus.OVERDUE.value]),
                     Inspection.scheduled_date < today,
                 )
             )
