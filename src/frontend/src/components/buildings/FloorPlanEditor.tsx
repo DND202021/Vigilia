@@ -230,10 +230,20 @@ export function FloorPlanEditor({
     setPosition({ x: 0, y: 0 });
   }, []);
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setScale((s) => Math.min(Math.max(s * delta, 0.5), 5));
+  // Wheel zoom handler - must use native event listener with { passive: false }
+  // to allow preventDefault() for preventing page scroll during zoom
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      setScale((s) => Math.min(Math.max(s * delta, 0.5), 5));
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
   }, []);
 
   // --- Pan handlers (disabled when editing or dragging marker) ---
@@ -742,7 +752,6 @@ export function FloorPlanEditor({
           'flex-1 overflow-hidden bg-gray-50 relative',
           isEditing ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'
         )}
-        onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
