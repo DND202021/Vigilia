@@ -295,10 +295,41 @@ The application is deployed locally via Docker on a server at **http://10.0.0.13
 
 **Note**: SSH to the server (port 22) is not accessible from the Claude Code environment due to firewall restrictions. Deployment must be done manually from a machine with SSH access.
 
+### Server Access
+- **Server IP:** 10.0.0.13
+- **SSH User:** dnoiseux
+- **Project Path:** `/home/dnoiseux/projects/Vigilia/Vigilia`
+- **Direct Access:** http://10.0.0.13:83/
+
+### Nginx Proxy Manager (NPM)
+- **Admin URL:** http://10.0.0.13:81
+- **Email:** noiseux@gmail.com
+- **Password:** tDSvP1zAHgvilB8MqxjY##\
+- **Vigilia Proxy Host:** `vigilia.4541f.duckdns.org` → forwards to `eriop-proxy:80`
+
+### Netlify Deployment (Frontend)
+- **Site URL:** https://eriop.netlify.app
+- **Environment Variable:** `VITE_API_URL=https://vigilia.4541f.duckdns.org/api/v1`
+- **Config:** `netlify.toml` at repo root with `base = "src/frontend"`
+
+### Docker Containers
+- `eriop-backend` - FastAPI backend (port 8000 internal)
+- `eriop-frontend` - React frontend (port 80 internal)
+- `eriop-proxy` - Nginx reverse proxy (port 83 external → 80 internal)
+- `eriop-db` - PostgreSQL/TimescaleDB
+- `eriop-redis` - Redis cache
+
 ### Deployment Commands (on server)
 ```bash
-cd /home/vigilia/Vigilia
-git pull origin main
+cd /home/dnoiseux/projects/Vigilia/Vigilia
+
+# Git pull doesn't work (no SSH key), use curl instead:
+curl -o docker-compose.local.yml https://raw.githubusercontent.com/DND202021/Vigilia/main/docker-compose.local.yml
+
+# Or for specific files:
+curl -o <path> https://raw.githubusercontent.com/DND202021/Vigilia/main/<path>
+
+# Rebuild and restart
 docker compose -f docker-compose.local.yml down
 docker compose -f docker-compose.local.yml build --no-cache
 docker compose -f docker-compose.local.yml up -d
@@ -307,6 +338,12 @@ docker compose -f docker-compose.local.yml up -d
 ### After deploying new features, run database migrations:
 ```bash
 docker exec -it eriop-backend alembic upgrade head
+```
+
+### Network Configuration
+NPM must be connected to Vigilia network for internal routing:
+```bash
+docker network connect vigilia_default nginx-proxy-manager-app-1
 ```
 
 ## Recent Changes (January 2025 Session)
