@@ -272,6 +272,19 @@ alembic revision --autogenerate -m "description"  # Create migration
 
 See `.env.example` for all configuration options.
 
+### Critical Environment Variable Names
+
+**IMPORTANT:** The Python config in `src/backend/app/core/config.py` uses pydantic-settings which maps environment variables to class attributes. The variable names must match EXACTLY:
+
+| Config Attribute | Environment Variable | Notes |
+|------------------|---------------------|-------|
+| `cors_origins_str` | `CORS_ORIGINS_STR` | **NOT** `CORS_ORIGINS` - comma-separated list of allowed origins |
+| `database_url` | `DATABASE_URL` | PostgreSQL connection string |
+| `redis_url` | `REDIS_URL` | Redis connection string |
+| `secret_key` | `SECRET_KEY` | JWT signing key |
+
+**Common Mistake:** Using `CORS_ORIGINS` instead of `CORS_ORIGINS_STR` will cause CORS errors because the backend won't receive the allowed origins and will use defaults (localhost only).
+
 ## Documentation
 
 - [System Architecture](docs/architecture/SYSTEM_ARCHITECTURE.md)
