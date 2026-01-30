@@ -51,7 +51,7 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       SECRET_KEY: ${SECRET_KEY:?Secret key required}
       ENVIRONMENT: production
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://localhost:3000}
+      CORS_ORIGINS_STR: ${CORS_ORIGINS_STR:-http://localhost,http://localhost:3000}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       PORT: 8000
       FILE_STORAGE_PATH: /data/buildings
