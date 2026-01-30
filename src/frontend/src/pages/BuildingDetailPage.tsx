@@ -37,6 +37,7 @@ import { useDeviceStore } from '../stores/deviceStore';
 import { iotDevicesApi, emergencyPlanningApi } from '../services/api';
 import type { IoTDevice, EmergencyPlanOverview, EmergencyProcedure, EmergencyCheckpoint, RouteWaypoint } from '../types';
 import { Badge, Button, Spinner } from '../components/ui';
+import { toast } from '../stores/toastStore';
 import {
   cn,
   formatDate,
@@ -267,7 +268,11 @@ export function BuildingDetailPage() {
       const plan = await emergencyPlanningApi.getEmergencyPlan(building.id);
       setEmergencyPlan(plan);
     } catch (error) {
-      console.error('Failed to fetch emergency plan:', error);
+      const message = error instanceof Error ? error.message : 'Failed to fetch emergency plan';
+      if (message === 'Network Error') {
+        toast.error('Unable to load emergency plan. Server is unavailable.');
+      }
+      // Non-critical, don't show toast for other errors
     } finally {
       setEmergencyPlanLoading(false);
     }
@@ -484,7 +489,8 @@ export function BuildingDetailPage() {
       setEditingProcedure(undefined);
       setEmergencyEditMode('view');
     } catch (error) {
-      console.error('Failed to save procedure:', error);
+      const message = error instanceof Error ? error.message : 'Failed to save procedure';
+      toast.error(message === 'Network Error' ? 'Unable to save. Server is unavailable.' : message);
     }
   }, [building?.id, fetchEmergencyPlan]);
 
@@ -495,7 +501,8 @@ export function BuildingDetailPage() {
       await emergencyPlanningApi.deleteProcedure(procedureId);
       await fetchEmergencyPlan();
     } catch (error) {
-      console.error('Failed to delete procedure:', error);
+      const message = error instanceof Error ? error.message : 'Failed to delete procedure';
+      toast.error(message === 'Network Error' ? 'Unable to delete. Server is unavailable.' : message);
     }
   }, [fetchEmergencyPlan]);
 
@@ -516,7 +523,8 @@ export function BuildingDetailPage() {
       });
       await fetchEmergencyPlan();
     } catch (error) {
-      console.error('Failed to create route:', error);
+      const message = error instanceof Error ? error.message : 'Failed to create route';
+      toast.error(message === 'Network Error' ? 'Unable to create route. Server is unavailable.' : message);
     }
   }, [building?.id, selectedFloor?.id, emergencyPlan?.routes.length, fetchEmergencyPlan]);
 
@@ -526,7 +534,8 @@ export function BuildingDetailPage() {
       await emergencyPlanningApi.updateRoute(routeId, { waypoints });
       await fetchEmergencyPlan();
     } catch (error) {
-      console.error('Failed to update route:', error);
+      const message = error instanceof Error ? error.message : 'Failed to update route';
+      toast.error(message === 'Network Error' ? 'Unable to update route. Server is unavailable.' : message);
     }
   }, [fetchEmergencyPlan]);
 
@@ -538,7 +547,8 @@ export function BuildingDetailPage() {
       await fetchEmergencyPlan();
       setSelectedRouteId(undefined);
     } catch (error) {
-      console.error('Failed to delete route:', error);
+      const message = error instanceof Error ? error.message : 'Failed to delete route';
+      toast.error(message === 'Network Error' ? 'Unable to delete route. Server is unavailable.' : message);
     }
   }, [fetchEmergencyPlan]);
 
@@ -552,7 +562,8 @@ export function BuildingDetailPage() {
       });
       await fetchEmergencyPlan();
     } catch (error) {
-      console.error('Failed to create checkpoint:', error);
+      const message = error instanceof Error ? error.message : 'Failed to create checkpoint';
+      toast.error(message === 'Network Error' ? 'Unable to create checkpoint. Server is unavailable.' : message);
     }
   }, [building?.id, fetchEmergencyPlan]);
 
@@ -562,7 +573,8 @@ export function BuildingDetailPage() {
       await emergencyPlanningApi.updateCheckpoint(checkpointId, data);
       await fetchEmergencyPlan();
     } catch (error) {
-      console.error('Failed to update checkpoint:', error);
+      const message = error instanceof Error ? error.message : 'Failed to update checkpoint';
+      toast.error(message === 'Network Error' ? 'Unable to update checkpoint. Server is unavailable.' : message);
     }
   }, [fetchEmergencyPlan]);
 
@@ -574,7 +586,8 @@ export function BuildingDetailPage() {
       await fetchEmergencyPlan();
       setSelectedCheckpointId(undefined);
     } catch (error) {
-      console.error('Failed to delete checkpoint:', error);
+      const message = error instanceof Error ? error.message : 'Failed to delete checkpoint';
+      toast.error(message === 'Network Error' ? 'Unable to delete checkpoint. Server is unavailable.' : message);
     }
   }, [fetchEmergencyPlan]);
 

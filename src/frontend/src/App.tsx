@@ -9,6 +9,7 @@ import { useAuthStore } from './stores/authStore';
 import { useWebSocket } from './hooks/useWebSocket';
 import { Layout, ProtectedRoute } from './components/layout';
 import { Spinner } from './components/ui';
+import { ToastContainer } from './components/ui/Toast';
 
 // Lazy load pages for code-splitting
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
@@ -66,6 +67,7 @@ function App() {
 
   return (
     <Layout>
+      <ToastContainer />
       <Suspense fallback={<PageLoader />}>
         <Routes>
           {/* Public routes */}

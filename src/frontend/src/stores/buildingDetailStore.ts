@@ -90,7 +90,13 @@ export const useBuildingDetailStore = create<BuildingDetailStore>((set, get) => 
         get().fetchAlertsForFloor(ground.id);
       }
     } catch (error) {
-      console.error('Failed to load floor plans:', error);
+      const message = error instanceof Error ? error.message : 'Failed to load floor plans';
+      // Network errors get a user-friendly message
+      if (message === 'Network Error') {
+        set({ error: 'Unable to connect to server. Please check your connection.' });
+      } else {
+        set({ error: message });
+      }
     }
   },
 
@@ -113,8 +119,12 @@ export const useBuildingDetailStore = create<BuildingDetailStore>((set, get) => 
       });
       set({ devices: response.items, isLoadingDevices: false });
     } catch (error) {
-      console.error('Failed to fetch devices:', error);
-      set({ devices: [], isLoadingDevices: false });
+      const message = error instanceof Error ? error.message : 'Failed to fetch devices';
+      if (message === 'Network Error') {
+        set({ error: 'Unable to load devices. Server is unavailable.', devices: [], isLoadingDevices: false });
+      } else {
+        set({ error: message, devices: [], isLoadingDevices: false });
+      }
     }
   },
 
@@ -126,8 +136,12 @@ export const useBuildingDetailStore = create<BuildingDetailStore>((set, get) => 
       });
       set({ alerts: response.items, isLoadingAlerts: false });
     } catch (error) {
-      console.error('Failed to fetch floor alerts:', error);
-      set({ alerts: [], isLoadingAlerts: false });
+      const message = error instanceof Error ? error.message : 'Failed to fetch alerts';
+      if (message === 'Network Error') {
+        set({ error: 'Unable to load alerts. Server is unavailable.', alerts: [], isLoadingAlerts: false });
+      } else {
+        set({ error: message, alerts: [], isLoadingAlerts: false });
+      }
     }
   },
 
