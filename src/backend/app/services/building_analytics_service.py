@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, func, cast, String
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.device import IoTDevice, DeviceType, DeviceStatus
@@ -412,11 +412,11 @@ class BuildingAnalyticsService:
         total = total_result.scalar() or 0
 
         # Get completed count
-        # Use literal string for PostgreSQL enum comparison
+        # Cast enum to text for PostgreSQL comparison (bypasses SQLAlchemy enum handling)
         completed_query = select(func.count(Inspection.id)).where(
             and_(
                 Inspection.building_id == building_id,
-                Inspection.status == "completed",
+                cast(Inspection.status, String) == "completed",
             )
         )
         completed_result = await self.db.execute(completed_query)
@@ -426,7 +426,7 @@ class BuildingAnalyticsService:
         scheduled_query = select(func.count(Inspection.id)).where(
             and_(
                 Inspection.building_id == building_id,
-                Inspection.status == "scheduled",
+                cast(Inspection.status, String) == "scheduled",
                 Inspection.scheduled_date >= today,
             )
         )
@@ -437,7 +437,7 @@ class BuildingAnalyticsService:
         overdue_query = select(func.count(Inspection.id)).where(
             and_(
                 Inspection.building_id == building_id,
-                Inspection.status.in_(["scheduled", "overdue"]),
+                cast(Inspection.status, String).in_(["scheduled", "overdue"]),
                 Inspection.scheduled_date < today,
             )
         )
@@ -455,7 +455,7 @@ class BuildingAnalyticsService:
             .where(
                 and_(
                     Inspection.building_id == building_id,
-                    Inspection.status == "scheduled",
+                    cast(Inspection.status, String) == "scheduled",
                     Inspection.scheduled_date >= today,
                 )
             )
@@ -480,7 +480,7 @@ class BuildingAnalyticsService:
             .where(
                 and_(
                     Inspection.building_id == building_id,
-                    Inspection.status.in_(["scheduled", "overdue"]),
+                    cast(Inspection.status, String).in_(["scheduled", "overdue"]),
                     Inspection.scheduled_date < today,
                 )
             )
