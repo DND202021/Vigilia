@@ -79,8 +79,7 @@ export const useBuildingMapStore = create<BuildingMapStore>((set) => ({
   fetchMapBuildings: async () => {
     set({ isLoading: true, error: null });
     try {
-      // Backend limits page_size to 100 max
-      const response = await buildingsApi.list({ page_size: 100 });
+      const response = await buildingsApi.list({ page_size: 1000 });
       set({ mapBuildings: response.items, isLoading: false });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to fetch buildings for map';
