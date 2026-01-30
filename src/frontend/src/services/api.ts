@@ -1055,90 +1055,91 @@ export const buildingAnalyticsApi = {
 };
 
 // Emergency Planning API
+// Note: All endpoints use /emergency-planning prefix as defined in backend router
 export const emergencyPlanningApi = {
   // Procedures
   getProcedures: async (buildingId: string, params?: { procedure_type?: string; is_active?: boolean }): Promise<EmergencyProcedure[]> => {
-    const response = await api.get(`/buildings/${buildingId}/procedures`, { params });
+    const response = await api.get(`/emergency-planning/buildings/${buildingId}/procedures`, { params });
     return response.data;
   },
 
   getProcedure: async (id: string): Promise<EmergencyProcedure> => {
-    const response = await api.get(`/procedures/${id}`);
+    const response = await api.get(`/emergency-planning/procedures/${id}`);
     return response.data;
   },
 
   createProcedure: async (buildingId: string, data: Omit<EmergencyProcedure, 'id' | 'created_at' | 'updated_at'>): Promise<EmergencyProcedure> => {
-    const response = await api.post(`/buildings/${buildingId}/procedures`, data);
+    const response = await api.post(`/emergency-planning/buildings/${buildingId}/procedures`, data);
     return response.data;
   },
 
   updateProcedure: async (id: string, data: Partial<EmergencyProcedure>): Promise<EmergencyProcedure> => {
-    const response = await api.patch(`/procedures/${id}`, data);
+    const response = await api.patch(`/emergency-planning/procedures/${id}`, data);
     return response.data;
   },
 
   deleteProcedure: async (id: string): Promise<void> => {
-    await api.delete(`/procedures/${id}`);
+    await api.delete(`/emergency-planning/procedures/${id}`);
   },
 
   // Routes
   getRoutes: async (buildingId: string, params?: { floor_plan_id?: string; route_type?: string; is_active?: boolean }): Promise<EvacuationRoute[]> => {
-    const response = await api.get(`/buildings/${buildingId}/routes`, { params });
+    const response = await api.get(`/emergency-planning/buildings/${buildingId}/routes`, { params });
     return response.data;
   },
 
   getRoute: async (id: string): Promise<EvacuationRoute> => {
-    const response = await api.get(`/routes/${id}`);
+    const response = await api.get(`/emergency-planning/routes/${id}`);
     return response.data;
   },
 
   createRoute: async (buildingId: string, data: Omit<EvacuationRoute, 'id' | 'created_at' | 'updated_at'>): Promise<EvacuationRoute> => {
-    const response = await api.post(`/buildings/${buildingId}/routes`, data);
+    const response = await api.post(`/emergency-planning/buildings/${buildingId}/routes`, data);
     return response.data;
   },
 
   updateRoute: async (id: string, data: Partial<EvacuationRoute>): Promise<EvacuationRoute> => {
-    const response = await api.patch(`/routes/${id}`, data);
+    const response = await api.patch(`/emergency-planning/routes/${id}`, data);
     return response.data;
   },
 
   deleteRoute: async (id: string): Promise<void> => {
-    await api.delete(`/routes/${id}`);
+    await api.delete(`/emergency-planning/routes/${id}`);
   },
 
   // Checkpoints
   getCheckpoints: async (buildingId: string, params?: { floor_plan_id?: string; checkpoint_type?: string; is_active?: boolean }): Promise<EmergencyCheckpoint[]> => {
-    const response = await api.get(`/buildings/${buildingId}/checkpoints`, { params });
+    const response = await api.get(`/emergency-planning/buildings/${buildingId}/checkpoints`, { params });
     return response.data;
   },
 
   getCheckpoint: async (id: string): Promise<EmergencyCheckpoint> => {
-    const response = await api.get(`/checkpoints/${id}`);
+    const response = await api.get(`/emergency-planning/checkpoints/${id}`);
     return response.data;
   },
 
   createCheckpoint: async (buildingId: string, data: Omit<EmergencyCheckpoint, 'id' | 'created_at' | 'updated_at'>): Promise<EmergencyCheckpoint> => {
-    const response = await api.post(`/buildings/${buildingId}/checkpoints`, data);
+    const response = await api.post(`/emergency-planning/buildings/${buildingId}/checkpoints`, data);
     return response.data;
   },
 
   updateCheckpoint: async (id: string, data: Partial<EmergencyCheckpoint>): Promise<EmergencyCheckpoint> => {
-    const response = await api.patch(`/checkpoints/${id}`, data);
+    const response = await api.patch(`/emergency-planning/checkpoints/${id}`, data);
     return response.data;
   },
 
   deleteCheckpoint: async (id: string): Promise<void> => {
-    await api.delete(`/checkpoints/${id}`);
+    await api.delete(`/emergency-planning/checkpoints/${id}`);
   },
 
   // Combined
   getEmergencyPlan: async (buildingId: string): Promise<EmergencyPlanOverview> => {
-    const response = await api.get(`/buildings/${buildingId}/emergency-plan`);
+    const response = await api.get(`/emergency-planning/buildings/${buildingId}/emergency-plan`);
     return response.data;
   },
 
   exportEmergencyPlan: async (buildingId: string): Promise<Blob> => {
-    const response = await api.get(`/buildings/${buildingId}/emergency-plan/export`, { responseType: 'blob' });
+    const response = await api.get(`/emergency-planning/buildings/${buildingId}/emergency-plan/export`, { responseType: 'blob' });
     return response.data;
   },
 };
