@@ -12,6 +12,7 @@
 
 import { useMemo } from 'react';
 import { cn } from '../../utils';
+import { toAbsoluteApiUrl } from '../../services/api';
 import type { Building, FloorPlan, FloorKeyLocation, LocationMarkerCategory } from '../../types';
 import { MARKER_TYPE_CATEGORIES, getMarkerConfig } from '../../types';
 import { MARKER_TYPES, type MarkerType } from './LocationMarker';
@@ -232,7 +233,7 @@ export function FloorPlanPrint({
             {floorPlan.plan_file_url ? (
               <div className="relative">
                 <img
-                  src={floorPlan.plan_file_url}
+                  src={toAbsoluteApiUrl(floorPlan.plan_file_url)}
                   alt={`Floor plan for ${floorDisplayName}`}
                   className="w-full h-auto max-h-[60vh] object-contain print:max-h-[7in]"
                 />

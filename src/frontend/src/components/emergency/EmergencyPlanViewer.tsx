@@ -7,7 +7,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button } from '../ui';
 import { cn, formatDate } from '../../utils';
-import { tokenStorage, emergencyPlanningApi } from '../../services/api';
+import { tokenStorage, emergencyPlanningApi, toAbsoluteApiUrl } from '../../services/api';
 import type {
   EmergencyPlanOverview,
   EmergencyProcedure,
@@ -325,9 +325,11 @@ function FloorPlanView({
   const floorRoutes = routes.filter(r => r.floor_plan_id === floorPlan.id && r.is_active);
   const floorCheckpoints = checkpoints.filter(c => c.floor_plan_id === floorPlan.id && c.is_active);
 
-  // Auth image loading
+  // Auth image loading - convert relative URL to absolute
+  const imageUrl = toAbsoluteApiUrl(floorPlan.image_url);
+
   useEffect(() => {
-    if (!floorPlan.image_url) return;
+    if (!imageUrl) return;
 
     let revoked = false;
     const token = tokenStorage.getAccessToken();
@@ -335,7 +337,7 @@ function FloorPlanView({
     setImageLoaded(false);
     setImageError(false);
 
-    fetch(floorPlan.image_url, {
+    fetch(imageUrl, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then((res) => {
@@ -360,7 +362,7 @@ function FloorPlanView({
         URL.revokeObjectURL(authImageUrl);
       }
     };
-  }, [floorPlan.image_url]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [imageUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Zoom controls
   const zoomIn = useCallback(() => setScale((s) => Math.min(s * 1.2, 5)), []);

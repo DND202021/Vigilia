@@ -11,7 +11,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '../../utils';
-import { tokenStorage } from '../../services/api';
+import { tokenStorage, toAbsoluteApiUrl } from '../../services/api';
 import type { FloorPlan, FloorKeyLocation, IoTDevice, DeviceType, DeviceStatus } from '../../types';
 
 // --- Marker types (from FloorPlanViewer) ---
@@ -147,7 +147,7 @@ export function UnifiedFloorPlanViewer({
 
   // --- Auth image loading ---
   const [authImageUrl, setAuthImageUrl] = useState<string | null>(null);
-  const rawImgSrc = floorPlan.plan_file_url || floorPlan.plan_thumbnail_url;
+  const rawImgSrc = toAbsoluteApiUrl(floorPlan.plan_file_url || floorPlan.plan_thumbnail_url);
 
   useEffect(() => {
     if (!rawImgSrc) return;

@@ -317,8 +317,10 @@ The application is deployed locally via Docker on a server at **http://10.0.0.13
 ### Nginx Proxy Manager (NPM)
 - **Admin URL:** http://10.0.0.13:81
 - **Email:** noiseux@gmail.com
-- **Password:** tDSvP1zAHgvilB8MqxjY##\
+- **Password:** TempPass2025!
 - **Vigilia Proxy Host:** `vigilia.4541f.duckdns.org` → forwards to `eriop-proxy:80`
+- **Code Server:** `code.4541f.duckdns.org` → forwards to `10.0.0.13:3001`
+- **Webtop:** `webtop.4541f.duckdns.org` → forwards to `10.0.0.13:3005`
 
 ### Netlify Deployment (Frontend)
 - **Site URL:** https://eriop.netlify.app

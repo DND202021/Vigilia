@@ -15,7 +15,7 @@
 
 import { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react';
 import { cn } from '../../utils';
-import { tokenStorage } from '../../services/api';
+import { tokenStorage, toAbsoluteApiUrl } from '../../services/api';
 import { LocationMarker } from './LocationMarker';
 import { useMarkerStore, initializeMarkersFromFloorPlan } from '../../stores/markerStore';
 import { useFloorPlanSync } from '../../hooks/useFloorPlanSync';
@@ -183,8 +183,8 @@ export function FloorPlanEditor({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [isDirty]);
 
-  // Load authenticated image
-  const rawImgSrc = floorPlan.plan_file_url || floorPlan.plan_thumbnail_url;
+  // Load authenticated image - convert relative URL to absolute
+  const rawImgSrc = toAbsoluteApiUrl(floorPlan.plan_file_url || floorPlan.plan_thumbnail_url);
 
   useEffect(() => {
     if (!rawImgSrc) return;

@@ -5,7 +5,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '../../utils';
-import { tokenStorage } from '../../services/api';
+import { tokenStorage, toAbsoluteApiUrl } from '../../services/api';
 import type { FloorPlan } from '../../types';
 
 // Marker types for different location categories
@@ -168,7 +168,7 @@ export function FloorPlanViewer({
 
   // Fetch image with auth header since <img> tags don't send Authorization headers
   const [authImageUrl, setAuthImageUrl] = useState<string | null>(null);
-  const rawImgSrc = imageUrl || floorPlan.plan_file_url || floorPlan.plan_thumbnail_url;
+  const rawImgSrc = toAbsoluteApiUrl(imageUrl || floorPlan.plan_file_url || floorPlan.plan_thumbnail_url);
 
   useEffect(() => {
     if (!rawImgSrc) return;

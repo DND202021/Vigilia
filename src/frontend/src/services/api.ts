@@ -60,6 +60,38 @@ import type {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
+// Extract the base origin from API_BASE_URL for absolute URL construction
+// e.g., "https://vigilia.4541f.duckdns.org/api/v1" -> "https://vigilia.4541f.duckdns.org"
+const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, '');
+
+/**
+ * Convert a relative API URL to an absolute URL using the backend origin.
+ * Handles URLs like "/api/v1/buildings/.../files/..." that need the backend domain.
+ *
+ * @param relativeUrl - A URL that may be relative (starting with "/api/") or already absolute
+ * @returns Absolute URL with the correct backend origin
+ */
+export function toAbsoluteApiUrl(relativeUrl: string | null | undefined): string {
+  if (!relativeUrl) return '';
+
+  // Already absolute URL
+  if (relativeUrl.startsWith('http://') || relativeUrl.startsWith('https://')) {
+    return relativeUrl;
+  }
+
+  // Relative URL starting with /api/
+  if (relativeUrl.startsWith('/api/')) {
+    return `${API_ORIGIN}${relativeUrl}`;
+  }
+
+  // Other relative URLs - prepend API_BASE_URL
+  if (relativeUrl.startsWith('/')) {
+    return `${API_BASE_URL}${relativeUrl}`;
+  }
+
+  return relativeUrl;
+}
+
 // Token storage keys
 const ACCESS_TOKEN_KEY = 'eriop_access_token';
 const REFRESH_TOKEN_KEY = 'eriop_refresh_token';
