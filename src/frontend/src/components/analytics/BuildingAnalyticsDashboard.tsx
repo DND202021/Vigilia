@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { cn } from '../../utils';
+import { buildingAnalyticsApi } from '../../services/api';
 import { BuildingStatsCards } from './BuildingStatsCards';
 import { DeviceHealthChart, type DeviceHealthData } from './DeviceHealthChart';
 import { IncidentTrendChart } from './IncidentTrendChart';
@@ -178,7 +179,7 @@ export function BuildingAnalyticsDashboard({
     alertBreakdown: null,
   });
 
-  // Fetch analytics data
+  // Fetch analytics data using axios-based API (handles token refresh automatically)
   const fetchAnalytics = useCallback(
     async (showRefreshIndicator = false) => {
       if (showRefreshIndicator) {
@@ -189,106 +190,48 @@ export function BuildingAnalyticsDashboard({
       setError(null);
 
       const days = timeRangeToDays(timeRange);
-      const baseUrl = import.meta.env.VITE_API_URL || '/api/v1';
 
       try {
-        // Fetch all analytics data in parallel
-        const response = await fetch(
-          `${baseUrl}/buildings/${buildingId}/analytics?days=${days}`,
-          {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem('eriop_access_token')}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-
-        if (!response.ok) {
-          // If the combined endpoint doesn't exist, try fetching individual endpoints
-          if (response.status === 404) {
-            // Fetch individual endpoints
-            const [statsRes, devicesRes, incidentsRes, inspectionsRes, alertsRes] =
+        // Try the combined analytics endpoint first
+        const analyticsResponse = await buildingAnalyticsApi.getOverview(buildingId, days);
+        setData({
+          stats: analyticsResponse.stats || null,
+          deviceHealth: analyticsResponse.device_health || null,
+          incidentTrend: analyticsResponse.incident_trend || null,
+          inspectionCompliance: analyticsResponse.inspection_compliance || null,
+          alertBreakdown: analyticsResponse.alert_breakdown || null,
+        });
+      } catch (err) {
+        // If combined endpoint fails with 404, try individual endpoints
+        if ((err as { response?: { status?: number } })?.response?.status === 404) {
+          try {
+            const [deviceHealth, incidentStats, alertBreakdown, inspectionCompliance] =
               await Promise.allSettled([
-                fetch(`${baseUrl}/buildings/${buildingId}/stats`, {
-                  headers: {
-                    Authorization: `Bearer ${localStorage.getItem('eriop_access_token')}`,
-                  },
-                }),
-                fetch(`${baseUrl}/buildings/${buildingId}/devices/health?days=${days}`, {
-                  headers: {
-                    Authorization: `Bearer ${localStorage.getItem('eriop_access_token')}`,
-                  },
-                }),
-                fetch(`${baseUrl}/buildings/${buildingId}/incidents/analytics?days=${days}`, {
-                  headers: {
-                    Authorization: `Bearer ${localStorage.getItem('eriop_access_token')}`,
-                  },
-                }),
-                fetch(`${baseUrl}/buildings/${buildingId}/inspections/analytics`, {
-                  headers: {
-                    Authorization: `Bearer ${localStorage.getItem('eriop_access_token')}`,
-                  },
-                }),
-                fetch(`${baseUrl}/buildings/${buildingId}/alerts/analytics?days=${days}`, {
-                  headers: {
-                    Authorization: `Bearer ${localStorage.getItem('eriop_access_token')}`,
-                  },
-                }),
+                buildingAnalyticsApi.getDeviceHealth(buildingId),
+                buildingAnalyticsApi.getIncidentStats(buildingId, days),
+                buildingAnalyticsApi.getAlertBreakdown(buildingId, days),
+                buildingAnalyticsApi.getInspectionCompliance(buildingId),
               ]);
 
-            const analyticsData: AnalyticsData = {
+            setData({
               stats: null,
-              deviceHealth: null,
-              incidentTrend: null,
-              inspectionCompliance: null,
-              alertBreakdown: null,
-            };
-
-            // Process stats
-            if (statsRes.status === 'fulfilled' && statsRes.value.ok) {
-              analyticsData.stats = await statsRes.value.json();
-            }
-
-            // Process device health
-            if (devicesRes.status === 'fulfilled' && devicesRes.value.ok) {
-              analyticsData.deviceHealth = await devicesRes.value.json();
-            }
-
-            // Process incident trend
-            if (incidentsRes.status === 'fulfilled' && incidentsRes.value.ok) {
-              analyticsData.incidentTrend = await incidentsRes.value.json();
-            }
-
-            // Process inspection compliance
-            if (inspectionsRes.status === 'fulfilled' && inspectionsRes.value.ok) {
-              analyticsData.inspectionCompliance = await inspectionsRes.value.json();
-            }
-
-            // Process alert breakdown
-            if (alertsRes.status === 'fulfilled' && alertsRes.value.ok) {
-              analyticsData.alertBreakdown = await alertsRes.value.json();
-            }
-
-            setData(analyticsData);
-          } else {
-            throw new Error(`Failed to fetch analytics: ${response.statusText}`);
+              deviceHealth: deviceHealth.status === 'fulfilled' ? deviceHealth.value : null,
+              incidentTrend: incidentStats.status === 'fulfilled' ? incidentStats.value : null,
+              alertBreakdown: alertBreakdown.status === 'fulfilled' ? alertBreakdown.value : null,
+              inspectionCompliance: inspectionCompliance.status === 'fulfilled' ? inspectionCompliance.value : null,
+            });
+          } catch (fallbackErr) {
+            const errorMessage =
+              fallbackErr instanceof Error ? fallbackErr.message : 'Failed to load analytics data';
+            setError(errorMessage);
+            console.error('Analytics fetch error:', fallbackErr);
           }
         } else {
-          // Combined endpoint response
-          const analyticsResponse = await response.json();
-          setData({
-            stats: analyticsResponse.stats || null,
-            deviceHealth: analyticsResponse.device_health || null,
-            incidentTrend: analyticsResponse.incident_trend || null,
-            inspectionCompliance: analyticsResponse.inspection_compliance || null,
-            alertBreakdown: analyticsResponse.alert_breakdown || null,
-          });
+          const errorMessage =
+            err instanceof Error ? err.message : 'Failed to load analytics data';
+          setError(errorMessage);
+          console.error('Analytics fetch error:', err);
         }
-      } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : 'Failed to load analytics data';
-        setError(errorMessage);
-        console.error('Analytics fetch error:', err);
       } finally {
         setIsLoading(false);
         setIsRefreshing(false);
