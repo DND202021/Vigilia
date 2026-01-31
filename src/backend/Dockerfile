@@ -39,7 +39,9 @@ RUN pip install --no-cache-dir pip --upgrade && \
     "python-socketio>=5.10.0" \
     "pyotp>=2.9.0" \
     "qrcode[pil]>=7.4.0" \
-    "aiohttp>=3.9.0"
+    "aiohttp>=3.9.0" \
+    "prometheus-fastapi-instrumentator>=6.1.0" \
+    "prometheus-client>=0.19.0"
 
 # Copy application code
 COPY . .
