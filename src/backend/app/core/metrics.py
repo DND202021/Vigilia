@@ -53,39 +53,15 @@ def setup_metrics(app) -> Instrumentator:
         inprogress_labels=True,
     )
 
-    # Add default metrics
-    instrumentator.add(
-        metrics.default(
-            metric_namespace="",
-            metric_subsystem="",
-            should_include_handler=True,
-            should_include_method=True,
-            should_include_status=True,
-            latency_highr_buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
-        )
-    )
+    # Add default metrics (latency, requests total)
+    # v7.x API is simplified - uses default labels automatically
+    instrumentator.add(metrics.default())
 
     # Add request size metric
-    instrumentator.add(
-        metrics.request_size(
-            metric_namespace="",
-            metric_subsystem="",
-            should_include_handler=True,
-            should_include_method=True,
-            should_include_status=True,
-        )
-    )
+    instrumentator.add(metrics.request_size())
 
     # Add response size metric
-    instrumentator.add(
-        metrics.response_size(
-            metric_namespace="",
-            metric_subsystem="",
-            should_include_handler=True,
-            should_include_method=True,
-            should_include_status=True,
-        )
-    )
+    instrumentator.add(metrics.response_size())
 
     # Instrument the app
     instrumentator.instrument(app)
