@@ -71,6 +71,7 @@ export function FloorPlanViewer({
   showLegend = true,
 }: FloorPlanViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -78,6 +79,7 @@ export function FloorPlanViewer({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [selectedMarker, setSelectedMarker] = useState<LocationMarker | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Combine all markers
   const allMarkers: LocationMarker[] = [
@@ -99,6 +101,31 @@ export function FloorPlanViewer({
   const resetView = useCallback(() => {
     setScale(1);
     setPosition({ x: 0, y: 0 });
+  }, []);
+
+  // Fullscreen controls
+  const toggleFullscreen = useCallback(() => {
+    if (!wrapperRef.current) return;
+
+    if (!document.fullscreenElement) {
+      wrapperRef.current.requestFullscreen?.().catch((err) => {
+        console.warn('Failed to enter fullscreen:', err);
+      });
+    } else {
+      document.exitFullscreen?.().catch((err) => {
+        console.warn('Failed to exit fullscreen:', err);
+      });
+    }
+  }, []);
+
+  // Listen for fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
   // Mouse wheel zoom
@@ -209,16 +236,32 @@ export function FloorPlanViewer({
   const activeMarkerTypes = new Set(allMarkers.map((m) => m.type));
 
   return (
-    <div className={cn('flex flex-col h-full', className)}>
+    <div
+      ref={wrapperRef}
+      className={cn(
+        'flex flex-col h-full',
+        isFullscreen && 'fixed inset-0 z-50 bg-gray-900',
+        className
+      )}
+    >
       {/* Controls */}
       {showControls && (
-        <div className="flex items-center justify-between p-2 bg-gray-100 border-b">
+        <div className={cn(
+          'flex items-center justify-between p-2 border-b',
+          isFullscreen ? 'bg-gray-800 border-gray-700' : 'bg-gray-100'
+        )}>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-700">
+            <span className={cn(
+              'text-sm font-medium',
+              isFullscreen ? 'text-gray-100' : 'text-gray-700'
+            )}>
               {floorPlan.floor_name || `Floor ${floorPlan.floor_number}`}
             </span>
             {floorPlan.floor_area_sqm && (
-              <span className="text-xs text-gray-500">
+              <span className={cn(
+                'text-xs',
+                isFullscreen ? 'text-gray-400' : 'text-gray-500'
+              )}>
                 ({floorPlan.floor_area_sqm.toFixed(0)} m²)
               </span>
             )}
@@ -258,6 +301,35 @@ export function FloorPlanViewer({
                   d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
                 />
               </svg>
+            </button>
+            {/* Fullscreen button */}
+            <button
+              onClick={toggleFullscreen}
+              className={cn(
+                'p-1.5 rounded transition-colors ml-1',
+                isFullscreen ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
+              )}
+              title={isFullscreen ? 'Exit Fullscreen (Esc)' : 'Fullscreen'}
+            >
+              {isFullscreen ? (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"
+                  />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"
+                  />
+                </svg>
+              )}
             </button>
           </div>
         </div>

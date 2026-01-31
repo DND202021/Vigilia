@@ -21,8 +21,10 @@ import { useMarkerStore, initializeMarkersFromFloorPlan } from '../../stores/mar
 import { useFloorPlanSync } from '../../hooks/useFloorPlanSync';
 import { PresenceIndicator } from './PresenceIndicator';
 import { DeviceStatusOverlay } from './DeviceStatusOverlay';
+import { DeviceEditSidebar } from './DeviceEditSidebar';
 import { useAuthStore } from '../../stores/authStore';
-import type { FloorPlan, Building, FloorKeyLocation, LocationMarkerType } from '../../types';
+import { useDevicePositionStore } from '../../stores/devicePositionStore';
+import type { FloorPlan, Building, FloorKeyLocation, LocationMarkerType, IoTDevice } from '../../types';
 import { DEFAULT_MARKER_CONFIGS } from '../../types';
 
 // Lazy load modals
@@ -90,9 +92,21 @@ export function FloorPlanEditor({
   const [pendingPosition, setPendingPosition] = useState<{ x: number; y: number } | null>(null);
   const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
   const [containerDimensions, setContainerDimensions] = useState({ width: 0, height: 0 });
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [deviceEditMode, setDeviceEditMode] = useState(false);
+  const [draggingDevice, setDraggingDevice] = useState<IoTDevice | null>(null);
 
   // Auth store for current user
   const { user } = useAuthStore();
+
+  // Device position store for device placement
+  const {
+    positions: devicePositions,
+    addDeviceToFloorPlan,
+    updateDevicePosition,
+    removeDeviceFromFloorPlan,
+    setCurrentFloorPlan: setCurrentDeviceFloorPlan,
+  } = useDevicePositionStore();
 
   // Real-time sync hook
   const {
@@ -228,6 +242,31 @@ export function FloorPlanEditor({
   const resetView = useCallback(() => {
     setScale(1);
     setPosition({ x: 0, y: 0 });
+  }, []);
+
+  // --- Fullscreen controls ---
+  const toggleFullscreen = useCallback(() => {
+    if (!containerRef.current) return;
+
+    if (!document.fullscreenElement) {
+      containerRef.current.parentElement?.requestFullscreen?.().catch((err) => {
+        console.warn('Failed to enter fullscreen:', err);
+      });
+    } else {
+      document.exitFullscreen?.().catch((err) => {
+        console.warn('Failed to exit fullscreen:', err);
+      });
+    }
+  }, []);
+
+  // Listen for fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
   // Wheel zoom handler - must use native event listener with { passive: false }
@@ -496,26 +535,105 @@ export function FloorPlanEditor({
     printWindow.print();
   }, [authImageUrl, building, floorPlan, markers]);
 
+  // --- Device edit mode handlers ---
+  const handleToggleDeviceEditMode = useCallback(() => {
+    if (deviceEditMode) {
+      // Exiting device edit mode
+      setDeviceEditMode(false);
+      setDraggingDevice(null);
+    } else {
+      // Entering device edit mode - exit marker edit mode first
+      if (isEditing) {
+        setEditing(false);
+      }
+      setDeviceEditMode(true);
+      setCurrentDeviceFloorPlan(floorPlan.id);
+    }
+  }, [deviceEditMode, isEditing, setEditing, floorPlan.id, setCurrentDeviceFloorPlan]);
+
+  const handleDeviceDragStart = useCallback((device: IoTDevice) => {
+    setDraggingDevice(device);
+  }, []);
+
+  const handleDeviceDragEnd = useCallback(() => {
+    setDraggingDevice(null);
+  }, []);
+
+  const handleDeviceDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    if (!draggingDevice || !imageRef.current) return;
+
+    const rect = imageRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+    // Clamp to 0-100
+    const clampedX = Math.max(0, Math.min(100, x));
+    const clampedY = Math.max(0, Math.min(100, y));
+
+    // Check if device is already placed (has position in store)
+    const existingPos = devicePositions[draggingDevice.id];
+    if (existingPos) {
+      // Update position
+      await updateDevicePosition(draggingDevice.id, clampedX, clampedY);
+    } else {
+      // Add new device to floor plan
+      await addDeviceToFloorPlan(
+        draggingDevice.id,
+        clampedX,
+        clampedY,
+        draggingDevice.name,
+        draggingDevice.device_type,
+        draggingDevice.status
+      );
+    }
+
+    setDraggingDevice(null);
+  }, [draggingDevice, devicePositions, updateDevicePosition, addDeviceToFloorPlan]);
+
+  const handleDevicePositionUpdate = useCallback(async (deviceId: string, x: number, y: number) => {
+    await updateDevicePosition(deviceId, x, y);
+  }, [updateDevicePosition]);
+
+  const handleDeviceRemove = useCallback(async (deviceId: string) => {
+    await removeDeviceFromFloorPlan(deviceId);
+  }, [removeDeviceFromFloorPlan]);
+
+  // Get list of placed device IDs
+  const placedDeviceIds = Object.keys(devicePositions).filter(
+    id => devicePositions[id]?.floor_plan_id === floorPlan.id
+  );
+
   return (
-    <div className={cn('flex flex-col h-full', className)}>
+    <div className={cn(
+      'flex flex-col h-full',
+      isFullscreen && 'fixed inset-0 z-50 bg-gray-900',
+      className
+    )}>
       {/* Toolbar */}
-      <div className="flex items-center justify-between p-2 bg-gray-100 border-b gap-2 flex-wrap">
+      <div className={cn(
+        'flex items-center justify-between p-2 border-b gap-2 flex-wrap',
+        isFullscreen ? 'bg-gray-800 border-gray-700' : 'bg-gray-100'
+      )}>
         {/* Left: Floor info and edit toggle */}
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-700">
             {floorPlan.floor_name || `Floor ${floorPlan.floor_number}`}
           </span>
 
-          {/* Edit mode toggle */}
+          {/* Marker edit mode toggle */}
           <button
             onClick={handleToggleEditMode}
+            disabled={deviceEditMode}
             className={cn(
               'p-1.5 rounded transition-colors',
               isEditing
                 ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                : 'hover:bg-gray-200 text-gray-600'
+                : deviceEditMode
+                  ? 'text-gray-400 cursor-not-allowed'
+                  : 'hover:bg-gray-200 text-gray-600'
             )}
-            title={isEditing ? 'Exit Edit Mode' : 'Enter Edit Mode'}
+            title={isEditing ? 'Exit Marker Edit Mode' : 'Edit Markers'}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -523,6 +641,30 @@ export function FloorPlanEditor({
                 strokeLinejoin="round"
                 strokeWidth={2}
                 d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+              />
+            </svg>
+          </button>
+
+          {/* Device edit mode toggle */}
+          <button
+            onClick={handleToggleDeviceEditMode}
+            disabled={isEditing}
+            className={cn(
+              'p-1.5 rounded transition-colors',
+              deviceEditMode
+                ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                : isEditing
+                  ? 'text-gray-400 cursor-not-allowed'
+                  : 'hover:bg-gray-200 text-gray-600'
+            )}
+            title={deviceEditMode ? 'Exit Device Edit Mode' : 'Edit Devices'}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"
               />
             </svg>
           </button>
@@ -560,6 +702,11 @@ export function FloorPlanEditor({
           {isEditing && (
             <span className="text-xs text-gray-500 hidden sm:inline">
               Click to place, drag to move, double-click to edit
+            </span>
+          )}
+          {deviceEditMode && (
+            <span className="text-xs text-green-600 hidden sm:inline">
+              Drag devices from sidebar, right-click to remove
             </span>
           )}
         </div>
@@ -657,6 +804,36 @@ export function FloorPlanEditor({
               />
             </svg>
           </button>
+
+          {/* Fullscreen button */}
+          <button
+            onClick={toggleFullscreen}
+            className={cn(
+              'p-1.5 rounded transition-colors ml-1',
+              isFullscreen ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
+            )}
+            title={isFullscreen ? 'Exit Fullscreen (Esc)' : 'Fullscreen'}
+          >
+            {isFullscreen ? (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"
+                />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"
+                />
+              </svg>
+            )}
+          </button>
         </div>
       </div>
 
@@ -745,18 +922,22 @@ export function FloorPlanEditor({
         </div>
       )}
 
-      {/* Floor Plan Viewer */}
-      <div
-        ref={containerRef}
-        className={cn(
-          'flex-1 overflow-hidden bg-gray-50 relative',
-          isEditing ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'
-        )}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-      >
+      {/* Main content area - floor plan with optional sidebar */}
+      <div className="flex flex-1 min-h-0">
+        {/* Floor Plan Viewer */}
+        <div
+          ref={containerRef}
+          className={cn(
+            'flex-1 overflow-hidden bg-gray-50 relative',
+            isEditing ? 'cursor-crosshair' : deviceEditMode ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
+          )}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          onDrop={deviceEditMode ? handleDeviceDrop : undefined}
+          onDragOver={deviceEditMode ? (e) => e.preventDefault() : undefined}
+        >
         <div
           className="absolute inset-0 flex items-center justify-center"
           style={{
@@ -804,7 +985,19 @@ export function FloorPlanEditor({
                   containerWidth={containerDimensions.width}
                   containerHeight={containerDimensions.height}
                   showLabels={scale >= 1.5}
+                  isEditable={deviceEditMode}
+                  onDeviceDragEnd={handleDevicePositionUpdate}
+                  onDeviceRemove={handleDeviceRemove}
                 />
+              )}
+
+              {/* Drop indicator when dragging device */}
+              {deviceEditMode && draggingDevice && (
+                <div className="absolute inset-0 bg-green-50/50 border-2 border-dashed border-green-500 rounded flex items-center justify-center pointer-events-none">
+                  <div className="bg-white px-4 py-2 rounded-lg shadow-lg text-sm text-green-600 font-medium">
+                    Drop {draggingDevice.name} here
+                  </div>
+                </div>
               )}
             </div>
           ) : (
@@ -854,6 +1047,19 @@ export function FloorPlanEditor({
             </div>
           )}
         </div>
+      </div>
+
+        {/* Device Edit Sidebar */}
+        {deviceEditMode && (
+          <DeviceEditSidebar
+            buildingId={building.id}
+            floorPlanId={floorPlan.id}
+            placedDeviceIds={placedDeviceIds}
+            onDragStart={handleDeviceDragStart}
+            onDragEnd={handleDeviceDragEnd}
+            isFullscreen={isFullscreen}
+          />
+        )}
       </div>
 
       {/* Legend */}

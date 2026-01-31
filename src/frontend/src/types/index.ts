@@ -723,7 +723,9 @@ export interface IoTDeviceUpdateRequest {
   firmware_version?: string;
   manufacturer?: string;
   building_id?: string;
-  floor_plan_id?: string;
+  floor_plan_id?: string | null;
+  position_x?: number | null;
+  position_y?: number | null;
   location_name?: string;
   config?: Record<string, unknown>;
   capabilities?: string[];

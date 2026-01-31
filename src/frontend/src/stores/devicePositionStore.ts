@@ -19,6 +19,8 @@ interface DevicePositionStore {
   setCurrentFloorPlan: (floorPlanId: string | null) => void;
   loadDevicesForFloorPlan: (floorPlanId: string) => Promise<void>;
   updateDevicePosition: (deviceId: string, x: number, y: number) => Promise<void>;
+  addDeviceToFloorPlan: (deviceId: string, x: number, y: number, deviceName?: string, deviceType?: string, status?: DeviceStatus) => Promise<void>;
+  removeDeviceFromFloorPlan: (deviceId: string) => Promise<void>;
   handleRemotePositionUpdate: (deviceId: string, x: number, y: number, timestamp: string) => void;
   handleRemoteStatusChange: (deviceId: string, status: DeviceStatus, timestamp: string) => void;
   clearPositions: () => void;
@@ -106,6 +108,77 @@ export const useDevicePositionStore = create<DevicePositionStore>((set, get) => 
         },
         error: error instanceof Error ? error.message : 'Failed to update device position',
       }));
+    }
+  },
+
+  addDeviceToFloorPlan: async (deviceId, x, y, _deviceName, _deviceType, status = 'offline') => {
+    const { currentFloorPlanId } = get();
+    if (!currentFloorPlanId) return;
+
+    // Optimistic update
+    const timestamp = new Date().toISOString();
+    set((state) => ({
+      positions: {
+        ...state.positions,
+        [deviceId]: {
+          device_id: deviceId,
+          floor_plan_id: currentFloorPlanId,
+          position_x: x,
+          position_y: y,
+          status,
+          timestamp,
+        },
+      },
+    }));
+
+    try {
+      await iotDevicesApi.updatePosition(deviceId, {
+        position_x: x,
+        position_y: y,
+        floor_plan_id: currentFloorPlanId,
+      });
+    } catch (error) {
+      // Rollback on error - remove the device from positions
+      set((state) => {
+        const newPositions = { ...state.positions };
+        delete newPositions[deviceId];
+        return {
+          positions: newPositions,
+          error: error instanceof Error ? error.message : 'Failed to add device to floor plan',
+        };
+      });
+    }
+  },
+
+  removeDeviceFromFloorPlan: async (deviceId) => {
+    const { positions } = get();
+    const previousPosition = positions[deviceId];
+
+    // Optimistic update - remove from positions
+    set((state) => {
+      const newPositions = { ...state.positions };
+      delete newPositions[deviceId];
+      return { positions: newPositions };
+    });
+
+    try {
+      // Update device with null floor_plan_id and positions
+      await iotDevicesApi.update(deviceId, {
+        floor_plan_id: null,
+        position_x: null,
+        position_y: null,
+      });
+    } catch (error) {
+      // Rollback on error - restore the position
+      if (previousPosition) {
+        set((state) => ({
+          positions: {
+            ...state.positions,
+            [deviceId]: previousPosition,
+          },
+          error: error instanceof Error ? error.message : 'Failed to remove device from floor plan',
+        }));
+      }
     }
   },
 
