@@ -164,6 +164,48 @@ class TestDeviceService:
         assert device.status == DeviceStatus.OFFLINE.value
 
     @pytest.mark.asyncio
+    async def test_create_device_requires_both_coordinates(
+        self,
+        db_session: AsyncSession,
+        test_building: Building,
+        test_floor_plan: FloorPlan,
+    ):
+        """Device creation with floor_plan_id requires both position coordinates."""
+        service = DeviceService(db_session)
+
+        # Should fail with only position_x
+        with pytest.raises(DeviceError) as exc_info:
+            await service.create_device(
+                name="Incomplete Device",
+                device_type=DeviceType.SENSOR,
+                building_id=test_building.id,
+                floor_plan_id=test_floor_plan.id,
+                position_x=50.0,
+            )
+        assert "Both position_x and position_y are required" in str(exc_info.value)
+
+        # Should fail with only position_y
+        with pytest.raises(DeviceError) as exc_info:
+            await service.create_device(
+                name="Incomplete Device",
+                device_type=DeviceType.SENSOR,
+                building_id=test_building.id,
+                floor_plan_id=test_floor_plan.id,
+                position_y=50.0,
+            )
+        assert "Both position_x and position_y are required" in str(exc_info.value)
+
+        # Should fail with neither coordinate
+        with pytest.raises(DeviceError) as exc_info:
+            await service.create_device(
+                name="Incomplete Device",
+                device_type=DeviceType.SENSOR,
+                building_id=test_building.id,
+                floor_plan_id=test_floor_plan.id,
+            )
+        assert "Both position_x and position_y are required" in str(exc_info.value)
+
+    @pytest.mark.asyncio
     async def test_get_device(self, db_session: AsyncSession, test_building: Building):
         """Getting a device by ID should work."""
         service = DeviceService(db_session)
@@ -246,12 +288,16 @@ class TestDeviceService:
             device_type=DeviceType.SENSOR,
             building_id=test_building.id,
             floor_plan_id=test_floor_plan.id,
+            position_x=10.0,
+            position_y=20.0,
         )
         await service.create_device(
             name="Floor 2 Device",
             device_type=DeviceType.SENSOR,
             building_id=test_building.id,
             floor_plan_id=second_floor_plan.id,
+            position_x=30.0,
+            position_y=40.0,
         )
 
         devices, total = await service.list_devices(floor_plan_id=test_floor_plan.id)
@@ -543,18 +589,24 @@ class TestDeviceService:
             device_type=DeviceType.CAMERA,
             building_id=test_building.id,
             floor_plan_id=test_floor_plan.id,
+            position_x=10.0,
+            position_y=20.0,
         )
         await service.create_device(
             name="Floor 1 - Sensor",
             device_type=DeviceType.SENSOR,
             building_id=test_building.id,
             floor_plan_id=test_floor_plan.id,
+            position_x=30.0,
+            position_y=40.0,
         )
         await service.create_device(
             name="Floor 2 - Mic",
             device_type=DeviceType.MICROPHONE,
             building_id=test_building.id,
             floor_plan_id=second_floor_plan.id,
+            position_x=50.0,
+            position_y=60.0,
         )
         await service.create_device(
             name="Unplaced Device",

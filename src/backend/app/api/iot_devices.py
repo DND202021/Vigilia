@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +38,16 @@ class IoTDeviceCreate(BaseModel):
     location_name: str | None = None
     config: dict | None = None
     capabilities: list[str] | None = None
+
+    @model_validator(mode='after')
+    def validate_floor_plan_position(self) -> 'IoTDeviceCreate':
+        """Ensure both coordinates are provided when floor_plan_id is set."""
+        if self.floor_plan_id is not None:
+            if self.position_x is None or self.position_y is None:
+                raise ValueError(
+                    'Both position_x and position_y are required when floor_plan_id is specified'
+                )
+        return self
 
 
 class IoTDeviceUpdate(BaseModel):
