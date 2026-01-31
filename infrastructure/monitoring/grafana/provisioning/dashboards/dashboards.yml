@@ -1,4 +1,4 @@
-# Grafana Dashboard Provisioning
+# Grafana dashboard provisioning
 apiVersion: 1
 
 providers:
@@ -8,8 +8,6 @@ providers:
     folderUid: 'eriop'
     type: file
     disableDeletion: false
-    updateIntervalSeconds: 30
-    allowUiUpdates: true
+    editable: true
     options:
       path: /etc/grafana/dashboards
-      foldersFromFilesStructure: false
