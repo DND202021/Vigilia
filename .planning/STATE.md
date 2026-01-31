@@ -44,6 +44,7 @@
 
 ### Pending Todos
 1. `2025-01-31-project-status-review-action-items.md` - High-level action items from status review
+2. `2026-01-31-floor-plan-device-visibility-navigation.md` - Floor plan device visibility and navigation
 
 ### Key Decisions
 - Phase 10 completed with 10 sprints covering all Building Information Management features
