@@ -68,22 +68,31 @@ export function DeviceEditSidebar({
     loadDevices();
   }, [buildingId]);
 
+  // Helper to check if device has valid position coordinates
+  const hasValidPosition = (device: IoTDevice) =>
+    device.position_x != null && device.position_y != null;
+
+  // A device is "placed" if it has valid coordinates on this floor plan OR was just placed in current session
+  const isDevicePlaced = (device: IoTDevice, placedSet: Set<string>) =>
+    placedSet.has(device.id) || (device.floor_plan_id === floorPlanId && hasValidPosition(device));
+
   // Filter devices
   const filteredDevices = useMemo(() => {
     const placedSet = new Set(placedDeviceIds);
 
     switch (filter) {
       case 'unplaced':
-        return devices.filter(d => !placedSet.has(d.id) && d.floor_plan_id !== floorPlanId);
+        return devices.filter(d => !isDevicePlaced(d, placedSet));
       case 'placed':
-        return devices.filter(d => placedSet.has(d.id) || d.floor_plan_id === floorPlanId);
+        return devices.filter(d => isDevicePlaced(d, placedSet));
       default:
         return devices;
     }
   }, [devices, placedDeviceIds, floorPlanId, filter]);
 
-  const unplacedCount = devices.filter(d => !placedDeviceIds.includes(d.id) && d.floor_plan_id !== floorPlanId).length;
-  const placedCount = devices.filter(d => placedDeviceIds.includes(d.id) || d.floor_plan_id === floorPlanId).length;
+  const placedSet = new Set(placedDeviceIds);
+  const unplacedCount = devices.filter(d => !isDevicePlaced(d, placedSet)).length;
+  const placedCount = devices.filter(d => isDevicePlaced(d, placedSet)).length;
 
   return (
     <div className={cn(
