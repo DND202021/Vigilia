@@ -258,9 +258,12 @@ function DeviceDialog({
     setSaving(true);
     try {
       const data: Record<string, unknown> = { ...form };
-      // Remove empty strings
+      // Remove empty strings (except required fields)
+      const requiredFields = ['name', 'device_type', 'building_id'];
       Object.keys(data).forEach((key) => {
-        if (data[key] === '') data[key] = undefined;
+        if (data[key] === '' && !requiredFields.includes(key)) {
+          data[key] = undefined;
+        }
       });
       await onSave(data);
     } finally {
