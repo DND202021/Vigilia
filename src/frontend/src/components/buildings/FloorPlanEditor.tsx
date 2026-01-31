@@ -286,17 +286,19 @@ export function FloorPlanEditor({
     return () => container.removeEventListener('wheel', handleWheel);
   }, []);
 
-  // --- Pan handlers (disabled when editing or dragging marker) ---
+  // --- Pan handlers (disabled when editing markers or devices) ---
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (e.button !== 0) return;
+      // Don't start pan in device edit mode - interferes with device placement
+      if (deviceEditMode) return;
       // Don't start pan when clicking on markers in edit mode
       if (isEditing && (e.target as HTMLElement).closest('[data-marker]')) return;
 
       setIsDragging(true);
       setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
     },
-    [position, isEditing]
+    [position, isEditing, deviceEditMode]
   );
 
   const handleMouseMove = useCallback(
