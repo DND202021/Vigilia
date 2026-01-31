@@ -5,17 +5,19 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import router as api_router
 from app.core.config import settings
-from app.core.deps import async_session_factory
+from app.core.deps import async_session_factory, get_db, engine
 from app.services.socketio import sio, create_combined_app
 from app.services.fundamentum_mqtt import init_mqtt_client, shutdown_mqtt_client
 from app.services.device_monitor_service import DeviceMonitorService
 from app.services.sound_alert_pipeline import SoundAlertPipeline
 from app.services.notification_service import NotificationService
+from app.services.health_service import health_service
 
 logger = structlog.get_logger()
 
@@ -106,10 +108,33 @@ fastapi_app.add_middleware(
 fastapi_app.include_router(api_router, prefix="/api/v1")
 
 
+# Set up Prometheus metrics instrumentation
+_instrumentator = None
+if settings.metrics_enabled:
+    from app.core.metrics import setup_metrics, expose_metrics
+
+    _instrumentator = setup_metrics(fastapi_app)
+    expose_metrics(fastapi_app, _instrumentator)
+
+
 @fastapi_app.get("/health")
 async def health_check() -> dict[str, str]:
     """Health check endpoint for Kubernetes probes."""
     return {"status": "healthy", "version": "0.1.0"}
+
+
+@fastapi_app.get("/health/live")
+async def liveness_check() -> dict:
+    """Liveness probe - checks if application is running."""
+    result = health_service.get_liveness()
+    return result.to_dict()
+
+
+@fastapi_app.get("/health/ready")
+async def readiness_check(db: AsyncSession = Depends(get_db)) -> dict:
+    """Readiness probe - checks if application can serve traffic."""
+    result = await health_service.get_readiness(db, engine)
+    return result.to_dict()
 
 
 # Create combined ASGI app with Socket.IO wrapping FastAPI

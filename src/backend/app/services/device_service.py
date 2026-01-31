@@ -41,6 +41,8 @@ class DeviceService:
         latitude: float | None = None,
         longitude: float | None = None,
         location_name: str | None = None,
+        icon_type: str | None = None,
+        icon_color: str | None = None,
         config: dict | None = None,
         capabilities: list | None = None,
     ) -> IoTDevice:
@@ -69,6 +71,8 @@ class DeviceService:
             latitude=latitude,
             longitude=longitude,
             location_name=location_name,
+            icon_type=icon_type,
+            icon_color=icon_color,
             status=DeviceStatus.OFFLINE.value,
             config=config or {},
             capabilities=capabilities or [],

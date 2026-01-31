@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
+    # Metrics
+    metrics_enabled: bool = True
+
 
 @lru_cache
 def get_settings() -> Settings:

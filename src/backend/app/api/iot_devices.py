@@ -36,6 +36,8 @@ class IoTDeviceCreate(BaseModel):
     latitude: float | None = Field(None, ge=-90, le=90)
     longitude: float | None = Field(None, ge=-180, le=180)
     location_name: str | None = None
+    icon_type: str | None = Field(None, max_length=50, description="Icon type for floor plan display")
+    icon_color: str | None = Field(None, max_length=50, description="Icon color (Tailwind class or hex)")
     config: dict | None = None
     capabilities: list[str] | None = None
 
@@ -63,6 +65,8 @@ class IoTDeviceUpdate(BaseModel):
     latitude: float | None = Field(None, ge=-90, le=90)
     longitude: float | None = Field(None, ge=-180, le=180)
     location_name: str | None = None
+    icon_type: str | None = Field(None, max_length=50, description="Icon type for floor plan display")
+    icon_color: str | None = Field(None, max_length=50, description="Icon color (Tailwind class or hex)")
     capabilities: list[str] | None = None
 
 
@@ -96,6 +100,8 @@ class IoTDeviceResponse(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     location_name: str | None = None
+    icon_type: str | None = None
+    icon_color: str | None = None
     status: str
     last_seen: str | None = None
     connection_quality: int | None = None
@@ -214,6 +220,8 @@ def device_to_response(device) -> IoTDeviceResponse:
         latitude=device.latitude,
         longitude=device.longitude,
         location_name=device.location_name,
+        icon_type=device.icon_type,
+        icon_color=device.icon_color,
         status=device.status.value if hasattr(device.status, 'value') else device.status,
         last_seen=device.last_seen.isoformat() if device.last_seen else None,
         connection_quality=device.connection_quality,
@@ -318,6 +326,8 @@ async def create_iot_device(
             latitude=data.latitude,
             longitude=data.longitude,
             location_name=data.location_name,
+            icon_type=data.icon_type,
+            icon_color=data.icon_color,
             config=data.config,
             capabilities=data.capabilities,
         )

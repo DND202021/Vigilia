@@ -26,6 +26,66 @@ class DeviceType(str, Enum):
     OTHER = "other"
 
 
+class DeviceIconType(str, Enum):
+    """Device icon types for floor plan visualization.
+
+    Organized by category for first responders and tactical teams.
+    """
+
+    # Surveillance & Audio
+    CAMERA_DOME = "camera_dome"
+    CAMERA_PTZ = "camera_ptz"
+    CAMERA_BULLET = "camera_bullet"
+    CAMERA_THERMAL = "camera_thermal"
+    CAMERA_BODY = "camera_body"
+    MICROPHONE = "microphone"
+    MICROPHONE_ARRAY = "microphone_array"
+    SPEAKER = "speaker"
+
+    # Motion & Presence
+    MOTION_SENSOR = "motion_sensor"
+    PIR_SENSOR = "pir_sensor"
+    RADAR_SENSOR = "radar_sensor"
+    LIDAR_SENSOR = "lidar_sensor"
+    OCCUPANCY_SENSOR = "occupancy_sensor"
+
+    # Access Control
+    DOOR_SENSOR = "door_sensor"
+    WINDOW_SENSOR = "window_sensor"
+    GLASS_BREAK = "glass_break"
+    CARD_READER = "card_reader"
+    KEYPAD = "keypad"
+    BIOMETRIC = "biometric"
+
+    # Environmental
+    SMOKE_DETECTOR = "smoke_detector"
+    HEAT_DETECTOR = "heat_detector"
+    GAS_DETECTOR = "gas_detector"
+    CO_DETECTOR = "co_detector"
+    WATER_LEAK = "water_leak"
+    TEMPERATURE = "temperature"
+    HUMIDITY = "humidity"
+
+    # Communication & Network
+    GATEWAY = "gateway"
+    REPEATER = "repeater"
+    RADIO = "radio"
+    INTERCOM = "intercom"
+    PANIC_BUTTON = "panic_button"
+
+    # Tactical
+    ENTRY_POINT = "entry_point"
+    BREACH_POINT = "breach_point"
+    SNIPER_POSITION = "sniper_position"
+    OBSERVATION_POST = "observation_post"
+    RALLY_POINT = "rally_point"
+    HOSTAGE_LOCATION = "hostage_location"
+    THREAT_LOCATION = "threat_location"
+
+    # Generic
+    CUSTOM = "custom"
+
+
 class DeviceStatus(str, Enum):
     """Device operational status."""
 
@@ -100,6 +160,10 @@ class IoTDevice(Base, TimestampMixin, SoftDeleteMixin):
         DateTime(timezone=True), nullable=True
     )
     connection_quality: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Visual representation on floor plans
+    icon_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    icon_color: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # Configuration (detection sensitivities, etc.)
     config: Mapped[dict | None] = mapped_column(JSON, default=dict)

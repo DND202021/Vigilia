@@ -666,6 +666,172 @@ export interface BuildingStats {
 export type DeviceType = 'microphone' | 'camera' | 'sensor' | 'gateway' | 'other';
 export type DeviceStatus = 'online' | 'offline' | 'alert' | 'maintenance' | 'error';
 
+// Device Icon Types for floor plan visualization
+// Organized by category for first responders and tactical teams
+export type DeviceIconType =
+  // Surveillance & Audio
+  | 'camera_dome'
+  | 'camera_ptz'
+  | 'camera_bullet'
+  | 'camera_thermal'
+  | 'camera_body'
+  | 'microphone'
+  | 'microphone_array'
+  | 'speaker'
+  // Motion & Presence
+  | 'motion_sensor'
+  | 'pir_sensor'
+  | 'radar_sensor'
+  | 'lidar_sensor'
+  | 'occupancy_sensor'
+  // Access Control
+  | 'door_sensor'
+  | 'window_sensor'
+  | 'glass_break'
+  | 'card_reader'
+  | 'keypad'
+  | 'biometric'
+  // Environmental
+  | 'smoke_detector'
+  | 'heat_detector'
+  | 'gas_detector'
+  | 'co_detector'
+  | 'water_leak'
+  | 'temperature'
+  | 'humidity'
+  // Communication & Network
+  | 'gateway'
+  | 'repeater'
+  | 'radio'
+  | 'intercom'
+  | 'panic_button'
+  // Tactical
+  | 'entry_point'
+  | 'breach_point'
+  | 'sniper_position'
+  | 'observation_post'
+  | 'rally_point'
+  | 'hostage_location'
+  | 'threat_location'
+  // Generic
+  | 'custom';
+
+export type DeviceIconCategory =
+  | 'surveillance'
+  | 'motion'
+  | 'access'
+  | 'environmental'
+  | 'communication'
+  | 'tactical';
+
+export interface DeviceIconConfig {
+  type: DeviceIconType;
+  category: DeviceIconCategory;
+  label: string;
+  icon: string;
+  color: string;
+  description?: string;
+}
+
+// Device icon configurations for floor plan display
+export const DEFAULT_DEVICE_ICON_CONFIGS: DeviceIconConfig[] = [
+  // Surveillance & Audio
+  { type: 'camera_dome', category: 'surveillance', label: 'Dome Camera', icon: '🔵', color: 'bg-blue-500', description: 'Fixed dome surveillance camera' },
+  { type: 'camera_ptz', category: 'surveillance', label: 'PTZ Camera', icon: '🎥', color: 'bg-blue-600', description: 'Pan-tilt-zoom camera' },
+  { type: 'camera_bullet', category: 'surveillance', label: 'Bullet Camera', icon: '📹', color: 'bg-blue-500', description: 'Fixed bullet camera' },
+  { type: 'camera_thermal', category: 'surveillance', label: 'Thermal Camera', icon: '🌡️', color: 'bg-orange-500', description: 'Thermal imaging camera' },
+  { type: 'camera_body', category: 'surveillance', label: 'Body Camera', icon: '📷', color: 'bg-blue-400', description: 'Body-worn camera' },
+  { type: 'microphone', category: 'surveillance', label: 'Microphone', icon: '🎙️', color: 'bg-purple-500', description: 'Audio monitoring microphone' },
+  { type: 'microphone_array', category: 'surveillance', label: 'Mic Array', icon: '🎚️', color: 'bg-purple-600', description: 'Multi-directional microphone array' },
+  { type: 'speaker', category: 'surveillance', label: 'Speaker', icon: '🔊', color: 'bg-purple-400', description: 'Audio announcement speaker' },
+
+  // Motion & Presence
+  { type: 'motion_sensor', category: 'motion', label: 'Motion Sensor', icon: '👁️', color: 'bg-cyan-500', description: 'Motion detection sensor' },
+  { type: 'pir_sensor', category: 'motion', label: 'PIR Sensor', icon: '📡', color: 'bg-cyan-500', description: 'Passive infrared sensor' },
+  { type: 'radar_sensor', category: 'motion', label: 'Radar Sensor', icon: '📶', color: 'bg-cyan-600', description: 'Radar-based motion detection' },
+  { type: 'lidar_sensor', category: 'motion', label: 'LiDAR Sensor', icon: '🔦', color: 'bg-cyan-700', description: 'Laser-based 3D scanning' },
+  { type: 'occupancy_sensor', category: 'motion', label: 'Occupancy', icon: '👥', color: 'bg-cyan-400', description: 'Room occupancy detection' },
+
+  // Access Control
+  { type: 'door_sensor', category: 'access', label: 'Door Sensor', icon: '🚪', color: 'bg-amber-500', description: 'Door open/close sensor' },
+  { type: 'window_sensor', category: 'access', label: 'Window Sensor', icon: '🪟', color: 'bg-amber-400', description: 'Window open/close sensor' },
+  { type: 'glass_break', category: 'access', label: 'Glass Break', icon: '💥', color: 'bg-amber-600', description: 'Glass break acoustic sensor' },
+  { type: 'card_reader', category: 'access', label: 'Card Reader', icon: '💳', color: 'bg-amber-500', description: 'Access card reader' },
+  { type: 'keypad', category: 'access', label: 'Keypad', icon: '🔢', color: 'bg-amber-500', description: 'PIN entry keypad' },
+  { type: 'biometric', category: 'access', label: 'Biometric', icon: '👆', color: 'bg-amber-600', description: 'Fingerprint/face recognition' },
+
+  // Environmental
+  { type: 'smoke_detector', category: 'environmental', label: 'Smoke Detector', icon: '💨', color: 'bg-red-500', description: 'Smoke detection sensor' },
+  { type: 'heat_detector', category: 'environmental', label: 'Heat Detector', icon: '🔥', color: 'bg-red-600', description: 'Heat/fire detection' },
+  { type: 'gas_detector', category: 'environmental', label: 'Gas Detector', icon: '⚠️', color: 'bg-yellow-500', description: 'Gas leak detection' },
+  { type: 'co_detector', category: 'environmental', label: 'CO Detector', icon: '☁️', color: 'bg-gray-500', description: 'Carbon monoxide detector' },
+  { type: 'water_leak', category: 'environmental', label: 'Water Leak', icon: '💧', color: 'bg-blue-400', description: 'Water leak sensor' },
+  { type: 'temperature', category: 'environmental', label: 'Temperature', icon: '🌡️', color: 'bg-green-500', description: 'Temperature sensor' },
+  { type: 'humidity', category: 'environmental', label: 'Humidity', icon: '💦', color: 'bg-teal-500', description: 'Humidity sensor' },
+
+  // Communication & Network
+  { type: 'gateway', category: 'communication', label: 'Gateway', icon: '🔌', color: 'bg-gray-600', description: 'Network gateway/hub' },
+  { type: 'repeater', category: 'communication', label: 'Repeater', icon: '📡', color: 'bg-gray-500', description: 'Signal repeater' },
+  { type: 'radio', category: 'communication', label: 'Radio', icon: '📻', color: 'bg-indigo-500', description: 'Two-way radio base' },
+  { type: 'intercom', category: 'communication', label: 'Intercom', icon: '🔔', color: 'bg-indigo-400', description: 'Intercom station' },
+  { type: 'panic_button', category: 'communication', label: 'Panic Button', icon: '🆘', color: 'bg-red-600', description: 'Emergency panic button' },
+
+  // Tactical (for SWAT/first responders)
+  { type: 'entry_point', category: 'tactical', label: 'Entry Point', icon: '🚨', color: 'bg-green-600', description: 'Planned entry point' },
+  { type: 'breach_point', category: 'tactical', label: 'Breach Point', icon: '💢', color: 'bg-orange-600', description: 'Tactical breach location' },
+  { type: 'sniper_position', category: 'tactical', label: 'Sniper Position', icon: '🎯', color: 'bg-slate-700', description: 'Sniper/overwatch position' },
+  { type: 'observation_post', category: 'tactical', label: 'Observation Post', icon: '👀', color: 'bg-slate-600', description: 'Surveillance observation point' },
+  { type: 'rally_point', category: 'tactical', label: 'Rally Point', icon: '🏁', color: 'bg-green-500', description: 'Team rally/staging point' },
+  { type: 'hostage_location', category: 'tactical', label: 'Hostage Location', icon: '🧑', color: 'bg-yellow-600', description: 'Known hostage position' },
+  { type: 'threat_location', category: 'tactical', label: 'Threat Location', icon: '⚡', color: 'bg-red-700', description: 'Known threat position' },
+
+  // Generic
+  { type: 'custom', category: 'surveillance', label: 'Custom', icon: '📍', color: 'bg-gray-400', description: 'Custom device marker' },
+];
+
+// Device icon color options
+export const DEVICE_ICON_COLORS = [
+  { name: 'Red', value: 'bg-red-500', hex: '#ef4444' },
+  { name: 'Orange', value: 'bg-orange-500', hex: '#f97316' },
+  { name: 'Amber', value: 'bg-amber-500', hex: '#f59e0b' },
+  { name: 'Yellow', value: 'bg-yellow-500', hex: '#eab308' },
+  { name: 'Lime', value: 'bg-lime-500', hex: '#84cc16' },
+  { name: 'Green', value: 'bg-green-500', hex: '#22c55e' },
+  { name: 'Emerald', value: 'bg-emerald-500', hex: '#10b981' },
+  { name: 'Teal', value: 'bg-teal-500', hex: '#14b8a6' },
+  { name: 'Cyan', value: 'bg-cyan-500', hex: '#06b6d4' },
+  { name: 'Sky', value: 'bg-sky-500', hex: '#0ea5e9' },
+  { name: 'Blue', value: 'bg-blue-500', hex: '#3b82f6' },
+  { name: 'Indigo', value: 'bg-indigo-500', hex: '#6366f1' },
+  { name: 'Violet', value: 'bg-violet-500', hex: '#8b5cf6' },
+  { name: 'Purple', value: 'bg-purple-500', hex: '#a855f7' },
+  { name: 'Fuchsia', value: 'bg-fuchsia-500', hex: '#d946ef' },
+  { name: 'Pink', value: 'bg-pink-500', hex: '#ec4899' },
+  { name: 'Rose', value: 'bg-rose-500', hex: '#f43f5e' },
+  { name: 'Slate', value: 'bg-slate-500', hex: '#64748b' },
+  { name: 'Gray', value: 'bg-gray-500', hex: '#6b7280' },
+];
+
+// Helper functions for device icons
+export function getDeviceIconConfig(type: DeviceIconType | string): DeviceIconConfig | undefined {
+  return DEFAULT_DEVICE_ICON_CONFIGS.find((config) => config.type === type);
+}
+
+export function getDeviceIconsByCategory(category: DeviceIconCategory): DeviceIconConfig[] {
+  return DEFAULT_DEVICE_ICON_CONFIGS.filter((config) => config.category === category);
+}
+
+export function getDefaultIconForDeviceType(deviceType: DeviceType): DeviceIconConfig {
+  const mapping: Record<DeviceType, DeviceIconType> = {
+    microphone: 'microphone',
+    camera: 'camera_dome',
+    sensor: 'motion_sensor',
+    gateway: 'gateway',
+    other: 'custom',
+  };
+  return getDeviceIconConfig(mapping[deviceType]) || DEFAULT_DEVICE_ICON_CONFIGS[DEFAULT_DEVICE_ICON_CONFIGS.length - 1];
+}
+
 export interface IoTDevice {
   id: string;
   name: string;
@@ -683,6 +849,8 @@ export interface IoTDevice {
   latitude?: number;
   longitude?: number;
   location_name?: string;
+  icon_type?: DeviceIconType | string;
+  icon_color?: string;
   status: DeviceStatus;
   last_seen?: string;
   connection_quality?: number;
@@ -709,6 +877,8 @@ export interface IoTDeviceCreateRequest {
   latitude?: number;
   longitude?: number;
   location_name?: string;
+  icon_type?: DeviceIconType | string;
+  icon_color?: string;
   config?: Record<string, unknown>;
   capabilities?: string[];
 }
@@ -727,6 +897,8 @@ export interface IoTDeviceUpdateRequest {
   position_x?: number | null;
   position_y?: number | null;
   location_name?: string;
+  icon_type?: DeviceIconType | string | null;
+  icon_color?: string | null;
   config?: Record<string, unknown>;
   capabilities?: string[];
 }

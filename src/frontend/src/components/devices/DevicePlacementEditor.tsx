@@ -2,10 +2,12 @@
  * Device Placement Editor - Drag-and-drop device positioning on floor plans.
  *
  * Extends the floor plan viewer with edit mode for positioning devices.
+ * Supports custom device icons and colors for first responders and tactical teams.
  */
 
 import { useRef, useState, useCallback } from 'react';
-import type { IoTDevice, DeviceType } from '../../types';
+import type { IoTDevice, DeviceType, DeviceIconType } from '../../types';
+import { getDeviceIconConfig, getDefaultIconForDeviceType, DEVICE_ICON_COLORS } from '../../types';
 
 interface DevicePlacementEditorProps {
   floorPlanUrl: string;
@@ -17,7 +19,17 @@ interface DevicePlacementEditorProps {
   className?: string;
 }
 
-function getDeviceColor(status: string): string {
+function getDeviceColor(status: string, customColor?: string): string {
+  // Use custom color if provided
+  if (customColor) {
+    // If it's a Tailwind class, convert to hex
+    const colorConfig = DEVICE_ICON_COLORS.find((c) => c.value === customColor);
+    if (colorConfig) return colorConfig.hex;
+    // If it's already a hex color, use it
+    if (customColor.startsWith('#')) return customColor;
+  }
+
+  // Fall back to status-based colors
   switch (status) {
     case 'online': return '#22c55e';
     case 'alert': return '#ef4444';
@@ -26,14 +38,19 @@ function getDeviceColor(status: string): string {
   }
 }
 
-function getDeviceEmoji(type: DeviceType): string {
-  switch (type) {
-    case 'microphone': return '🎙️';
-    case 'camera': return '📷';
-    case 'sensor': return '📡';
-    case 'gateway': return '🔌';
-    default: return '📱';
+function getDeviceIcon(
+  deviceType: DeviceType,
+  iconType?: DeviceIconType | string
+): string {
+  // Use custom icon if provided
+  if (iconType) {
+    const config = getDeviceIconConfig(iconType);
+    if (config) return config.icon;
   }
+
+  // Fall back to default for device type
+  const defaultConfig = getDefaultIconForDeviceType(deviceType);
+  return defaultConfig?.icon || '📱';
 }
 
 export function DevicePlacementEditor({
@@ -122,7 +139,7 @@ export function DevicePlacementEditor({
                 onDragStart={() => setDraggingDevice(device)}
                 className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg cursor-grab hover:bg-gray-100 border border-transparent hover:border-blue-200"
               >
-                <span>{getDeviceEmoji(device.device_type)}</span>
+                <span>{getDeviceIcon(device.device_type, device.icon_type)}</span>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-gray-800 truncate">{device.name}</div>
                   <div className="text-xs text-gray-500 capitalize">{device.device_type}</div>
@@ -173,10 +190,10 @@ export function DevicePlacementEditor({
                   className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-lg ${
                     isPending ? 'ring-2 ring-blue-400 ring-offset-1' : ''
                   }`}
-                  style={{ backgroundColor: getDeviceColor(device.status) }}
+                  style={{ backgroundColor: getDeviceColor(device.status, device.icon_color) }}
                   title={`${device.name} (${device.device_type})`}
                 >
-                  {device.device_type === 'microphone' ? '🎙' : device.device_type === 'camera' ? '📷' : '📡'}
+                  {getDeviceIcon(device.device_type, device.icon_type)}
                 </div>
                 <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 whitespace-nowrap bg-gray-900 text-white text-[10px] px-1.5 py-0.5 rounded">
                   {device.name}

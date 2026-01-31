@@ -99,6 +99,88 @@ services:
     networks:
       - eriop-net
 
+  # Prometheus - Metrics collection
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: eriop-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./infrastructure/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/monitoring/prometheus/rules:/etc/prometheus/rules:ro
+      - eriop_prometheus:/prometheus
+    networks:
+      - eriop-net
+    depends_on:
+      - backend
+
+  # Grafana - Metrics visualization
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: eriop-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./infrastructure/monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./infrastructure/monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./infrastructure/monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+      - eriop_grafana:/var/lib/grafana
+    ports:
+      - "3003:3000"
+    networks:
+      - eriop-net
+    depends_on:
+      - prometheus
+
+  # AlertManager - Alert routing
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
+    container_name: eriop-alertmanager
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    volumes:
+      - ./infrastructure/monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - eriop_alertmanager:/alertmanager
+    networks:
+      - eriop-net
+    depends_on:
+      - prometheus
+
+  # Redis Exporter - Redis metrics for Prometheus
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: eriop-redis-exporter
+    restart: unless-stopped
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-eriop_redis_2025}
+    networks:
+      - eriop-net
+    depends_on:
+      - redis
+
+  # Postgres Exporter - PostgreSQL metrics for Prometheus
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: eriop-postgres-exporter
+    restart: unless-stopped
+    environment:
+      - DATA_SOURCE_NAME=postgresql://eriop:${DB_PASSWORD:-eriop_secure_2025}@postgres:5432/eriop?sslmode=disable
+    networks:
+      - eriop-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   eriop_postgres:
     external: true
@@ -109,6 +191,9 @@ volumes:
   eriop_building_files:
     external: true
     name: eriop_building_files
+  eriop_prometheus:
+  eriop_grafana:
+  eriop_alertmanager:
 
 networks:
   eriop-net:

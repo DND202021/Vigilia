@@ -2,11 +2,13 @@
  * DeviceStatusOverlay Component
  *
  * Renders device icons on a floor plan with real-time status indicators.
+ * Supports customizable icon types and colors for first responders and tactical teams.
  */
 
 import { useMemo, useState, useEffect } from 'react';
 import { useDevicePositionStore } from '../../stores/devicePositionStore';
-import type { DeviceStatus, DeviceType } from '../../types';
+import type { DeviceStatus, DeviceType, DeviceIconType } from '../../types';
+import { getDeviceIconConfig, getDefaultIconForDeviceType } from '../../types';
 import { cn } from '../../utils';
 
 const STATUS_COLORS: Record<DeviceStatus, { bg: string; ring: string; pulse?: boolean }> = {
@@ -17,6 +19,7 @@ const STATUS_COLORS: Record<DeviceStatus, { bg: string; ring: string; pulse?: bo
   error: { bg: 'bg-red-600', ring: 'ring-red-400', pulse: true },
 };
 
+// Fallback icons for legacy devices without icon_type
 const DEVICE_ICONS: Record<DeviceType, string> = {
   microphone: '\u{1F399}\uFE0F',
   camera: '\u{1F4F9}',
@@ -24,6 +27,33 @@ const DEVICE_ICONS: Record<DeviceType, string> = {
   gateway: '\u{1F5A7}',
   other: '\u{1F4BB}',
 };
+
+/**
+ * Get icon and color for a device based on its icon_type/icon_color or device_type fallback
+ */
+function getDeviceVisuals(
+  deviceType: DeviceType,
+  iconType?: DeviceIconType | string,
+  iconColor?: string
+): { icon: string; color: string } {
+  // If device has a custom icon_type, use it
+  if (iconType) {
+    const config = getDeviceIconConfig(iconType);
+    if (config) {
+      return {
+        icon: config.icon,
+        color: iconColor || config.color,
+      };
+    }
+  }
+
+  // Fall back to default icon for device type
+  const defaultConfig = getDefaultIconForDeviceType(deviceType);
+  return {
+    icon: defaultConfig?.icon || DEVICE_ICONS[deviceType] || DEVICE_ICONS.other,
+    color: iconColor || defaultConfig?.color || 'bg-gray-500',
+  };
+}
 
 interface DeviceStatusOverlayProps {
   floorPlanId: string;
@@ -35,6 +65,8 @@ interface DeviceStatusOverlayProps {
     device_type: DeviceType;
     position_x?: number;
     position_y?: number;
+    icon_type?: DeviceIconType | string;
+    icon_color?: string;
     status: DeviceStatus;
     last_seen?: string;
   }>;
@@ -59,7 +91,15 @@ function DeviceMarker({
   isEditable,
   showLabel,
 }: {
-  device: { id: string; name: string; device_type: DeviceType; status: DeviceStatus; last_seen?: string };
+  device: {
+    id: string;
+    name: string;
+    device_type: DeviceType;
+    icon_type?: DeviceIconType | string;
+    icon_color?: string;
+    status: DeviceStatus;
+    last_seen?: string;
+  };
   position: { x: number; y: number };
   containerWidth: number;
   containerHeight: number;
@@ -74,7 +114,11 @@ function DeviceMarker({
   const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
 
   const statusStyle = STATUS_COLORS[device.status] || STATUS_COLORS.offline;
-  const icon = DEVICE_ICONS[device.device_type] || DEVICE_ICONS.other;
+  const { icon, color: iconColor } = getDeviceVisuals(
+    device.device_type,
+    device.icon_type,
+    device.icon_color
+  );
 
   // Convert percentage to pixels
   const left = (position.x / 100) * containerWidth;
@@ -135,7 +179,8 @@ function DeviceMarker({
           className={cn(
             'w-8 h-8 rounded-full flex items-center justify-center text-sm',
             'ring-2 shadow-md transition-transform hover:scale-110',
-            statusStyle.bg,
+            // Use custom icon color if set, otherwise use status-based color
+            device.icon_color ? iconColor : statusStyle.bg,
             statusStyle.ring,
             statusStyle.pulse && 'animate-pulse',
             isEditable && 'ring-offset-1 ring-offset-blue-400'
@@ -232,7 +277,11 @@ export function DeviceStatusOverlay({
         .map(device => {
           const storePos = storePositions[device.id];
           return {
-            device,
+            device: {
+              ...device,
+              icon_type: device.icon_type,
+              icon_color: device.icon_color,
+            },
             position: {
               x: storePos?.position_x ?? device.position_x!,
               y: storePos?.position_y ?? device.position_y!,
@@ -250,6 +299,8 @@ export function DeviceStatusOverlay({
           id: pos.device_id,
           name: `Device ${pos.device_id.slice(0, 8)}`,
           device_type: 'other' as DeviceType,
+          icon_type: undefined,
+          icon_color: undefined,
           status: pos.status,
           last_seen: pos.last_seen,
         },

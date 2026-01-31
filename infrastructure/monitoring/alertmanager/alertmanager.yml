@@ -1,0 +1,102 @@
+# AlertManager Configuration for ERIOP Platform
+global:
+  # SMTP configuration for email notifications
+  # Configure these with your SMTP server settings
+  smtp_smarthost: 'smtp.example.com:587'
+  smtp_from: 'eriop-alerts@example.com'
+  smtp_auth_username: 'alertmanager@example.com'
+  smtp_auth_password: 'your-smtp-password'
+  smtp_require_tls: true
+
+  # Default resolve timeout
+  resolve_timeout: 5m
+
+# Route tree
+route:
+  # Default receiver
+  receiver: 'email-notifications'
+
+  # Group alerts by these labels
+  group_by: ['alertname', 'severity', 'service']
+
+  # Wait before sending initial notification
+  group_wait: 30s
+
+  # Wait before sending notifications about new alerts in a group
+  group_interval: 5m
+
+  # Wait before re-sending a notification
+  repeat_interval: 4h
+
+  # Child routes for specific alert handling
+  routes:
+    # Critical alerts - immediate notification
+    - match:
+        severity: critical
+      receiver: 'email-critical'
+      group_wait: 10s
+      repeat_interval: 1h
+      continue: true
+
+    # Warning alerts - standard notification
+    - match:
+        severity: warning
+      receiver: 'email-notifications'
+      group_wait: 1m
+      repeat_interval: 4h
+
+# Inhibition rules - suppress lower severity when higher severity fires
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'service']
+
+# Receivers define notification destinations
+receivers:
+  # Default email notifications
+  - name: 'email-notifications'
+    email_configs:
+      - to: 'ops-team@example.com'
+        send_resolved: true
+        headers:
+          Subject: '[ERIOP {{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+        html: |
+          {{ range .Alerts }}
+          <h2>{{ .Labels.alertname }} - {{ .Labels.severity | toUpper }}</h2>
+          <p><strong>Status:</strong> {{ .Status }}</p>
+          <p><strong>Service:</strong> {{ .Labels.service }}</p>
+          <p><strong>Summary:</strong> {{ .Annotations.summary }}</p>
+          <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+          {{ if .Annotations.runbook_url }}
+          <p><strong>Runbook:</strong> <a href="{{ .Annotations.runbook_url }}">{{ .Annotations.runbook_url }}</a></p>
+          {{ end }}
+          <hr/>
+          {{ end }}
+
+  # Critical alerts - separate email for urgency
+  - name: 'email-critical'
+    email_configs:
+      - to: 'critical-alerts@example.com'
+        send_resolved: true
+        headers:
+          Subject: '[ERIOP CRITICAL] {{ .CommonLabels.alertname }} - {{ .CommonLabels.service }}'
+        html: |
+          <h1 style="color: red;">CRITICAL ALERT</h1>
+          {{ range .Alerts }}
+          <h2>{{ .Labels.alertname }}</h2>
+          <p><strong>Status:</strong> {{ .Status }}</p>
+          <p><strong>Service:</strong> {{ .Labels.service }}</p>
+          <p><strong>Summary:</strong> {{ .Annotations.summary }}</p>
+          <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+          {{ if .Annotations.runbook_url }}
+          <p><strong>Runbook:</strong> <a href="{{ .Annotations.runbook_url }}">{{ .Annotations.runbook_url }}</a></p>
+          {{ end }}
+          <p><strong>Started:</strong> {{ .StartsAt }}</p>
+          <hr/>
+          {{ end }}
+
+# Templates for customizing notification content
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
