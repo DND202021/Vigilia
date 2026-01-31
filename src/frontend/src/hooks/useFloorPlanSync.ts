@@ -111,7 +111,27 @@ export function useFloorPlanSync(options: UseFloorPlanSyncOptions): UseFloorPlan
   }, [floorPlanId, userId, userName, userRole]);
 
   // ============================================================================
-  // Room Join/Leave Management
+  // Device Loading (independent of WebSocket)
+  // ============================================================================
+
+  useEffect(() => {
+    if (!enabled || !floorPlanId) {
+      return;
+    }
+
+    // Load devices for this floor plan (regardless of WebSocket connection)
+    loadDevicesForFloorPlan(floorPlanId).catch((err) => {
+      console.error('[FloorPlanSync] Failed to load devices:', err);
+    });
+
+    // Cleanup function - clear positions when leaving floor plan
+    return () => {
+      clearPositions();
+    };
+  }, [enabled, floorPlanId, loadDevicesForFloorPlan, clearPositions]);
+
+  // ============================================================================
+  // Room Join/Leave Management (requires WebSocket connection)
   // ============================================================================
 
   useEffect(() => {
@@ -121,11 +141,6 @@ export function useFloorPlanSync(options: UseFloorPlanSyncOptions): UseFloorPlan
 
     // Join the floor plan room
     joinFloorPlan(floorPlanId);
-
-    // Load devices for this floor plan
-    loadDevicesForFloorPlan(floorPlanId).catch((err) => {
-      console.error('[FloorPlanSync] Failed to load devices:', err);
-    });
 
     // Start presence heartbeat
     const sendHeartbeatFn = () => {
@@ -141,7 +156,6 @@ export function useFloorPlanSync(options: UseFloorPlanSyncOptions): UseFloorPlan
         leaveFloorPlan(floorPlanId);
       }
       stopHeartbeat();
-      clearPositions();
     };
   }, [
     enabled,
@@ -149,8 +163,6 @@ export function useFloorPlanSync(options: UseFloorPlanSyncOptions): UseFloorPlan
     isConnected,
     joinFloorPlan,
     leaveFloorPlan,
-    loadDevicesForFloorPlan,
-    clearPositions,
     startHeartbeat,
     stopHeartbeat,
     sendPresenceHeartbeat,

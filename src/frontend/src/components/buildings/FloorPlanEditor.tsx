@@ -577,14 +577,18 @@ export function FloorPlanEditor({
       // Update position
       await updateDevicePosition(draggingDevice.id, clampedX, clampedY);
     } else {
-      // Add new device to floor plan
+      // Add new device to floor plan with full device details
       await addDeviceToFloorPlan(
         draggingDevice.id,
         clampedX,
         clampedY,
-        draggingDevice.name,
-        draggingDevice.device_type,
-        draggingDevice.status
+        {
+          deviceName: draggingDevice.name,
+          deviceType: draggingDevice.device_type,
+          iconType: draggingDevice.icon_type,
+          iconColor: draggingDevice.icon_color,
+          status: draggingDevice.status,
+        }
       );
     }
 

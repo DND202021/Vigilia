@@ -1219,6 +1219,11 @@ export interface DeviceFloorPosition {
   status: DeviceStatus;
   last_seen?: string;
   timestamp: string;
+  // Device details for display
+  device_name?: string;
+  device_type?: DeviceType;
+  icon_type?: DeviceIconType | string;
+  icon_color?: string;
 }
 
 /**

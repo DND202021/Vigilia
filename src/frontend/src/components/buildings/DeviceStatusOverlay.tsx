@@ -297,10 +297,10 @@ export function DeviceStatusOverlay({
       .map(pos => ({
         device: {
           id: pos.device_id,
-          name: `Device ${pos.device_id.slice(0, 8)}`,
-          device_type: 'other' as DeviceType,
-          icon_type: undefined,
-          icon_color: undefined,
+          name: pos.device_name || `Device ${pos.device_id.slice(0, 8)}`,
+          device_type: pos.device_type || 'other' as DeviceType,
+          icon_type: pos.icon_type,
+          icon_color: pos.icon_color,
           status: pos.status,
           last_seen: pos.last_seen,
         },

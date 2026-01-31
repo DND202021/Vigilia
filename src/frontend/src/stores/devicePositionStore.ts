@@ -6,7 +6,15 @@
 
 import { create } from 'zustand';
 import { iotDevicesApi } from '../services/api';
-import type { DeviceFloorPosition, DeviceStatus } from '../types';
+import type { DeviceFloorPosition, DeviceStatus, DeviceType, DeviceIconType } from '../types';
+
+interface AddDeviceOptions {
+  deviceName?: string;
+  deviceType?: DeviceType;
+  iconType?: DeviceIconType | string;
+  iconColor?: string;
+  status?: DeviceStatus;
+}
 
 interface DevicePositionStore {
   // State
@@ -19,7 +27,7 @@ interface DevicePositionStore {
   setCurrentFloorPlan: (floorPlanId: string | null) => void;
   loadDevicesForFloorPlan: (floorPlanId: string) => Promise<void>;
   updateDevicePosition: (deviceId: string, x: number, y: number) => Promise<void>;
-  addDeviceToFloorPlan: (deviceId: string, x: number, y: number, deviceName?: string, deviceType?: string, status?: DeviceStatus) => Promise<void>;
+  addDeviceToFloorPlan: (deviceId: string, x: number, y: number, options?: AddDeviceOptions) => Promise<void>;
   removeDeviceFromFloorPlan: (deviceId: string) => Promise<void>;
   handleRemotePositionUpdate: (deviceId: string, x: number, y: number, timestamp: string) => void;
   handleRemoteStatusChange: (deviceId: string, status: DeviceStatus, timestamp: string) => void;
@@ -60,6 +68,11 @@ export const useDevicePositionStore = create<DevicePositionStore>((set, get) => 
             status: device.status,
             last_seen: device.last_seen,
             timestamp: new Date().toISOString(),
+            // Store device details for display
+            device_name: device.name,
+            device_type: device.device_type,
+            icon_type: device.icon_type,
+            icon_color: device.icon_color,
           };
         }
       }
@@ -111,9 +124,11 @@ export const useDevicePositionStore = create<DevicePositionStore>((set, get) => 
     }
   },
 
-  addDeviceToFloorPlan: async (deviceId, x, y, _deviceName, _deviceType, status = 'offline') => {
+  addDeviceToFloorPlan: async (deviceId, x, y, options = {}) => {
     const { currentFloorPlanId } = get();
     if (!currentFloorPlanId) return;
+
+    const { deviceName, deviceType, iconType, iconColor, status = 'offline' } = options;
 
     // Optimistic update
     const timestamp = new Date().toISOString();
@@ -127,6 +142,10 @@ export const useDevicePositionStore = create<DevicePositionStore>((set, get) => 
           position_y: y,
           status,
           timestamp,
+          device_name: deviceName,
+          device_type: deviceType,
+          icon_type: iconType,
+          icon_color: iconColor,
         },
       },
     }));
