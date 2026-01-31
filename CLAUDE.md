@@ -285,6 +285,29 @@ See `.env.example` for all configuration options.
 
 **Common Mistake:** Using `CORS_ORIGINS` instead of `CORS_ORIGINS_STR` will cause CORS errors because the backend won't receive the allowed origins and will use defaults (localhost only).
 
+## Common Gotchas
+
+### SQLAlchemy Enum Comparisons with PostgreSQL
+
+PostgreSQL stores enum values as **lowercase strings**. SQLAlchemy's Enum column handling is tricky:
+
+```python
+# WRONG - All of these send 'COMPLETED' (uppercase) to PostgreSQL:
+Inspection.status == InspectionStatus.COMPLETED
+Inspection.status == InspectionStatus.COMPLETED.value
+Inspection.status == "completed"
+
+# CORRECT - Cast to String to bypass enum handling:
+from sqlalchemy import cast, String
+
+cast(Inspection.status, String) == "completed"
+cast(Inspection.status, String).in_(["scheduled", "overdue"])
+```
+
+**Why:** SQLAlchemy sees the column is an Enum type and converts any comparison value through the enum handler, which uses the Python enum **name** (uppercase) instead of the **value** (lowercase).
+
+**Symptom:** `asyncpg.exceptions.InvalidTextRepresentationError: invalid input value for enum`
+
 ## Documentation
 
 - [System Architecture](docs/architecture/SYSTEM_ARCHITECTURE.md)
