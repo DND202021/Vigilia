@@ -70,6 +70,7 @@ interface DeviceStatusOverlayProps {
     status: DeviceStatus;
     last_seen?: string;
   }>;
+  highlightedDeviceId?: string | null;
   onDeviceClick?: (deviceId: string) => void;
   onDeviceDragStart?: (deviceId: string) => void;
   onDeviceDragEnd?: (deviceId: string, x: number, y: number) => void;
@@ -90,6 +91,7 @@ function DeviceMarker({
   onRemove,
   isEditable,
   showLabel,
+  isHighlighted,
 }: {
   device: {
     id: string;
@@ -109,6 +111,7 @@ function DeviceMarker({
   onRemove?: () => void;
   isEditable?: boolean;
   showLabel?: boolean;
+  isHighlighted?: boolean;
 }) {
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
@@ -174,6 +177,14 @@ function DeviceMarker({
           }
         }}
       >
+        {/* Highlight ring - shown when device is focused */}
+        {isHighlighted && (
+          <div className="absolute inset-0 -m-3 rounded-full border-4 border-yellow-400 animate-ping opacity-75" />
+        )}
+        {isHighlighted && (
+          <div className="absolute inset-0 -m-2 rounded-full border-2 border-yellow-400" />
+        )}
+
         {/* Marker */}
         <div
           className={cn(
@@ -183,7 +194,8 @@ function DeviceMarker({
             device.icon_color ? iconColor : statusStyle.bg,
             statusStyle.ring,
             statusStyle.pulse && 'animate-pulse',
-            isEditable && 'ring-offset-1 ring-offset-blue-400'
+            isEditable && 'ring-offset-1 ring-offset-blue-400',
+            isHighlighted && 'scale-125 ring-4 ring-yellow-400 ring-offset-2 ring-offset-white z-10'
           )}
         >
           <span className="drop-shadow-sm">{icon}</span>
@@ -259,6 +271,7 @@ export function DeviceStatusOverlay({
   containerWidth,
   containerHeight,
   devices: externalDevices,
+  highlightedDeviceId,
   onDeviceClick,
   onDeviceDragStart,
   onDeviceDragEnd,
@@ -331,6 +344,7 @@ export function DeviceStatusOverlay({
             onRemove={() => onDeviceRemove?.(device.id)}
             isEditable={isEditable}
             showLabel={showLabels}
+            isHighlighted={highlightedDeviceId === device.id}
           />
         </div>
       ))}

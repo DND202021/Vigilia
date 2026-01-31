@@ -95,6 +95,7 @@ export function FloorPlanEditor({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [deviceEditMode, setDeviceEditMode] = useState(false);
   const [draggingDevice, setDraggingDevice] = useState<IoTDevice | null>(null);
+  const [highlightedDeviceId, setHighlightedDeviceId] = useState<string | null>(null);
 
   // Auth store for current user
   const { user } = useAuthStore();
@@ -603,6 +604,36 @@ export function FloorPlanEditor({
     await removeDeviceFromFloorPlan(deviceId);
   }, [removeDeviceFromFloorPlan]);
 
+  // Focus on a device - pan to show it and highlight it
+  const focusOnDevice = useCallback((device: IoTDevice) => {
+    // Get device position from store or device object
+    const storePos = devicePositions[device.id];
+    const posX = storePos?.position_x ?? device.position_x;
+    const posY = storePos?.position_y ?? device.position_y;
+
+    if (posX == null || posY == null || !containerRef.current) return;
+
+    // Zoom in a bit if not already zoomed
+    const targetScale = Math.max(scale, 1.5);
+
+    // Device position as offset from center (50%, 50%)
+    // The floor plan image is centered, so we calculate offset from center
+    const deviceOffsetX = (posX - 50) / 100 * containerDimensions.width * targetScale;
+    const deviceOffsetY = (posY - 50) / 100 * containerDimensions.height * targetScale;
+
+    // Pan to center the device (negate offset to move viewport)
+    setScale(targetScale);
+    setPosition({ x: -deviceOffsetX, y: -deviceOffsetY });
+
+    // Highlight the device
+    setHighlightedDeviceId(device.id);
+
+    // Clear highlight after 3 seconds
+    setTimeout(() => {
+      setHighlightedDeviceId((current) => current === device.id ? null : current);
+    }, 3000);
+  }, [devicePositions, scale, containerDimensions]);
+
   // Get list of placed device IDs
   const placedDeviceIds = Object.keys(devicePositions).filter(
     id => devicePositions[id]?.floor_plan_id === floorPlan.id
@@ -990,6 +1021,7 @@ export function FloorPlanEditor({
                   containerHeight={containerDimensions.height}
                   showLabels={scale >= 1.5}
                   isEditable={deviceEditMode}
+                  highlightedDeviceId={highlightedDeviceId}
                   onDeviceDragEnd={handleDevicePositionUpdate}
                   onDeviceRemove={handleDeviceRemove}
                 />
@@ -1061,6 +1093,7 @@ export function FloorPlanEditor({
             placedDeviceIds={placedDeviceIds}
             onDragStart={handleDeviceDragStart}
             onDragEnd={handleDeviceDragEnd}
+            onDeviceClick={focusOnDevice}
             isFullscreen={isFullscreen}
           />
         )}

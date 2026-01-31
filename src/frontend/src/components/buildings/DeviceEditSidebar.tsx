@@ -32,6 +32,7 @@ interface DeviceEditSidebarProps {
   placedDeviceIds: string[];
   onDragStart: (device: IoTDevice) => void;
   onDragEnd: () => void;
+  onDeviceClick?: (device: IoTDevice) => void;
   isFullscreen?: boolean;
   className?: string;
 }
@@ -42,6 +43,7 @@ export function DeviceEditSidebar({
   placedDeviceIds,
   onDragStart,
   onDragEnd,
+  onDeviceClick,
   isFullscreen = false,
   className,
 }: DeviceEditSidebarProps) {
@@ -170,15 +172,19 @@ export function DeviceEditSidebar({
           </div>
         ) : (
           <div className="space-y-1.5">
-            {filteredDevices.map((device) => (
+            {filteredDevices.map((device) => {
+              const isPlaced = isDevicePlaced(device, placedSet);
+              return (
               <div
                 key={device.id}
                 draggable
                 onDragStart={() => onDragStart(device)}
                 onDragEnd={onDragEnd}
+                onClick={() => isPlaced && onDeviceClick?.(device)}
                 className={cn(
-                  'flex items-center gap-2 p-2 rounded-lg cursor-grab active:cursor-grabbing',
+                  'flex items-center gap-2 p-2 rounded-lg',
                   'border transition-colors',
+                  isPlaced ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing',
                   isFullscreen
                     ? 'bg-gray-700 border-gray-600 hover:border-blue-500'
                     : 'bg-gray-50 border-transparent hover:border-blue-200 hover:bg-gray-100'
@@ -210,25 +216,52 @@ export function DeviceEditSidebar({
                   </div>
                 </div>
 
-                {/* Drag handle */}
-                <svg
-                  className={cn(
-                    'w-4 h-4 flex-shrink-0',
-                    isFullscreen ? 'text-gray-500' : 'text-gray-400'
-                  )}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 8h16M4 16h16"
-                  />
-                </svg>
+                {/* Drag handle or focus indicator */}
+                {isPlaced ? (
+                  <svg
+                    className={cn(
+                      'w-4 h-4 flex-shrink-0',
+                      isFullscreen ? 'text-blue-400' : 'text-blue-500'
+                    )}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-label="Click to focus on device"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                    />
+                  </svg>
+                ) : (
+                  <svg
+                    className={cn(
+                      'w-4 h-4 flex-shrink-0',
+                      isFullscreen ? 'text-gray-500' : 'text-gray-400'
+                    )}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 8h16M4 16h16"
+                    />
+                  </svg>
+                )}
               </div>
-            ))}
+            );
+            })}
           </div>
         )}
       </div>
@@ -244,8 +277,8 @@ export function DeviceEditSidebar({
         </div>
         <ul className="space-y-0.5 ml-4">
           <li>• Drag device to position</li>
+          <li>• Click placed device to focus</li>
           <li>• Right-click to remove</li>
-          <li>• Drag placed device to move</li>
         </ul>
       </div>
     </div>
