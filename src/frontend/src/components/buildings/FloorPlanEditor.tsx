@@ -153,6 +153,7 @@ export function FloorPlanEditor({
 
   // Track image dimensions for DeviceStatusOverlay
   // Use the image element directly for accurate positioning
+  // Re-run when layout changes (fullscreen, sidebar, etc.)
   useEffect(() => {
     const updateDimensions = () => {
       if (imageRef.current && imageLoaded) {
@@ -163,10 +164,15 @@ export function FloorPlanEditor({
       }
     };
 
-    updateDimensions();
+    // Small delay to allow layout to settle after mode changes
+    const timeoutId = setTimeout(updateDimensions, 50);
+
     window.addEventListener('resize', updateDimensions);
-    return () => window.removeEventListener('resize', updateDimensions);
-  }, [imageLoaded]);
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('resize', updateDimensions);
+    };
+  }, [imageLoaded, isFullscreen, deviceEditMode]);
 
   // Sync editing state with presence
   useEffect(() => {
