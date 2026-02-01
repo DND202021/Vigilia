@@ -110,6 +110,12 @@ class StatusTransitionRequest(BaseModel):
     notes: str | None = None
 
 
+class AssignUnitRequest(BaseModel):
+    """Request to assign a unit to an incident."""
+
+    unit_id: str
+
+
 class AvailableTransitionsResponse(BaseModel):
     """Available status transitions for an incident."""
 
@@ -494,6 +500,48 @@ async def update_incident_status(
 ) -> IncidentResponse:
     """Update incident status (alias for transition endpoint)."""
     return await transition_incident_status(incident_id, request, db, current_user)
+
+
+@router.post("/{incident_id}/assign", response_model=IncidentResponse)
+async def assign_unit_to_incident(
+    incident_id: str,
+    request: AssignUnitRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> IncidentResponse:
+    """Assign a unit (resource) to an incident."""
+    try:
+        incident_uuid = uuid.UUID(incident_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid incident ID format",
+        )
+
+    query = select(IncidentModel).where(IncidentModel.id == incident_uuid)
+    result = await db.execute(query)
+    incident = result.scalar_one_or_none()
+
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident not found",
+        )
+
+    # Add unit to assigned_units list
+    if incident.assigned_units is None:
+        incident.assigned_units = []
+
+    if request.unit_id not in incident.assigned_units:
+        incident.assigned_units = incident.assigned_units + [request.unit_id]
+
+    await db.commit()
+    await db.refresh(incident)
+
+    response = incident_to_response(incident)
+    await emit_incident_updated(response.model_dump(mode="json"))
+
+    return response
 
 
 @router.post("/{incident_id}/escalate", response_model=IncidentResponse)

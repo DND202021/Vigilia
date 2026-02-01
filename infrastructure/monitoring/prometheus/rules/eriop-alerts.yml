@@ -18,7 +18,7 @@ groups:
       # Slow responses
       - alert: SlowResponses
         expr: |
-          histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 5
+          histogram_quantile(0.99, sum(rate(http_request_duration_highr_seconds_bucket[5m])) by (le)) > 5
         for: 5m
         labels:
           severity: critical

@@ -30,6 +30,7 @@ class ResourceStatus(str, Enum):
 
     AVAILABLE = "available"
     ASSIGNED = "assigned"
+    DISPATCHED = "dispatched"  # Alias for assigned (frontend compatibility)
     EN_ROUTE = "en_route"
     ON_SCENE = "on_scene"
     OFF_DUTY = "off_duty"
@@ -304,7 +305,11 @@ async def update_resource_status(
             detail="Resource not found",
         )
 
-    resource.status = ResourceStatusModel(data.status.value)
+    # Map 'dispatched' to 'assigned' for database compatibility
+    status_value = data.status.value
+    if status_value == "dispatched":
+        status_value = "assigned"
+    resource.status = ResourceStatusModel(status_value)
     await db.commit()
     await db.refresh(resource)
 
