@@ -1,59 +1,52 @@
-# ERIOP Operational Runbooks
+# ERIOP Runbooks
 
-This directory contains operational runbooks for responding to alerts and incidents in the ERIOP platform.
+Operational runbooks for responding to alerts and incidents in the ERIOP platform.
 
 ## Alert Runbooks
 
-| Alert | Severity | Runbook |
-|-------|----------|---------|
-| HighErrorRate | Critical | [alert-high-error-rate.md](./alert-high-error-rate.md) |
-| DatabasePoolExhausted | Critical | [alert-database-connection-pool.md](./alert-database-connection-pool.md) |
-| RedisUnavailable | Critical | [alert-redis-unavailable.md](./alert-redis-unavailable.md) |
-| HealthCheckFailing | Critical | [alert-health-check-failing.md](./alert-health-check-failing.md) |
+| Alert | Runbook | Severity |
+|-------|---------|----------|
+| HighErrorRate | [alert-high-error-rate.md](alert-high-error-rate.md) | critical |
+| DatabasePoolExhausted | [alert-database-connection-pool.md](alert-database-connection-pool.md) | critical |
+| RedisUnavailable | [alert-redis-unavailable.md](alert-redis-unavailable.md) | critical |
+| HealthCheckFailing | [alert-health-check-failing.md](alert-health-check-failing.md) | critical |
 
-## Disaster Recovery
+## Other Runbooks
 
-- [disaster-recovery.md](./disaster-recovery.md) - Complete disaster recovery procedures
+| Topic | Runbook |
+|-------|---------|
+| Disaster Recovery | [disaster-recovery.md](disaster-recovery.md) |
 
 ## Quick Reference
 
 ### Accessing Monitoring Tools
 
-| Tool | URL | Default Credentials |
-|------|-----|---------------------|
-| Grafana | http://localhost:3003 | admin / admin |
-| Prometheus | http://localhost:9090 | N/A |
-| AlertManager | http://localhost:9093 | N/A |
+- **Grafana**: http://localhost:3003 (admin/admin on first login)
+- **Prometheus**: http://localhost:9090
+- **AlertManager**: http://localhost:9093
 
 ### Common Commands
 
 ```bash
 # Check container status
-docker compose ps
+docker ps | grep eriop
 
 # View backend logs
-docker compose logs -f backend
+docker logs -f eriop-backend
 
 # Restart backend
-docker compose restart backend
+docker compose -f docker-compose.local.yml restart backend
 
 # Check database connections
-docker exec -it eriop-db psql -U eriop -c "SELECT count(*) FROM pg_stat_activity;"
+docker exec eriop-db psql -U eriop -d eriop -c "SELECT count(*) FROM pg_stat_activity;"
 
-# Check Redis status
-docker exec -it eriop-redis redis-cli ping
+# Check Redis
+docker exec eriop-redis redis-cli ping
 ```
 
-### Escalation Contacts
+### Health Endpoints
 
-Configure your team's escalation contacts in the AlertManager configuration:
-`infrastructure/monitoring/alertmanager/alertmanager.yml`
-
-## Updating Runbooks
-
-When updating runbooks:
-1. Keep procedures actionable and specific
-2. Include exact commands to run
-3. Document expected outputs
-4. Keep recovery time objectives (RTO) in mind
-5. Update the last-reviewed date
+- `/health` - Basic health check
+- `/health/live` - Liveness probe (app is running)
+- `/health/ready` - Readiness probe (all dependencies healthy)
+- `/metrics` - Prometheus metrics

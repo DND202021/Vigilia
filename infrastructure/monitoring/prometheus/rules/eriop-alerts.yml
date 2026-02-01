@@ -1,61 +1,42 @@
 # ERIOP Alert Rules
 groups:
-  - name: eriop-backend
+  - name: eriop-critical
     rules:
       # High error rate
       - alert: HighErrorRate
-        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.05
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m])) 
+          / sum(rate(http_requests_total[5m])) > 0.05
         for: 5m
         labels:
           severity: critical
         annotations:
-          summary: "High error rate detected"
-          description: "Error rate is above 5% for the last 5 minutes"
+          summary: "High HTTP error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} (>5%)"
+          runbook: "docs/runbooks/alert-high-error-rate.md"
 
       # Slow responses
       - alert: SlowResponses
-        expr: histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 5
+        expr: |
+          histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 5
         for: 5m
         labels:
           severity: critical
         annotations:
-          summary: "Slow response times"
-          description: "99th percentile latency is above 5 seconds"
+          summary: "API p99 latency is high"
+          description: "99th percentile latency is {{ $value | humanizeDuration }}"
 
-      # Backend down
-      - alert: BackendDown
-        expr: up{job="eriop-backend"} == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "ERIOP Backend is down"
-          description: "Backend has been unreachable for more than 1 minute"
-
-  - name: eriop-database
-    rules:
-      # Database connection pool exhausted
+      # Database pool exhausted
       - alert: DatabasePoolExhausted
         expr: eriop_db_pool_available == 0
-        for: 2m
+        for: 1m
         labels:
           severity: critical
         annotations:
           summary: "Database connection pool exhausted"
-          description: "No available database connections for 2 minutes"
+          description: "No available database connections"
+          runbook: "docs/runbooks/alert-database-connection-pool.md"
 
-      # PostgreSQL down
-      - alert: PostgreSQLDown
-        expr: up{job="postgres"} == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "PostgreSQL is down"
-          description: "PostgreSQL has been unreachable for more than 1 minute"
-
-  - name: eriop-redis
-    rules:
       # Redis unavailable
       - alert: RedisUnavailable
         expr: eriop_redis_connected == 0
@@ -64,26 +45,71 @@ groups:
           severity: critical
         annotations:
           summary: "Redis is unavailable"
-          description: "Backend cannot connect to Redis for 2 minutes"
+          description: "Backend cannot connect to Redis"
+          runbook: "docs/runbooks/alert-redis-unavailable.md"
 
-      # Redis down
-      - alert: RedisDown
-        expr: up{job="redis"} == 0
-        for: 1m
+      # Health check failing
+      - alert: HealthCheckFailing
+        expr: up{job="eriop-backend"} == 0
+        for: 2m
         labels:
           severity: critical
         annotations:
-          summary: "Redis is down"
-          description: "Redis has been unreachable for more than 1 minute"
+          summary: "Backend health check failing"
+          description: "Backend is not responding to health checks"
+          runbook: "docs/runbooks/alert-health-check-failing.md"
 
-  - name: eriop-resources
+  - name: eriop-warning
     rules:
       # High memory usage
       - alert: HighMemoryUsage
-        expr: process_resident_memory_bytes / 1024 / 1024 > 500
+        expr: |
+          process_resident_memory_bytes{job="eriop-backend"} 
+          / (1024 * 1024 * 1024) > 0.8
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "High memory usage"
-          description: "Backend memory usage is above 500MB"
+          summary: "High memory usage on backend"
+          description: "Memory usage is {{ $value | humanize }}GB"
+
+      # High WebSocket connections
+      - alert: HighWebSocketConnections
+        expr: eriop_websocket_connections_active > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High number of WebSocket connections"
+          description: "{{ $value }} active connections"
+
+      # Slow alert processing
+      - alert: SlowAlertProcessing
+        expr: |
+          histogram_quantile(0.95, sum(rate(eriop_alert_processing_seconds_bucket[5m])) by (le, source)) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Alert processing is slow"
+          description: "95th percentile processing time is {{ $value | humanizeDuration }}"
+
+      # PostgreSQL connections high
+      - alert: PostgresConnectionsHigh
+        expr: pg_stat_activity_count > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High PostgreSQL connection count"
+          description: "{{ $value }} active connections"
+
+      # Redis memory usage
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis memory usage is high"
+          description: "Redis is using {{ $value | humanizePercentage }} of max memory"

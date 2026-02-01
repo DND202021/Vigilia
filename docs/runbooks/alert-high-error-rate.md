@@ -2,177 +2,84 @@
 
 ## Overview
 
-| Field | Value |
-|-------|-------|
-| Alert Name | HighErrorRate |
-| Severity | Critical |
-| Condition | Error rate > 5% for 5 minutes |
-| RTO | 15 minutes |
+- **Alert Name**: HighErrorRate
+- **Severity**: critical
+- **Condition**: HTTP 5xx error rate > 5% for 5 minutes
 
-## Description
+## Symptoms
 
-This alert fires when the HTTP 5xx error rate exceeds 5% of total requests over a 5-minute window. High error rates indicate service degradation affecting users.
+- Users reporting errors or unable to access the application
+- Increased latency in API responses
+- Grafana shows spike in error rate on API dashboard
 
-## Impact
+## Investigation Steps
 
-- Users experience failed requests
-- API consumers receive 5xx errors
-- Real-time updates may fail
-- Emergency responders may lose access to critical information
-
-## Diagnosis
-
-### 1. Check Current Error Rate
-
-Open Grafana dashboard: **ERIOP API Performance**
-
-Or query Prometheus directly:
-```promql
-sum(rate(http_requests_total{job="eriop-backend", status=~"5.."}[5m]))
-/
-sum(rate(http_requests_total{job="eriop-backend"}[5m]))
-```
-
-### 2. Identify Failing Endpoints
-
-```promql
-topk(10, sum(rate(http_requests_total{job="eriop-backend", status=~"5.."}[5m])) by (handler))
-```
-
-### 3. Check Backend Logs
+### 1. Check Backend Logs
 
 ```bash
-# View recent errors
-docker compose logs backend --since 10m | grep -i error
-
-# Follow live logs
-docker compose logs -f backend
+docker logs --tail 100 eriop-backend | grep -i error
 ```
 
-### 4. Check Resource Usage
+Look for:
+- Stack traces
+- Database connection errors
+- Redis connection errors
+- Authentication failures
+
+### 2. Check Health Endpoints
 
 ```bash
-# Container stats
-docker stats eriop-backend
-
-# Memory usage
-docker exec eriop-backend ps aux
+curl http://localhost:8000/health/ready
 ```
 
-### 5. Check Dependencies
+Review component status - identify unhealthy dependencies.
+
+### 3. Check Database
 
 ```bash
-# Database connectivity
-docker exec eriop-backend python -c "from app.core.deps import engine; print('DB OK')"
+# Connection count
+docker exec eriop-db psql -U eriop -d eriop -c "SELECT count(*) FROM pg_stat_activity;"
 
-# Redis connectivity
+# Long-running queries
+docker exec eriop-db psql -U eriop -d eriop -c "SELECT pid, now() - query_start AS duration, query FROM pg_stat_activity WHERE state = 'active' ORDER BY duration DESC LIMIT 5;"
+```
+
+### 4. Check Redis
+
+```bash
 docker exec eriop-redis redis-cli ping
+docker exec eriop-redis redis-cli info stats | grep rejected
 ```
 
-## Common Causes & Remediation
+### 5. Check Resource Usage
 
-### Database Connection Pool Exhausted
-
-**Symptoms:**
-- Errors: "connection pool exhausted" or "QueuePool limit reached"
-- Database connections maxed out
-
-**Resolution:**
 ```bash
-# Check current connections
-docker exec eriop-db psql -U eriop -c "SELECT count(*) FROM pg_stat_activity WHERE datname='eriop';"
-
-# Restart backend to reset connection pool
-docker compose restart backend
-
-# If persistent, increase pool size in environment:
-# DATABASE_POOL_SIZE=20 (default is 5)
+docker stats --no-stream | grep eriop
 ```
 
-### Memory Exhaustion
+## Resolution Actions
 
-**Symptoms:**
-- OOMKilled containers
-- Slow response times before errors
+### Restart Backend (if unresponsive)
 
-**Resolution:**
 ```bash
-# Check memory usage
-docker stats eriop-backend --no-stream
-
-# Increase memory limit
-# In docker-compose.prod.yml, update deploy.resources.limits.memory
-
-# Restart with new limits
-docker compose -f docker-compose.prod.yml up -d backend
+docker compose -f docker-compose.local.yml restart backend
 ```
 
-### Dependency Failure (Database/Redis)
+### Clear Redis Cache (if corrupted)
 
-**Symptoms:**
-- Connection refused errors
-- Timeout errors
-
-**Resolution:**
 ```bash
-# Check dependency health
-docker compose ps
-
-# Restart failed service
-docker compose restart postgres  # or redis
-
-# Check logs
-docker compose logs postgres --tail 50
+docker exec eriop-redis redis-cli FLUSHDB
 ```
 
-### Application Bug / Regression
+### Scale Backend (if overloaded)
 
-**Symptoms:**
-- Errors in specific endpoints only
-- Started after recent deployment
-
-**Resolution:**
 ```bash
-# Check recent deployments
-git log --oneline -5
-
-# Rollback to previous version
-git checkout <previous-commit>
-docker compose build backend
-docker compose up -d backend
+docker compose -f docker-compose.local.yml up -d --scale backend=2
 ```
-
-## Verification
-
-After remediation, verify the fix:
-
-1. **Check error rate is decreasing:**
-   ```promql
-   sum(rate(http_requests_total{job="eriop-backend", status=~"5.."}[1m]))
-   ```
-
-2. **Test critical endpoints:**
-   ```bash
-   curl -s http://localhost:8000/health
-   curl -s http://localhost:8000/api/v1/auth/me -H "Authorization: Bearer $TOKEN"
-   ```
-
-3. **Monitor for 10 minutes** to ensure stability
 
 ## Escalation
 
-If unable to resolve within 15 minutes:
-
-1. Notify on-call engineer
-2. Consider enabling maintenance mode
-3. Prepare for potential database failover
-
-## Prevention
-
-- Implement circuit breakers for external dependencies
-- Set up database connection pool monitoring
-- Configure memory limits appropriately
-- Implement gradual rollouts for deployments
-
----
-*Last reviewed: January 2025*
+If the issue persists after 15 minutes:
+1. Page on-call engineer
+2. Check for upstream service issues
+3. Consider rollback if recent deployment

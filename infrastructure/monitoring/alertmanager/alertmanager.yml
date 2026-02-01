@@ -9,24 +9,44 @@ route:
   group_interval: 5m
   repeat_interval: 4h
   receiver: 'default'
+
   routes:
+    # Critical alerts - immediate notification
     - match:
         severity: critical
       receiver: 'critical'
-      continue: true
+      group_wait: 10s
+      repeat_interval: 1h
+
+    # Warning alerts
+    - match:
+        severity: warning
+      receiver: 'warning'
+      repeat_interval: 4h
 
 # Receivers
 receivers:
   - name: 'default'
-    # Add webhook, email, or Slack configuration here
+    # Default receiver - can be configured for email/slack/etc
 
   - name: 'critical'
-    # Configure critical alerts notification
+    # Configure for critical alerts
+    # Example email configuration:
+    # email_configs:
+    #   - to: 'oncall@example.com'
+    #     from: 'alertmanager@eriop.local'
+    #     smarthost: 'smtp.example.com:587'
+    #     auth_username: 'alertmanager'
+    #     auth_password: 'password'
+
+  - name: 'warning'
+    # Configure for warning alerts
 
 # Inhibition rules
 inhibit_rules:
+  # If critical alert fires, suppress warning alerts for same service
   - source_match:
       severity: 'critical'
     target_match:
       severity: 'warning'
-    equal: ['alertname']
+    equal: ['alertname', 'instance']
