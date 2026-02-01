@@ -38,13 +38,13 @@
 
 | Task | Status | Owner |
 |------|--------|-------|
-| Milestone 2.0 Planning | In Progress | - |
+| Phase 11: Production Observability | In Progress | - |
+| Edit building data and floor plans | In Progress | - |
 
 ## Accumulated Context
 
 ### Pending Todos
 1. `2025-01-31-project-status-review-action-items.md` - High-level action items from status review
-2. `2026-01-31-floor-plan-device-visibility-navigation.md` - Floor plan device visibility and navigation
 
 ### Key Decisions
 - Phase 10 completed with 10 sprints covering all Building Information Management features
