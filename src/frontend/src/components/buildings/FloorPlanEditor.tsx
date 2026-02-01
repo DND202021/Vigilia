@@ -151,13 +151,14 @@ export function FloorPlanEditor({
   const updateMarker = isConnected ? syncUpdateMarker : localUpdateMarker;
   const deleteMarker = isConnected ? syncDeleteMarker : localDeleteMarker;
 
-  // Track container dimensions for DeviceStatusOverlay
+  // Track image dimensions for DeviceStatusOverlay
+  // Use the image element directly for accurate positioning
   useEffect(() => {
     const updateDimensions = () => {
-      if (floorPlanContainerRef.current) {
+      if (imageRef.current && imageLoaded) {
         setContainerDimensions({
-          width: floorPlanContainerRef.current.offsetWidth,
-          height: floorPlanContainerRef.current.offsetHeight,
+          width: imageRef.current.offsetWidth,
+          height: imageRef.current.offsetHeight,
         });
       }
     };
@@ -564,10 +565,13 @@ export function FloorPlanEditor({
 
   const handleDeviceDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
-    if (!draggingDevice || !floorPlanContainerRef.current) return;
+    if (!draggingDevice || !imageRef.current) return;
 
-    // Use the floor plan container (same reference used for marker positioning)
-    const rect = floorPlanContainerRef.current.getBoundingClientRect();
+    // Get the image's bounding rect (includes all transforms)
+    const rect = imageRef.current.getBoundingClientRect();
+
+    // Calculate position relative to the image
+    // getBoundingClientRect returns scaled dimensions, so we get correct percentages
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
 
