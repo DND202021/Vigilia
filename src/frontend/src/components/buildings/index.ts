@@ -20,3 +20,5 @@ export { DocumentManager } from './DocumentManager';
 export { PhotoGallery } from './PhotoGallery';
 export { PhotoCapture } from './PhotoCapture';
 export { InspectionTracker } from './InspectionTracker';
+export { BuildingEditModal } from './BuildingEditModal';
+export { FloorPlanManageModal } from './FloorPlanManageModal';

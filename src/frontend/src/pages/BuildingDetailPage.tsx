@@ -20,7 +20,7 @@ import { useWebSocket } from '../hooks/useWebSocket';
 import { FloorSelector } from '../components/buildings/FloorSelector';
 import { BuildingInfoPanel } from '../components/buildings/BuildingInfoPanel';
 import { FloorPlanEditor } from '../components/buildings/FloorPlanEditor';
-import { FloorPlanUpload, BIMImport, BIMDataViewer } from '../components/buildings';
+import { FloorPlanUpload, BIMImport, BIMDataViewer, BuildingEditModal, FloorPlanManageModal } from '../components/buildings';
 import { BuildingAnalyticsDashboard } from '../components/analytics';
 import { DeviceMonitoringPanel } from '../components/devices/DeviceMonitoringPanel';
 import { DeviceDetailPanel } from '../components/devices/DeviceDetailPanel';
@@ -197,6 +197,10 @@ export function BuildingDetailPage() {
   const [emergencyEditMode, setEmergencyEditMode] = useState<'view' | 'procedures' | 'routes' | 'checkpoints'>('view');
   const [selectedRouteId, setSelectedRouteId] = useState<string | undefined>();
   const [selectedCheckpointId, setSelectedCheckpointId] = useState<string | undefined>();
+
+  // Building edit modal state
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isFloorPlanManageOpen, setIsFloorPlanManageOpen] = useState(false);
 
   // Device store for the Devices tab
   const {
@@ -668,9 +672,14 @@ export function BuildingDetailPage() {
             )}
           </div>
         </div>
-        <Button variant="secondary" onClick={() => navigate('/buildings')}>
-          Back
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={() => setIsEditModalOpen(true)}>
+            Edit
+          </Button>
+          <Button variant="secondary" onClick={() => navigate('/buildings')}>
+            Back
+          </Button>
+        </div>
       </div>
 
       {/* Error banner */}
@@ -713,6 +722,16 @@ export function BuildingDetailPage() {
             >
               Upload Floor Plan
             </Button>
+            {floorPlans.length > 0 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full"
+                onClick={() => setIsFloorPlanManageOpen(true)}
+              >
+                Manage Floor Plans
+              </Button>
+            )}
             {unplacedDevices.length > 0 && selectedFloor && (
               <div className="space-y-1.5">
                 <p className="text-xs text-gray-500">
@@ -1151,6 +1170,31 @@ export function BuildingDetailPage() {
           onDismiss={() => setRemoteNotification(null)}
         />
       )}
+
+      {/* Building Edit Modal */}
+      <BuildingEditModal
+        building={building}
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        onSaved={() => {
+          if (id) {
+            fetchBuilding(id);
+          }
+        }}
+      />
+
+      {/* Floor Plan Management Modal */}
+      <FloorPlanManageModal
+        buildingId={building.id}
+        floorPlans={floorPlans}
+        isOpen={isFloorPlanManageOpen}
+        onClose={() => setIsFloorPlanManageOpen(false)}
+        onUpdated={() => {
+          if (id) {
+            fetchFloorPlans(id);
+          }
+        }}
+      />
     </div>
   );
 }

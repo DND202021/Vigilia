@@ -637,17 +637,57 @@ export interface BuildingCreateRequest {
 }
 
 export interface BuildingUpdateRequest {
+  // Basic info
   name?: string;
+  civic_number?: string;
+  street_name?: string;
+  street_type?: string;
+  unit_number?: string;
+  city?: string;
+  province_state?: string;
+  postal_code?: string;
+  country?: string;
+  latitude?: number;
+  longitude?: number;
+  // Building characteristics
   building_type?: BuildingType;
+  occupancy_type?: OccupancyType;
+  construction_type?: ConstructionType;
+  year_built?: number;
+  year_renovated?: number;
+  total_floors?: number;
+  basement_levels?: number;
+  total_area_sqm?: number;
+  building_height_m?: number;
+  max_occupancy?: number;
+  // Safety
   hazard_level?: HazardLevel;
   has_sprinkler_system?: boolean;
   has_fire_alarm?: boolean;
   has_standpipe?: boolean;
   has_elevator?: boolean;
+  elevator_count?: number;
   has_generator?: boolean;
   has_hazmat?: boolean;
+  knox_box?: boolean;
+  // Access
   primary_entrance?: string;
   staging_area?: string;
+  key_box_location?: string;
+  roof_access?: string;
+  // Contacts
+  owner_name?: string;
+  owner_phone?: string;
+  owner_email?: string;
+  manager_name?: string;
+  manager_phone?: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  // Special info
+  special_needs_occupants?: boolean;
+  special_needs_details?: string;
+  animals_present?: boolean;
+  animals_details?: string;
   tactical_notes?: string;
 }
 
