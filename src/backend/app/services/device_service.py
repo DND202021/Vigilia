@@ -47,12 +47,8 @@ class DeviceService:
         capabilities: list | None = None,
     ) -> IoTDevice:
         """Register a new IoT device."""
-        # Validate that both coordinates are provided when floor_plan_id is set
-        if floor_plan_id is not None:
-            if position_x is None or position_y is None:
-                raise DeviceError(
-                    "Both position_x and position_y are required when floor_plan_id is specified"
-                )
+        # Note: position_x/position_y are optional even with floor_plan_id
+        # Devices can be added to a floor plan and positioned later
 
         device = IoTDevice(
             id=uuid.uuid4(),

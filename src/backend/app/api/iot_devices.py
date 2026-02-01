@@ -64,12 +64,12 @@ class IoTDeviceCreate(BaseModel):
 
     @model_validator(mode='after')
     def validate_floor_plan_position(self) -> 'IoTDeviceCreate':
-        """Ensure both coordinates are provided when floor_plan_id is set."""
-        if self.floor_plan_id is not None:
-            if self.position_x is None or self.position_y is None:
-                raise ValueError(
-                    'Both position_x and position_y are required when floor_plan_id is specified'
-                )
+        """Ensure both coordinates are provided together, or neither."""
+        # If one coordinate is provided, both must be provided
+        if (self.position_x is None) != (self.position_y is None):
+            raise ValueError(
+                'Both position_x and position_y must be provided together, or neither'
+            )
         return self
 
 

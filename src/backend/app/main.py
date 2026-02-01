@@ -138,13 +138,23 @@ from fastapi.responses import JSONResponse
 
 @fastapi_app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
+    # Convert errors to JSON-serializable format
+    errors = []
+    for error in exc.errors():
+        err = {
+            "loc": error.get("loc"),
+            "msg": str(error.get("msg")),
+            "type": error.get("type"),
+        }
+        errors.append(err)
+
     logger.error("Validation error",
                  path=str(request.url.path),
-                 errors=exc.errors(),
+                 errors=errors,
                  body=str(exc.body)[:500] if hasattr(exc, 'body') else None)
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors()}
+        content={"detail": errors}
     )
 
 
