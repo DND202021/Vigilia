@@ -3,12 +3,14 @@
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.core.deps import DbSession, CurrentUser, require_role
 from app.models.user import UserRole
+from app.models.audit import AuditAction
 from app.services.user_service import UserService, UserError
+from app.services.audit_service import AuditService
 
 router = APIRouter()
 
@@ -227,31 +229,49 @@ async def get_user(
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(
-    request: UserCreateRequest,
+    user_request: UserCreateRequest,
     db: DbSession,
+    request: Request,
     current_user: Annotated[
         Any, Depends(require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN))
     ],
 ) -> UserResponse:
     """Create a new user."""
     user_service = UserService(db)
+    audit_service = AuditService(db)
 
     # Agency admins can only create users in their agency
-    agency_id = request.agency_id
+    agency_id = user_request.agency_id
     if current_user.role == UserRole.AGENCY_ADMIN and current_user.agency_id:
         agency_id = current_user.agency_id
 
     try:
         user = await user_service.create_user(
-            email=request.email,
-            password=request.password,
-            full_name=request.full_name,
-            role_id=request.role_id,
+            email=user_request.email,
+            password=user_request.password,
+            full_name=user_request.full_name,
+            role_id=user_request.role_id,
             agency_id=agency_id,
-            badge_number=request.badge_number,
-            phone=request.phone,
-            is_verified=request.is_verified,
+            badge_number=user_request.badge_number,
+            phone=user_request.phone,
+            is_verified=user_request.is_verified,
         )
+
+        # Log user creation
+        await audit_service.log(
+            action=AuditAction.USER_CREATED,
+            user=current_user,
+            entity_type="user",
+            entity_id=str(user.id),
+            description=f"User created: {user.email}",
+            request=request,
+            new_values={
+                "email": user.email,
+                "full_name": user.full_name,
+                "role_name": user.role_name,
+            },
+        )
+
         return UserResponse.from_user(user)
     except UserError as e:
         raise HTTPException(
@@ -263,14 +283,16 @@ async def create_user(
 @router.patch("/{user_id}", response_model=UserResponse)
 async def update_user(
     user_id: uuid.UUID,
-    request: UserUpdateRequest,
+    user_request: UserUpdateRequest,
     db: DbSession,
+    request: Request,
     current_user: Annotated[
         Any, Depends(require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN))
     ],
 ) -> UserResponse:
     """Update an existing user."""
     user_service = UserService(db)
+    audit_service = AuditService(db)
 
     # Check if user exists and agency access
     existing = await user_service.get_user(user_id)
@@ -279,6 +301,13 @@ async def update_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
+
+    # Capture old values for audit
+    old_values = {
+        "email": existing.email,
+        "full_name": existing.full_name,
+        "role_name": existing.role_name,
+    }
 
     if (
         current_user.role == UserRole.AGENCY_ADMIN
@@ -291,21 +320,39 @@ async def update_user(
         )
 
     # Agency admins cannot change agency_id
-    agency_id = request.agency_id
+    agency_id = user_request.agency_id
     if current_user.role == UserRole.AGENCY_ADMIN:
         agency_id = None
 
     try:
         user = await user_service.update_user(
             user_id=user_id,
-            full_name=request.full_name,
-            email=request.email,
-            role_id=request.role_id,
+            full_name=user_request.full_name,
+            email=user_request.email,
+            role_id=user_request.role_id,
             agency_id=agency_id,
-            badge_number=request.badge_number,
-            phone=request.phone,
-            is_verified=request.is_verified,
+            badge_number=user_request.badge_number,
+            phone=user_request.phone,
+            is_verified=user_request.is_verified,
         )
+
+        # Log user update
+        new_values = {
+            "email": user.email,
+            "full_name": user.full_name,
+            "role_name": user.role_name,
+        }
+        await audit_service.log(
+            action=AuditAction.USER_UPDATED,
+            user=current_user,
+            entity_type="user",
+            entity_id=str(user.id),
+            description=f"User updated: {user.email}",
+            request=request,
+            old_values=old_values,
+            new_values=new_values,
+        )
+
         return UserResponse.from_user(user)
     except UserError as e:
         raise HTTPException(
@@ -318,12 +365,14 @@ async def update_user(
 async def deactivate_user(
     user_id: uuid.UUID,
     db: DbSession,
+    request: Request,
     current_user: Annotated[
         Any, Depends(require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN))
     ],
 ) -> UserResponse:
     """Deactivate a user account."""
     user_service = UserService(db)
+    audit_service = AuditService(db)
 
     # Check permissions
     existing = await user_service.get_user(user_id)
@@ -352,6 +401,19 @@ async def deactivate_user(
 
     try:
         user = await user_service.deactivate_user(user_id)
+
+        # Log deactivation
+        await audit_service.log(
+            action=AuditAction.USER_UPDATED,
+            user=current_user,
+            entity_type="user",
+            entity_id=str(user.id),
+            description=f"User deactivated: {user.email}",
+            request=request,
+            old_values={"is_active": True},
+            new_values={"is_active": False},
+        )
+
         return UserResponse.from_user(user)
     except UserError as e:
         raise HTTPException(
@@ -364,12 +426,14 @@ async def deactivate_user(
 async def activate_user(
     user_id: uuid.UUID,
     db: DbSession,
+    request: Request,
     current_user: Annotated[
         Any, Depends(require_role(UserRole.SYSTEM_ADMIN, UserRole.AGENCY_ADMIN))
     ],
 ) -> UserResponse:
     """Activate a user account."""
     user_service = UserService(db)
+    audit_service = AuditService(db)
 
     existing = await user_service.get_user(user_id)
     if not existing:
@@ -390,6 +454,19 @@ async def activate_user(
 
     try:
         user = await user_service.activate_user(user_id)
+
+        # Log activation
+        await audit_service.log(
+            action=AuditAction.USER_UPDATED,
+            user=current_user,
+            entity_type="user",
+            entity_id=str(user.id),
+            description=f"User activated: {user.email}",
+            request=request,
+            old_values={"is_active": False},
+            new_values={"is_active": True},
+        )
+
         return UserResponse.from_user(user)
     except UserError as e:
         raise HTTPException(
@@ -439,12 +516,14 @@ async def verify_user(
 @router.post("/{user_id}/reset-password", response_model=MessageResponse)
 async def reset_password(
     user_id: uuid.UUID,
-    request: PasswordResetRequest,
+    password_request: PasswordResetRequest,
     db: DbSession,
+    request: Request,
     current_user: Annotated[Any, Depends(require_role(UserRole.SYSTEM_ADMIN))],
 ) -> MessageResponse:
     """Reset a user's password (admin only)."""
     user_service = UserService(db)
+    audit_service = AuditService(db)
 
     existing = await user_service.get_user(user_id)
     if not existing:
@@ -454,7 +533,19 @@ async def reset_password(
         )
 
     try:
-        await user_service.reset_password(user_id, request.new_password)
+        await user_service.reset_password(user_id, password_request.new_password)
+
+        # Log password reset
+        await audit_service.log(
+            action=AuditAction.PASSWORD_CHANGED,
+            user=current_user,
+            entity_type="user",
+            entity_id=str(user_id),
+            description=f"Password reset by admin for {existing.email}",
+            request=request,
+            metadata={"reset_by": current_user.email},
+        )
+
         return MessageResponse(message="Password reset successfully")
     except UserError as e:
         raise HTTPException(
@@ -467,10 +558,12 @@ async def reset_password(
 async def delete_user(
     user_id: uuid.UUID,
     db: DbSession,
+    request: Request,
     current_user: Annotated[Any, Depends(require_role(UserRole.SYSTEM_ADMIN))],
 ) -> MessageResponse:
     """Soft delete a user (system admin only)."""
     user_service = UserService(db)
+    audit_service = AuditService(db)
 
     existing = await user_service.get_user(user_id)
     if not existing:
@@ -488,6 +581,18 @@ async def delete_user(
 
     try:
         await user_service.delete_user(user_id)
+
+        # Log user deletion
+        await audit_service.log(
+            action=AuditAction.USER_DELETED,
+            user=current_user,
+            entity_type="user",
+            entity_id=str(user_id),
+            description=f"User deleted: {existing.email}",
+            request=request,
+            old_values={"email": existing.email, "full_name": existing.full_name},
+        )
+
         return MessageResponse(message="User deleted successfully")
     except UserError as e:
         raise HTTPException(

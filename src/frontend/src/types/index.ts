@@ -1391,3 +1391,66 @@ export interface EmergencyPlanOverview {
   routes: EvacuationRoute[];
   checkpoints: EmergencyCheckpoint[];
 }
+
+// Audit Log Types
+export type AuditAction =
+  | 'login'
+  | 'logout'
+  | 'login_failed'
+  | 'password_changed'
+  | 'mfa_enabled'
+  | 'mfa_disabled'
+  | 'user_created'
+  | 'user_updated'
+  | 'user_deleted'
+  | 'user_role_changed'
+  | 'incident_created'
+  | 'incident_updated'
+  | 'incident_assigned'
+  | 'incident_escalated'
+  | 'incident_closed'
+  | 'alert_received'
+  | 'alert_acknowledged'
+  | 'alert_dismissed'
+  | 'alert_to_incident'
+  | 'resource_created'
+  | 'resource_updated'
+  | 'resource_deleted'
+  | 'resource_assigned'
+  | 'resource_status_changed'
+  | 'system_config_changed'
+  | 'api_access'
+  | 'permission_denied';
+
+export interface AuditLog {
+  id: string;
+  timestamp: string;
+  action: AuditAction;
+  user_id: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  description: string | null;
+  ip_address: string | null;
+  old_values: Record<string, unknown> | null;
+  new_values: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface AuditLogListResponse {
+  items: AuditLog[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface AuditLogFilters {
+  action?: AuditAction;
+  entity_type?: string;
+  entity_id?: string;
+  user_id?: string;
+  start_date?: string;
+  end_date?: string;
+  page?: number;
+  page_size?: number;
+}

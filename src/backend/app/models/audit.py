@@ -108,8 +108,8 @@ class AuditLog(Base):
     old_values: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     new_values: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
-    # Additional metadata
-    extra_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Additional metadata (maps to 'metadata' column in database)
+    extra_data: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True)
 
     __table_args__ = (
         Index("ix_audit_logs_entity", "entity_type", "entity_id"),

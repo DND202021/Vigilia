@@ -1144,4 +1144,26 @@ export const emergencyPlanningApi = {
   },
 };
 
+// Audit Logs API
+import type { AuditLog, AuditLogListResponse, AuditLogFilters } from '../types';
+
+export const auditApi = {
+  list: async (filters?: AuditLogFilters): Promise<AuditLogListResponse> => {
+    const response = await api.get<AuditLogListResponse>('/audit', { params: filters });
+    return response.data;
+  },
+
+  get: async (id: string): Promise<AuditLog> => {
+    const response = await api.get<AuditLog>(`/audit/${id}`);
+    return response.data;
+  },
+
+  getEntityTrail: async (entityType: string, entityId: string, limit?: number): Promise<AuditLog[]> => {
+    const response = await api.get<AuditLog[]>(`/audit/entity/${entityType}/${entityId}`, {
+      params: limit ? { limit } : undefined,
+    });
+    return response.data;
+  },
+};
+
 export default api;

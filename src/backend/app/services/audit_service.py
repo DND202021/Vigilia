@@ -69,7 +69,7 @@ class AuditService:
             user_agent=user_agent,
             old_values=old_values,
             new_values=new_values,
-            metadata=metadata,
+            extra_data=metadata,
         )
 
         self.db.add(audit_log)

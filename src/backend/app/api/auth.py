@@ -2,13 +2,15 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
 
 from app.core.deps import DbSession, CurrentUser
 from app.services.auth_service import AuthService, AuthenticationError
 from app.services.mfa_service import MFAService
+from app.services.audit_service import AuditService
 from app.models.user import UserRole
+from app.models.audit import AuditAction
 
 router = APIRouter()
 
@@ -106,7 +108,7 @@ class LoginResponse(BaseModel):
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(request: LoginRequest, db: DbSession) -> LoginResponse:
+async def login(login_request: LoginRequest, db: DbSession, request: Request) -> LoginResponse:
     """Authenticate user and return tokens.
 
     If MFA is enabled, returns mfa_required=True with a temporary token.
@@ -116,21 +118,31 @@ async def login(request: LoginRequest, db: DbSession) -> LoginResponse:
 
     auth_service = AuthService(db)
     mfa_service = MFAService(db)
+    audit_service = AuditService(db)
 
     try:
-        user = await auth_service.authenticate_user(request.email, request.password)
+        user = await auth_service.authenticate_user(login_request.email, login_request.password)
 
         # Check if MFA is required
         if user.mfa_enabled and user.mfa_secret:
-            if request.mfa_code:
+            if login_request.mfa_code:
                 # Verify MFA code provided with login
-                if not await mfa_service.verify_mfa(user, request.mfa_code):
+                if not await mfa_service.verify_mfa(user, login_request.mfa_code):
+                    await audit_service.log(
+                        action=AuditAction.LOGIN_FAILED,
+                        entity_type="user",
+                        entity_id=str(user.id),
+                        description=f"MFA verification failed for {user.email}",
+                        request=request,
+                        metadata={"email": user.email, "reason": "invalid_mfa_code"},
+                    )
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
                         detail="Invalid MFA code",
                     )
                 # MFA verified, return tokens
                 tokens = await auth_service.create_tokens(user)
+                await audit_service.log_login(user, request, success=True)
                 return LoginResponse(
                     access_token=tokens["access_token"],
                     refresh_token=tokens["refresh_token"],
@@ -145,11 +157,19 @@ async def login(request: LoginRequest, db: DbSession) -> LoginResponse:
 
         # No MFA, return tokens directly
         tokens = await auth_service.create_tokens(user)
+        await audit_service.log_login(user, request, success=True)
         return LoginResponse(
             access_token=tokens["access_token"],
             refresh_token=tokens["refresh_token"],
         )
     except AuthenticationError as e:
+        # Log failed login attempt
+        await audit_service.log(
+            action=AuditAction.LOGIN_FAILED,
+            description=f"Failed login attempt for {login_request.email}",
+            request=request,
+            metadata={"email": login_request.email, "reason": str(e)},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e),
@@ -158,18 +178,31 @@ async def login(request: LoginRequest, db: DbSession) -> LoginResponse:
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(request: RegisterRequest, db: DbSession) -> UserResponse:
+async def register(register_request: RegisterRequest, db: DbSession, request: Request) -> UserResponse:
     """Register a new user (public users only)."""
     auth_service = AuthService(db)
+    audit_service = AuditService(db)
 
     try:
         user = await auth_service.create_user(
-            email=request.email,
-            password=request.password,
-            full_name=request.full_name,
+            email=register_request.email,
+            password=register_request.password,
+            full_name=register_request.full_name,
             role=UserRole.PUBLIC_USER,
-            badge_number=request.badge_number,
+            badge_number=register_request.badge_number,
         )
+
+        # Log user registration
+        await audit_service.log(
+            action=AuditAction.USER_CREATED,
+            user=user,
+            entity_type="user",
+            entity_id=str(user.id),
+            description=f"New user registered: {user.email}",
+            request=request,
+            new_values={"email": user.email, "full_name": user.full_name, "role": user.role.value},
+        )
+
         return UserResponse(
             id=str(user.id),
             email=user.email,
@@ -204,8 +237,20 @@ async def refresh_token(request: RefreshTokenRequest, db: DbSession) -> TokenRes
 
 
 @router.post("/logout", response_model=MessageResponse)
-async def logout(current_user: CurrentUser) -> MessageResponse:
+async def logout(current_user: CurrentUser, db: DbSession, request: Request) -> MessageResponse:
     """Logout user (client should discard tokens)."""
+    audit_service = AuditService(db)
+
+    # Log logout
+    await audit_service.log(
+        action=AuditAction.LOGOUT,
+        user=current_user,
+        entity_type="user",
+        entity_id=str(current_user.id),
+        description=f"User {current_user.email} logged out",
+        request=request,
+    )
+
     # In a stateless JWT system, logout is handled client-side
     # For added security, you could maintain a token blacklist in Redis
     return MessageResponse(message="Successfully logged out")
@@ -228,19 +273,32 @@ async def get_current_user(current_user: CurrentUser) -> UserResponse:
 
 @router.post("/change-password", response_model=MessageResponse)
 async def change_password(
-    request: ChangePasswordRequest,
+    password_request: ChangePasswordRequest,
     current_user: CurrentUser,
     db: DbSession,
+    request: Request,
 ) -> MessageResponse:
     """Change current user's password."""
     auth_service = AuthService(db)
+    audit_service = AuditService(db)
 
     try:
         await auth_service.change_password(
             user=current_user,
-            current_password=request.current_password,
-            new_password=request.new_password,
+            current_password=password_request.current_password,
+            new_password=password_request.new_password,
         )
+
+        # Log password change
+        await audit_service.log(
+            action=AuditAction.PASSWORD_CHANGED,
+            user=current_user,
+            entity_type="user",
+            entity_id=str(current_user.id),
+            description=f"Password changed for {current_user.email}",
+            request=request,
+        )
+
         return MessageResponse(message="Password changed successfully")
     except AuthenticationError as e:
         raise HTTPException(
@@ -270,9 +328,10 @@ async def setup_mfa(current_user: CurrentUser, db: DbSession) -> MFASetupRespons
 
 @router.post("/mfa/confirm", response_model=MessageResponse)
 async def confirm_mfa_setup(
-    request: MFASetupRequest,
+    mfa_request: MFASetupRequest,
     current_user: CurrentUser,
     db: DbSession,
+    request: Request,
 ) -> MessageResponse:
     """Confirm MFA setup by verifying a code from the authenticator app.
 
@@ -285,13 +344,24 @@ async def confirm_mfa_setup(
         )
 
     mfa_service = MFAService(db)
-    success = await mfa_service.confirm_mfa_setup(current_user, request.secret, request.code)
+    audit_service = AuditService(db)
+    success = await mfa_service.confirm_mfa_setup(current_user, mfa_request.secret, mfa_request.code)
 
     if not success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid MFA code",
         )
+
+    # Log MFA enabled
+    await audit_service.log(
+        action=AuditAction.MFA_ENABLED,
+        user=current_user,
+        entity_type="user",
+        entity_id=str(current_user.id),
+        description=f"MFA enabled for {current_user.email}",
+        request=request,
+    )
 
     return MessageResponse(message="MFA has been enabled successfully")
 
@@ -345,9 +415,10 @@ async def complete_mfa_login(
 
 @router.post("/mfa/disable", response_model=MessageResponse)
 async def disable_mfa(
-    request: MFAVerifyRequest,
+    mfa_request: MFAVerifyRequest,
     current_user: CurrentUser,
     db: DbSession,
+    request: Request,
 ) -> MessageResponse:
     """Disable MFA on the current user's account.
 
@@ -360,12 +431,23 @@ async def disable_mfa(
         )
 
     mfa_service = MFAService(db)
-    success = await mfa_service.disable_mfa(current_user, request.code)
+    audit_service = AuditService(db)
+    success = await mfa_service.disable_mfa(current_user, mfa_request.code)
 
     if not success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid MFA code",
         )
+
+    # Log MFA disabled
+    await audit_service.log(
+        action=AuditAction.MFA_DISABLED,
+        user=current_user,
+        entity_type="user",
+        entity_id=str(current_user.id),
+        description=f"MFA disabled for {current_user.email}",
+        request=request,
+    )
 
     return MessageResponse(message="MFA has been disabled")

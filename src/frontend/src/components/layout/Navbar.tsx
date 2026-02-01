@@ -20,6 +20,7 @@ const navLinks = [
 const adminLinks = [
   { to: '/users', label: 'Users' },
   { to: '/roles', label: 'Roles' },
+  { to: '/audit-logs', label: 'Audit Logs' },
 ];
 
 export function Navbar() {
