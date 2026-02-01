@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,7 +23,7 @@ class IoTDeviceCreate(BaseModel):
     """Create IoT device request."""
     name: str = Field(..., min_length=1, max_length=200)
     device_type: str = Field(..., description="microphone, camera, sensor, gateway, other")
-    building_id: str
+    building_id: str = Field(..., min_length=1, description="Building UUID")
     serial_number: str | None = None
     ip_address: str | None = None
     mac_address: str | None = None
@@ -40,6 +40,27 @@ class IoTDeviceCreate(BaseModel):
     icon_color: str | None = Field(None, max_length=50, description="Icon color (Tailwind class or hex)")
     config: dict | None = None
     capabilities: list[str] | None = None
+
+    @field_validator('building_id')
+    @classmethod
+    def validate_building_id(cls, v: str) -> str:
+        """Validate building_id is a valid UUID."""
+        try:
+            uuid.UUID(v)
+        except (ValueError, TypeError):
+            raise ValueError('building_id must be a valid UUID')
+        return v
+
+    @field_validator('floor_plan_id')
+    @classmethod
+    def validate_floor_plan_id(cls, v: str | None) -> str | None:
+        """Validate floor_plan_id is a valid UUID if provided."""
+        if v is not None and v != '':
+            try:
+                uuid.UUID(v)
+            except (ValueError, TypeError):
+                raise ValueError('floor_plan_id must be a valid UUID')
+        return v if v != '' else None
 
     @model_validator(mode='after')
     def validate_floor_plan_position(self) -> 'IoTDeviceCreate':
