@@ -143,9 +143,29 @@ function DeviceMarker({
   // Close context menu on click outside
   useEffect(() => {
     if (!showContextMenu) return;
-    const handleClick = () => setShowContextMenu(false);
-    window.addEventListener('click', handleClick);
-    return () => window.removeEventListener('click', handleClick);
+
+    // Use mousedown instead of click, and add a small delay
+    // to prevent immediate closing from the same right-click event
+    const timeoutId = setTimeout(() => {
+      const handleMouseDown = (e: MouseEvent) => {
+        // Don't close if clicking inside the context menu
+        const target = e.target as HTMLElement;
+        if (target.closest('[data-context-menu]')) return;
+        setShowContextMenu(false);
+      };
+      window.addEventListener('mousedown', handleMouseDown);
+
+      // Store cleanup function
+      (window as unknown as { __contextMenuCleanup?: () => void }).__contextMenuCleanup = () => {
+        window.removeEventListener('mousedown', handleMouseDown);
+      };
+    }, 100);
+
+    return () => {
+      clearTimeout(timeoutId);
+      const cleanup = (window as unknown as { __contextMenuCleanup?: () => void }).__contextMenuCleanup;
+      if (cleanup) cleanup();
+    };
   }, [showContextMenu]);
 
   return (
@@ -247,6 +267,7 @@ function DeviceMarker({
       {/* Context menu */}
       {showContextMenu && (
         <div
+          data-context-menu
           className="fixed bg-white rounded-lg shadow-lg border py-1 z-50"
           style={{ left: contextMenuPos.x, top: contextMenuPos.y }}
           onClick={(e) => e.stopPropagation()}
