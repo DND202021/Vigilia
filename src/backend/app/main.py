@@ -24,15 +24,32 @@ logger = structlog.get_logger()
 # Module-level references for services that need lifecycle management
 _device_monitor: DeviceMonitorService | None = None
 _sound_pipeline: SoundAlertPipeline | None = None
+_metrics_task: asyncio.Task | None = None
+
+
+async def _update_health_metrics() -> None:
+    """Background task to periodically update health metrics for Prometheus."""
+    while True:
+        try:
+            async with async_session_factory() as session:
+                await health_service.get_readiness(session, engine)
+        except Exception as e:
+            logger.warning("Failed to update health metrics", error=str(e))
+        await asyncio.sleep(15)  # Update every 15 seconds
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler for startup/shutdown events."""
-    global _device_monitor, _sound_pipeline
+    global _device_monitor, _sound_pipeline, _metrics_task
 
     # Startup
     logger.info("Starting ERIOP application", environment=settings.environment)
+
+    # Start health metrics background task
+    if settings.metrics_enabled:
+        _metrics_task = asyncio.create_task(_update_health_metrics())
+        logger.info("Health metrics background task started")
 
     # Initialize MQTT client for Fundamentum IoT integration
     if settings.mqtt_broker_host:
@@ -78,6 +95,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Shutdown
     logger.info("Shutting down ERIOP application")
+
+    if _metrics_task:
+        _metrics_task.cancel()
+        try:
+            await _metrics_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("Health metrics background task stopped")
 
     if _device_monitor:
         await _device_monitor.stop()
