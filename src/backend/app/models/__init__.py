@@ -26,6 +26,8 @@ from app.models.document import BuildingDocument, DocumentCategory
 from app.models.emergency_procedure import EmergencyProcedure, ProcedureType
 from app.models.evacuation_route import EvacuationRoute, RouteType
 from app.models.emergency_checkpoint import EmergencyCheckpoint, CheckpointType
+from app.models.channel import Channel, ChannelType, ChannelMember
+from app.models.message import Message, MessageType, MessagePriority, MessageReaction
 
 __all__ = [
     "Base",
@@ -75,4 +77,11 @@ __all__ = [
     "RouteType",
     "EmergencyCheckpoint",
     "CheckpointType",
+    "Channel",
+    "ChannelType",
+    "ChannelMember",
+    "Message",
+    "MessageType",
+    "MessagePriority",
+    "MessageReaction",
 ]

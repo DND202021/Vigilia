@@ -443,3 +443,141 @@ async def emit_device_position_updated(floor_plan_id: str, device_data: dict):
         'timestamp': datetime.utcnow().isoformat(),
     }, room=room)
     logger.debug(f"Emitted device:position_updated to room {room}")
+
+
+# Communication Hub - Channel Room Handlers
+
+@sio.event
+async def join_channel(sid: str, channel_id: str) -> dict:
+    """Join a channel room for real-time messaging."""
+    room = f"channel:{channel_id}"
+    await sio.enter_room(sid, room)
+    if sid in connected_clients:
+        connected_clients[sid]["rooms"].add(room)
+    logger.info("Client joined channel room", sid=sid, channel_id=channel_id)
+    return {"status": "joined", "channel_id": channel_id}
+
+
+@sio.event
+async def leave_channel(sid: str, channel_id: str) -> dict:
+    """Leave a channel room."""
+    room = f"channel:{channel_id}"
+    await sio.leave_room(sid, room)
+    if sid in connected_clients:
+        connected_clients[sid]["rooms"].discard(room)
+    logger.info("Client left channel room", sid=sid, channel_id=channel_id)
+    return {"status": "left", "channel_id": channel_id}
+
+
+@sio.event
+async def typing_start(sid: str, data: dict) -> None:
+    """Handle user started typing in a channel."""
+    channel_id = data.get("channel_id")
+    if not channel_id:
+        return
+
+    room = f"channel:{channel_id}"
+    client_data = connected_clients.get(sid, {})
+    user_id = client_data.get("user_id")
+    user_name = client_data.get("user_name", "Unknown")
+
+    await sio.emit("typing:start", {
+        "channel_id": channel_id,
+        "user_id": user_id,
+        "user_name": user_name,
+        "timestamp": datetime.utcnow().isoformat(),
+    }, room=room, skip_sid=sid)
+
+
+@sio.event
+async def typing_stop(sid: str, data: dict) -> None:
+    """Handle user stopped typing in a channel."""
+    channel_id = data.get("channel_id")
+    if not channel_id:
+        return
+
+    room = f"channel:{channel_id}"
+    client_data = connected_clients.get(sid, {})
+    user_id = client_data.get("user_id")
+
+    await sio.emit("typing:stop", {
+        "channel_id": channel_id,
+        "user_id": user_id,
+        "timestamp": datetime.utcnow().isoformat(),
+    }, room=room, skip_sid=sid)
+
+
+# Communication Hub Emit Functions
+
+async def emit_message_new(channel_id: str, message: dict) -> None:
+    """Emit new message to channel room."""
+    room = f"channel:{channel_id}"
+    await sio.emit("message:new", {
+        "channel_id": channel_id,
+        "message": message,
+        "timestamp": datetime.utcnow().isoformat(),
+    }, room=room)
+    logger.debug(f"Emitted message:new to room {room}")
+
+
+async def emit_message_edited(channel_id: str, message_id: str, content: str, edited_at: str) -> None:
+    """Emit message edited event to channel room."""
+    room = f"channel:{channel_id}"
+    await sio.emit("message:edited", {
+        "channel_id": channel_id,
+        "message_id": message_id,
+        "content": content,
+        "edited_at": edited_at,
+        "timestamp": datetime.utcnow().isoformat(),
+    }, room=room)
+    logger.debug(f"Emitted message:edited to room {room}")
+
+
+async def emit_message_deleted(channel_id: str, message_id: str) -> None:
+    """Emit message deleted event to channel room."""
+    room = f"channel:{channel_id}"
+    await sio.emit("message:deleted", {
+        "channel_id": channel_id,
+        "message_id": message_id,
+        "timestamp": datetime.utcnow().isoformat(),
+    }, room=room)
+    logger.debug(f"Emitted message:deleted to room {room}")
+
+
+async def emit_channel_created(user_ids: list[str], channel: dict) -> None:
+    """Emit channel created event to specific users."""
+    for user_id in user_ids:
+        # Find all sids for this user
+        for sid, client_data in connected_clients.items():
+            if client_data.get("user_id") == user_id:
+                await sio.emit("channel:created", channel, to=sid)
+    logger.debug(f"Emitted channel:created to {len(user_ids)} users")
+
+
+async def emit_channel_updated(channel_id: str, channel: dict) -> None:
+    """Emit channel updated event to channel room."""
+    room = f"channel:{channel_id}"
+    await sio.emit("channel:updated", channel, room=room)
+    logger.debug(f"Emitted channel:updated to room {room}")
+
+
+async def emit_member_joined(channel_id: str, member: dict) -> None:
+    """Emit member joined event to channel room."""
+    room = f"channel:{channel_id}"
+    await sio.emit("member:joined", {
+        "channel_id": channel_id,
+        "member": member,
+        "timestamp": datetime.utcnow().isoformat(),
+    }, room=room)
+    logger.debug(f"Emitted member:joined to room {room}")
+
+
+async def emit_member_left(channel_id: str, user_id: str) -> None:
+    """Emit member left event to channel room."""
+    room = f"channel:{channel_id}"
+    await sio.emit("member:left", {
+        "channel_id": channel_id,
+        "user_id": user_id,
+        "timestamp": datetime.utcnow().isoformat(),
+    }, room=room)
+    logger.debug(f"Emitted member:left to room {room}")

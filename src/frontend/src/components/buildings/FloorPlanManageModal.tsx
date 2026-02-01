@@ -98,7 +98,7 @@ export function FloorPlanManageModal({
 
     setIsLoading(true);
     try {
-      await buildingsApi.uploadFloorPlan(buildingId, plan.floor_number, file, plan.floor_name);
+      await buildingsApi.uploadFloorPlan(buildingId, file, plan.floor_number, plan.floor_name);
       toast.success('Floor plan image replaced');
       onUpdated();
     } catch (error) {

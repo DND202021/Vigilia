@@ -32,6 +32,8 @@ from app.services.bim_parser import (
     BIMKeyLocation,
 )
 from app.services.building_analytics_service import BuildingAnalyticsService, BuildingAnalyticsError
+from app.services.channel_service import ChannelService
+from app.services.message_service import MessageService
 
 __all__ = [
     "AuthService",
@@ -74,4 +76,6 @@ __all__ = [
     "BIMKeyLocation",
     "BuildingAnalyticsService",
     "BuildingAnalyticsError",
+    "ChannelService",
+    "MessageService",
 ]
