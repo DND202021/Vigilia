@@ -81,11 +81,13 @@ class IncidentResponse(BaseModel):
     id: str
     incident_number: str
     category: IncidentCategory
+    incident_type: IncidentCategory  # Alias for frontend compatibility
     priority: IncidentPriority
     status: IncidentStatus
     title: str
     description: str | None
     location: Location
+    reported_at: datetime | None
     created_at: datetime
     updated_at: datetime
     assigned_units: list[str] = []
@@ -127,10 +129,12 @@ class PaginatedIncidentResponse(BaseModel):
 
 def incident_to_response(inc: IncidentModel) -> IncidentResponse:
     """Convert an incident model to response."""
+    category = IncidentCategory(inc.category.value)
     return IncidentResponse(
         id=str(inc.id),
         incident_number=inc.incident_number,
-        category=IncidentCategory(inc.category.value),
+        category=category,
+        incident_type=category,  # Alias for frontend compatibility
         priority=IncidentPriority(inc.priority),
         status=IncidentStatus(inc.status.value),
         title=inc.title,
@@ -141,6 +145,7 @@ def incident_to_response(inc: IncidentModel) -> IncidentResponse:
             address=inc.address,
             building_info=inc.building_info,
         ),
+        reported_at=inc.reported_at,
         created_at=inc.created_at,
         updated_at=inc.updated_at,
         assigned_units=inc.assigned_units or [],
@@ -478,6 +483,17 @@ async def transition_incident_status(
     await emit_incident_updated(response.model_dump(mode="json"))
 
     return response
+
+
+@router.post("/{incident_id}/status", response_model=IncidentResponse)
+async def update_incident_status(
+    incident_id: str,
+    request: StatusTransitionRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> IncidentResponse:
+    """Update incident status (alias for transition endpoint)."""
+    return await transition_incident_status(incident_id, request, db, current_user)
 
 
 @router.post("/{incident_id}/escalate", response_model=IncidentResponse)

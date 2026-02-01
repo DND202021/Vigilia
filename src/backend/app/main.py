@@ -132,6 +132,21 @@ fastapi_app.add_middleware(
 # Include API routes
 fastapi_app.include_router(api_router, prefix="/api/v1")
 
+# Add validation error logging
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
+@fastapi_app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    logger.error("Validation error",
+                 path=str(request.url.path),
+                 errors=exc.errors(),
+                 body=str(exc.body)[:500] if hasattr(exc, 'body') else None)
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors()}
+    )
+
 
 # Set up Prometheus metrics instrumentation
 _instrumentator = None

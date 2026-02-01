@@ -321,6 +321,9 @@ async def create_iot_device(
     current_user: User = Depends(get_current_active_user),
 ) -> IoTDeviceResponse:
     """Register a new IoT device."""
+    import structlog
+    logger = structlog.get_logger()
+    logger.info("Creating IoT device", data=data.model_dump())
     try:
         dtype = DeviceType(data.device_type)
     except ValueError:
