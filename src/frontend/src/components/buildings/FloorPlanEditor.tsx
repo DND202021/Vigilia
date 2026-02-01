@@ -564,9 +564,10 @@ export function FloorPlanEditor({
 
   const handleDeviceDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
-    if (!draggingDevice || !imageRef.current) return;
+    if (!draggingDevice || !floorPlanContainerRef.current) return;
 
-    const rect = imageRef.current.getBoundingClientRect();
+    // Use the floor plan container (same reference used for marker positioning)
+    const rect = floorPlanContainerRef.current.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
 
