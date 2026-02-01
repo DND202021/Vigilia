@@ -70,13 +70,12 @@ export function DeviceEditSidebar({
     loadDevices();
   }, [buildingId]);
 
-  // Helper to check if device has valid position coordinates
-  const hasValidPosition = (device: IoTDevice) =>
-    device.position_x != null && device.position_y != null;
-
-  // A device is "placed" if it has valid coordinates on this floor plan OR was just placed in current session
-  const isDevicePlaced = (device: IoTDevice, placedSet: Set<string>) =>
-    placedSet.has(device.id) || (device.floor_plan_id === floorPlanId && hasValidPosition(device));
+  // A device is "placed" if it's in the placedDeviceIds from the store
+  // We only trust the store's state (not the device's API data) because:
+  // 1. Store reflects real-time changes (add/remove)
+  // 2. Device API data may be stale until page refresh
+  const isDevicePlaced = (_device: IoTDevice, placedSet: Set<string>) =>
+    placedSet.has(_device.id);
 
   // Filter devices
   const filteredDevices = useMemo(() => {

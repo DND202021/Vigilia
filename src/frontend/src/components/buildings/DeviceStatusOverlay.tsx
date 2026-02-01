@@ -6,6 +6,7 @@
  */
 
 import { useMemo, useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useDevicePositionStore } from '../../stores/devicePositionStore';
 import type { DeviceStatus, DeviceType, DeviceIconType } from '../../types';
 import { getDeviceIconConfig, getDefaultIconForDeviceType } from '../../types';
@@ -264,11 +265,11 @@ function DeviceMarker({
         </div>
       </div>
 
-      {/* Context menu */}
-      {showContextMenu && (
+      {/* Context menu - rendered via portal to escape CSS transform context */}
+      {showContextMenu && createPortal(
         <div
           data-context-menu
-          className="fixed bg-white rounded-lg shadow-lg border py-1 z-50"
+          className="fixed bg-white rounded-lg shadow-lg border py-1 z-[9999]"
           style={{ left: contextMenuPos.x, top: contextMenuPos.y }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -281,7 +282,8 @@ function DeviceMarker({
             </svg>
             Remove from floor plan
           </button>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
