@@ -1,10 +1,11 @@
 /**
  * WebSocket Hook for Real-time Updates
  *
- * This hook provides optional real-time updates via Socket.IO.
- * If the connection fails (e.g., due to proxy configuration issues),
- * it fails silently without spamming the console.
+ * This hook provides real-time updates via Socket.IO using WebSocket
+ * transport with polling fallback. WebSocket connections go through
+ * nginx which is configured with proper upgrade headers.
  *
+ * If the connection fails, it fails silently without spamming the console.
  * The app works fully without WebSocket - users just need to refresh
  * to see updates instead of getting them in real-time.
  */
@@ -85,8 +86,8 @@ export function useWebSocket(): WebSocketHookResult {
     const socket = io(wsUrl, {
       path: '/socket.io/',
       auth: { token },
-      // Only use polling - WebSocket upgrade fails through HTTP/2 proxies
-      transports: ['polling'],
+      // Try WebSocket first, fallback to polling if upgrade fails
+      transports: ['websocket', 'polling'],
       // Enable reconnection with reasonable settings
       reconnection: true,
       reconnectionAttempts: 5,
