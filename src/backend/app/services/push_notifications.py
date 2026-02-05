@@ -12,6 +12,7 @@ from enum import Enum
 from typing import Any
 
 import structlog
+from pywebpush import webpush, WebPushException
 from sqlalchemy import select, String, Boolean, DateTime, Text, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
 from app.models.user import User
+from app.core.config import settings
 
 logger = structlog.get_logger()
 
@@ -283,28 +285,48 @@ class PushNotificationService:
             webpush_payload["actions"] = payload.actions
 
         # Send to each subscription
-        # Note: In production, use pywebpush library for actual delivery
         success_count = 0
         for sub in subscriptions:
             try:
-                # Placeholder for actual WebPush send
-                # In production:
-                # from pywebpush import webpush, WebPushException
-                # webpush(
-                #     subscription_info={
-                #         "endpoint": sub.endpoint,
-                #         "keys": {"p256dh": sub.p256dh_key, "auth": sub.auth_key}
-                #     },
-                #     data=json.dumps(webpush_payload),
-                #     vapid_private_key=settings.vapid_private_key,
-                #     vapid_claims={"sub": f"mailto:{settings.vapid_email}"}
-                # )
-                success_count += 1
-                logger.debug(
-                    "Would send push notification",
-                    subscription_id=str(sub.id),
-                    endpoint=sub.endpoint[:50],
-                )
+                # Send via pywebpush if VAPID keys configured
+                if settings.vapid_private_key:
+                    webpush(
+                        subscription_info={
+                            "endpoint": sub.endpoint,
+                            "keys": {"p256dh": sub.p256dh_key, "auth": sub.auth_key},
+                        },
+                        data=json.dumps(webpush_payload),
+                        vapid_private_key=settings.vapid_private_key,
+                        vapid_claims={"sub": settings.vapid_mailto},
+                        content_encoding="aes128gcm",
+                    )
+                    success_count += 1
+                    logger.debug(
+                        "Push notification sent",
+                        subscription_id=str(sub.id),
+                        endpoint=sub.endpoint[:50],
+                    )
+                else:
+                    # Stub mode when not configured
+                    success_count += 1
+                    logger.debug(
+                        "WebPush not configured, skipping actual send",
+                        subscription_id=str(sub.id),
+                    )
+            except WebPushException as e:
+                # Handle expired subscription (410 Gone)
+                if "410" in str(e) or "Gone" in str(e):
+                    sub.is_active = False
+                    logger.info(
+                        "Push subscription expired",
+                        subscription_id=str(sub.id),
+                    )
+                else:
+                    logger.error(
+                        "Push send failed",
+                        subscription_id=str(sub.id),
+                        error=str(e),
+                    )
             except Exception as e:
                 logger.error(
                     "Failed to send push notification",

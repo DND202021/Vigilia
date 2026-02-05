@@ -4,7 +4,7 @@ Supports multiple channels: email, SMS, phone call, and push notifications.
 Integrates with the alert pipeline to send notifications based on user preferences.
 """
 
-import logging
+import structlog
 from datetime import datetime, timezone, time as dt_time
 from typing import Any
 from uuid import UUID
@@ -15,8 +15,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.models.alert import Alert, AlertSeverity
 from app.models.notification_preference import NotificationPreference
 from app.models.user import User
+from app.models.notification_delivery import NotificationDelivery, DeliveryStatus, DeliveryChannel
+from app.services.delivery.email_delivery import EmailDeliveryService
+from app.services.delivery.sms_delivery import SMSDeliveryService
+from app.services.delivery.push_delivery import PushDeliveryService
+from app.services.delivery.retry_manager import NotificationRetryManager
+from app.services.push_notifications import PushSubscription
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # Severity to numeric level mapping (lower = more severe)
 SEVERITY_LEVELS = {
@@ -75,6 +81,54 @@ class NotificationService:
             "users_notified": 0,
         }
 
+        # Initialize delivery services (graceful if not configured)
+        self.email_service = EmailDeliveryService()
+        self.sms_service = SMSDeliveryService()
+        self.push_service = PushDeliveryService()
+        self.retry_manager = NotificationRetryManager()
+
+    async def _create_delivery_record(
+        self,
+        db: AsyncSession,
+        alert_id: UUID,
+        user_id: UUID,
+        channel: str,
+        status: str,
+        external_id: str | None = None,
+        error_message: str | None = None,
+        attempts: int = 1,
+    ) -> NotificationDelivery:
+        """Create a NotificationDelivery record in the database.
+
+        Args:
+            db: Database session
+            alert_id: Alert ID
+            user_id: User ID
+            channel: Delivery channel (email, sms, push, call)
+            status: Delivery status (sent, failed, etc.)
+            external_id: External service ID (SendGrid message ID, Twilio SID, etc.)
+            error_message: Error message if delivery failed
+            attempts: Number of delivery attempts
+
+        Returns:
+            Created NotificationDelivery record
+        """
+        delivery = NotificationDelivery(
+            alert_id=alert_id,
+            user_id=user_id,
+            channel=channel,
+            status=status,
+            external_id=external_id,
+            error_message=error_message,
+            attempts=attempts,
+            sent_at=datetime.now(timezone.utc) if status == DeliveryStatus.SENT.value else None,
+            failed_at=datetime.now(timezone.utc) if status == DeliveryStatus.FAILED.value else None,
+            last_attempt_at=datetime.now(timezone.utc),
+        )
+        db.add(delivery)
+        await db.flush()
+        return delivery
+
     async def notify_for_alert(self, alert: Alert) -> list[NotificationDeliveryResult]:
         """
         Send notifications for a new alert to all eligible users.
@@ -115,6 +169,7 @@ class NotificationService:
 
                 # Deliver via each enabled channel
                 user_results = await self._deliver_to_user(
+                    db=db,
                     user=user,
                     pref=pref,
                     alert=alert,
@@ -123,6 +178,9 @@ class NotificationService:
 
                 if any(r.success for r in user_results):
                     self._stats["users_notified"] += 1
+
+            # Commit all NotificationDelivery records
+            await db.commit()
 
         # Log all delivery attempts
         for result in results:
@@ -136,6 +194,7 @@ class NotificationService:
 
     async def _deliver_to_user(
         self,
+        db: AsyncSession,
         user: User,
         pref: NotificationPreference,
         alert: Alert,
@@ -144,11 +203,11 @@ class NotificationService:
         results = []
 
         if pref.email_enabled and user.email:
-            result = await self._send_email(user, alert)
+            result = await self._send_email(db, user, alert)
             results.append(result)
 
         if pref.sms_enabled and hasattr(user, 'phone') and user.phone:
-            result = await self._send_sms(user, alert)
+            result = await self._send_sms(db, user, alert)
             results.append(result)
 
         if pref.call_enabled and hasattr(user, 'phone') and user.phone:
@@ -156,32 +215,78 @@ class NotificationService:
             results.append(result)
 
         if pref.push_enabled:
-            result = await self._send_push(user, alert)
+            result = await self._send_push(db, user, alert)
             results.append(result)
 
         return results
 
-    async def _send_email(self, user: User, alert: Alert) -> NotificationDeliveryResult:
-        """Send email notification. Placeholder for SMTP/SendGrid integration."""
-        try:
-            # TODO: Integrate with SMTP or SendGrid
-            # For now, log the attempt
-            logger.info(
-                f"Email notification: {alert.title} -> {user.email}",
-                extra={
-                    "user_id": str(user.id),
-                    "alert_id": str(alert.id),
-                    "channel": "email",
-                },
+    async def _send_email(
+        self, db: AsyncSession, user: User, alert: Alert
+    ) -> NotificationDeliveryResult:
+        """Send email notification via SendGrid."""
+        if self.email_service.client is None:
+            logger.debug(
+                "Email not configured, skipping",
+                user_id=str(user.id),
+                alert_id=str(alert.id),
             )
             return NotificationDeliveryResult(
                 user_id=user.id,
                 channel="email",
-                success=True,
-                message=f"Email queued to {user.email}",
+                success=False,
+                message="Email not configured",
             )
+
+        try:
+            # Execute with retry logic
+            success, message, external_id = await self.retry_manager.execute_with_retry(
+                self.email_service.send_alert_email,
+                user.email,
+                alert.title,
+                alert.description or "",
+                alert.severity.value,
+            )
+
+            # Create delivery record
+            status = DeliveryStatus.SENT.value if success else DeliveryStatus.FAILED.value
+            await self._create_delivery_record(
+                db=db,
+                alert_id=alert.id,
+                user_id=user.id,
+                channel=DeliveryChannel.EMAIL.value,
+                status=status,
+                external_id=external_id,
+                error_message=None if success else message,
+                attempts=1,  # Retry manager handles attempt count internally
+            )
+
+            return NotificationDeliveryResult(
+                user_id=user.id,
+                channel="email",
+                success=success,
+                message=message,
+                external_id=external_id,
+            )
+
         except Exception as e:
-            logger.error(f"Email notification failed: {e}")
+            # All retries exhausted
+            logger.error(
+                "Email delivery failed after retries",
+                user_id=str(user.id),
+                alert_id=str(alert.id),
+                error=str(e),
+            )
+
+            await self._create_delivery_record(
+                db=db,
+                alert_id=alert.id,
+                user_id=user.id,
+                channel=DeliveryChannel.EMAIL.value,
+                status=DeliveryStatus.FAILED.value,
+                error_message=str(e),
+                attempts=self.retry_manager.MAX_TRIES,
+            )
+
             return NotificationDeliveryResult(
                 user_id=user.id,
                 channel="email",
@@ -189,27 +294,87 @@ class NotificationService:
                 message=str(e),
             )
 
-    async def _send_sms(self, user: User, alert: Alert) -> NotificationDeliveryResult:
-        """Send SMS notification. Placeholder for Twilio integration."""
-        try:
-            phone = getattr(user, 'phone', None)
-            # TODO: Integrate with Twilio SMS
-            logger.info(
-                f"SMS notification: {alert.title} -> {phone}",
-                extra={
-                    "user_id": str(user.id),
-                    "alert_id": str(alert.id),
-                    "channel": "sms",
-                },
+    async def _send_sms(
+        self, db: AsyncSession, user: User, alert: Alert
+    ) -> NotificationDeliveryResult:
+        """Send SMS notification via Twilio."""
+        phone = getattr(user, "phone", None)
+
+        if self.sms_service.client is None:
+            logger.debug(
+                "SMS not configured, skipping",
+                user_id=str(user.id),
+                alert_id=str(alert.id),
             )
             return NotificationDeliveryResult(
                 user_id=user.id,
                 channel="sms",
-                success=True,
-                message=f"SMS queued to {phone}",
+                success=False,
+                message="SMS not configured",
             )
+
+        if not phone:
+            logger.debug(
+                "User has no phone number, skipping SMS",
+                user_id=str(user.id),
+                alert_id=str(alert.id),
+            )
+            return NotificationDeliveryResult(
+                user_id=user.id,
+                channel="sms",
+                success=False,
+                message="No phone number",
+            )
+
+        try:
+            # Execute with retry logic
+            success, message, external_id = await self.retry_manager.execute_with_retry(
+                self.sms_service.send_alert_sms,
+                phone,
+                alert.title,
+                alert.severity.value,
+            )
+
+            # Create delivery record
+            status = DeliveryStatus.SENT.value if success else DeliveryStatus.FAILED.value
+            await self._create_delivery_record(
+                db=db,
+                alert_id=alert.id,
+                user_id=user.id,
+                channel=DeliveryChannel.SMS.value,
+                status=status,
+                external_id=external_id,
+                error_message=None if success else message,
+                attempts=1,
+            )
+
+            return NotificationDeliveryResult(
+                user_id=user.id,
+                channel="sms",
+                success=success,
+                message=message,
+                external_id=external_id,
+            )
+
         except Exception as e:
-            logger.error(f"SMS notification failed: {e}")
+            # All retries exhausted
+            logger.error(
+                "SMS delivery failed after retries",
+                user_id=str(user.id),
+                alert_id=str(alert.id),
+                error=str(e),
+            )
+
+            await self._create_delivery_record(
+                db=db,
+                alert_id=alert.id,
+                user_id=user.id,
+                channel=DeliveryChannel.SMS.value,
+                status=DeliveryStatus.FAILED.value,
+                error_message=str(e),
+                attempts=self.retry_manager.MAX_TRIES,
+            )
+
             return NotificationDeliveryResult(
                 user_id=user.id,
                 channel="sms",
@@ -245,26 +410,137 @@ class NotificationService:
                 message=str(e),
             )
 
-    async def _send_push(self, user: User, alert: Alert) -> NotificationDeliveryResult:
-        """Send push notification. Placeholder for WebPush/FCM integration."""
-        try:
-            # TODO: Integrate with WebPush or Firebase Cloud Messaging
-            logger.info(
-                f"Push notification: {alert.title} -> user {user.id}",
-                extra={
-                    "user_id": str(user.id),
-                    "alert_id": str(alert.id),
-                    "channel": "push",
-                },
+    async def _send_push(
+        self, db: AsyncSession, user: User, alert: Alert
+    ) -> NotificationDeliveryResult:
+        """Send push notification via WebPush."""
+        if not self.push_service.enabled:
+            logger.debug(
+                "WebPush not configured, skipping",
+                user_id=str(user.id),
+                alert_id=str(alert.id),
             )
             return NotificationDeliveryResult(
                 user_id=user.id,
                 channel="push",
-                success=True,
-                message="Push notification queued",
+                success=False,
+                message="WebPush not configured",
             )
+
+        try:
+            # Query active push subscriptions for user
+            result = await db.execute(
+                select(PushSubscription).where(
+                    PushSubscription.user_id == user.id,
+                    PushSubscription.is_active == True,
+                )
+            )
+            subscriptions = list(result.scalars().all())
+
+            if not subscriptions:
+                logger.debug(
+                    "User has no active push subscriptions",
+                    user_id=str(user.id),
+                    alert_id=str(alert.id),
+                )
+                return NotificationDeliveryResult(
+                    user_id=user.id,
+                    channel="push",
+                    success=False,
+                    message="No active subscriptions",
+                )
+
+            # Send to each subscription
+            success_count = 0
+            failed_count = 0
+            last_error = None
+
+            for subscription in subscriptions:
+                subscription_info = {
+                    "endpoint": subscription.endpoint,
+                    "keys": {
+                        "p256dh": subscription.p256dh_key,
+                        "auth": subscription.auth_key,
+                    },
+                }
+
+                try:
+                    # Execute with retry logic
+                    success, message, _ = await self.retry_manager.execute_with_retry(
+                        self.push_service.send_alert_push,
+                        subscription_info,
+                        alert.title,
+                        alert.description or "",
+                        alert.severity.value,
+                        str(alert.id),
+                        None,  # url
+                    )
+
+                    if success:
+                        success_count += 1
+                    else:
+                        failed_count += 1
+                        last_error = message
+
+                        # Handle expired subscription
+                        if message == "subscription_expired":
+                            subscription.is_active = False
+                            logger.info(
+                                "Deactivated expired push subscription",
+                                subscription_id=str(subscription.id),
+                                user_id=str(user.id),
+                            )
+
+                except Exception as e:
+                    failed_count += 1
+                    last_error = str(e)
+                    logger.error(
+                        "Push delivery failed",
+                        subscription_id=str(subscription.id),
+                        error=str(e),
+                    )
+
+            # Create delivery record for overall push attempt
+            overall_success = success_count > 0
+            status = DeliveryStatus.SENT.value if overall_success else DeliveryStatus.FAILED.value
+            error_msg = None if overall_success else last_error
+
+            await self._create_delivery_record(
+                db=db,
+                alert_id=alert.id,
+                user_id=user.id,
+                channel=DeliveryChannel.PUSH.value,
+                status=status,
+                error_message=error_msg,
+                attempts=1,
+            )
+
+            return NotificationDeliveryResult(
+                user_id=user.id,
+                channel="push",
+                success=overall_success,
+                message=f"Sent to {success_count}/{len(subscriptions)} subscriptions",
+            )
+
         except Exception as e:
-            logger.error(f"Push notification failed: {e}")
+            # All retries exhausted or other error
+            logger.error(
+                "Push notification failed",
+                user_id=str(user.id),
+                alert_id=str(alert.id),
+                error=str(e),
+            )
+
+            await self._create_delivery_record(
+                db=db,
+                alert_id=alert.id,
+                user_id=user.id,
+                channel=DeliveryChannel.PUSH.value,
+                status=DeliveryStatus.FAILED.value,
+                error_message=str(e),
+                attempts=self.retry_manager.MAX_TRIES,
+            )
+
             return NotificationDeliveryResult(
                 user_id=user.id,
                 channel="push",
