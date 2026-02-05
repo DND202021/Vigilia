@@ -2,18 +2,20 @@
 groups:
   - name: eriop-critical
     rules:
-      # High error rate
-      - alert: HighErrorRate
+      # API error rate exceeds 1% SLO
+      - alert: APIErrorRateHigh
         expr: |
-          sum(rate(http_requests_total{status=~"5.."}[5m])) 
-          / sum(rate(http_requests_total[5m])) > 0.05
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            / sum(rate(http_requests_total[5m]))
+          ) > 0.01
         for: 5m
         labels:
           severity: critical
         annotations:
-          summary: "High HTTP error rate detected"
-          description: "Error rate is {{ $value | humanizePercentage }} (>5%)"
-          runbook: "docs/runbooks/alert-high-error-rate.md"
+          summary: "API error rate exceeds 1% SLO"
+          description: "Error rate is {{ $value | humanizePercentage }}"
+          runbook: "docs/runbooks/api-error-rate.md"
 
       # Slow responses
       - alert: SlowResponses
@@ -58,6 +60,18 @@ groups:
           summary: "Backend health check failing"
           description: "Backend is not responding to health checks"
           runbook: "docs/runbooks/alert-health-check-failing.md"
+
+      # WebSocket connection failures
+      - alert: WebSocketConnectionFailures
+        expr: |
+          increase(eriop_websocket_disconnects_total{reason="error"}[5m]) > 10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High WebSocket connection failure rate"
+          description: "{{ $value }} connection failures in the last 5 minutes"
+          runbook: "docs/runbooks/websocket-failures.md"
 
   - name: eriop-warning
     rules:
@@ -113,3 +127,15 @@ groups:
         annotations:
           summary: "Redis memory usage is high"
           description: "Redis is using {{ $value | humanizePercentage }} of max memory"
+
+      # All connections using polling fallback
+      - alert: NoWebSocketTransport
+        expr: |
+          eriop_websocket_connections_active > 0
+          and increase(eriop_websocket_connections_total{transport="websocket"}[1h]) == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "All connections using polling fallback"
+          description: "No WebSocket transport connections in the last hour - proxy may be misconfigured"
