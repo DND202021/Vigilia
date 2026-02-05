@@ -112,6 +112,7 @@ class UserService:
         agency_id: uuid.UUID | None = None,
         badge_number: str | None = None,
         phone: str | None = None,
+        is_active: bool = True,
         is_verified: bool = False,
     ) -> User:
         """Create a new user."""
@@ -150,6 +151,7 @@ class UserService:
             agency_id=agency_id,
             badge_number=badge_number,
             phone=phone,
+            is_active=is_active,
             is_verified=is_verified,
         )
 

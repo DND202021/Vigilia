@@ -11,6 +11,7 @@ from app.models.user import UserRole
 from app.models.audit import AuditAction
 from app.services.user_service import UserService, UserError
 from app.services.audit_service import AuditService
+from app.services.role_service import RoleService, AVAILABLE_PERMISSIONS
 
 router = APIRouter()
 
@@ -23,9 +24,11 @@ class UserCreateRequest(BaseModel):
     password: str = Field(min_length=12)
     full_name: str = Field(min_length=1, max_length=200)
     role_id: uuid.UUID | None = None
+    role: str | None = None  # Role name (alternative to role_id)
     agency_id: uuid.UUID | None = None
     badge_number: str | None = None
     phone: str | None = None
+    is_active: bool = True
     is_verified: bool = False
 
 
@@ -78,9 +81,10 @@ class UserResponse(BaseModel):
     full_name: str
     badge_number: str | None
     phone: str | None
+    role: str  # Role name for backward compatibility
     role_name: str
     role_display_name: str
-    role: RoleResponse | None
+    role_obj: RoleResponse | None = None
     agency: AgencyResponse | None
     is_active: bool
     is_verified: bool
@@ -97,9 +101,10 @@ class UserResponse(BaseModel):
             full_name=user.full_name,
             badge_number=user.badge_number,
             phone=user.phone,
+            role=user.role_name,  # backward compat
             role_name=user.role_name,
             role_display_name=user.role_display_name,
-            role=RoleResponse.model_validate(user.role_obj) if user.role_obj else None,
+            role_obj=RoleResponse.model_validate(user.role_obj) if user.role_obj else None,
             agency=AgencyResponse.model_validate(user.agency) if user.agency else None,
             is_active=user.is_active,
             is_verified=user.is_verified,
@@ -195,6 +200,126 @@ async def get_user_stats(
     return UserStatsResponse(**stats)
 
 
+# ==================== Role convenience endpoints ====================
+# NOTE: These MUST be defined BEFORE /{user_id} to avoid path conflicts
+
+
+class RoleListItem(BaseModel):
+    """Role item for list response."""
+
+    name: str
+    display_name: str
+    description: str | None
+    permissions: list[str]
+
+
+class ChangeRoleRequest(BaseModel):
+    """Request to change user role."""
+
+    role: str
+
+
+class ChangeRoleResponse(BaseModel):
+    """Response after changing role."""
+
+    id: uuid.UUID
+    email: str
+    role: str
+
+
+class PermissionItem(BaseModel):
+    """Permission item."""
+
+    name: str
+    description: str
+
+
+@router.get("/roles", response_model=list[RoleListItem])
+async def list_roles(
+    db: DbSession,
+    current_user: CurrentUser,
+) -> list[RoleListItem]:
+    """List all available roles."""
+    role_service = RoleService(db)
+    roles = await role_service.list_roles()
+
+    return [
+        RoleListItem(
+            name=r.name,
+            display_name=r.display_name,
+            description=r.description,
+            permissions=r.permissions or [],
+        )
+        for r in roles
+    ]
+
+
+@router.get("/roles/{role_name}", response_model=RoleListItem)
+async def get_role(
+    role_name: str,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> RoleListItem:
+    """Get a specific role by name."""
+    role_service = RoleService(db)
+    role = await role_service.get_role_by_name(role_name)
+
+    if not role:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Role not found",
+        )
+
+    return RoleListItem(
+        name=role.name,
+        display_name=role.display_name,
+        description=role.description,
+        permissions=role.permissions or [],
+    )
+
+
+@router.get("/permissions", response_model=list[PermissionItem])
+async def list_permissions(
+    current_user: CurrentUser,
+) -> list[PermissionItem]:
+    """List all available permissions."""
+    return [
+        PermissionItem(name=p["key"], description=p["description"])
+        for p in AVAILABLE_PERMISSIONS
+    ]
+
+
+@router.get("/me/permissions", response_model=list[str])
+async def get_my_permissions(
+    db: DbSession,
+    current_user: CurrentUser,
+) -> list[str]:
+    """Get current user's permissions."""
+    role_service = RoleService(db)
+
+    # Get role from database if user has a role_id
+    if current_user.role_id:
+        role = await role_service.get_role(current_user.role_id)
+        if role and role.permissions:
+            return role.permissions
+
+    # Default permissions based on UserRole enum
+    default_permissions = {
+        UserRole.SYSTEM_ADMIN: ["system:admin"],
+        UserRole.AGENCY_ADMIN: ["users:manage_agency", "incident:*", "resource:*", "alert:*"],
+        UserRole.COMMANDER: ["incident:*", "resource:*", "alert:*"],
+        UserRole.DISPATCHER: ["incident:read", "incident:create", "incident:update", "incident:assign", "alert:*"],
+        UserRole.FIELD_UNIT_LEADER: ["incident:read", "incident:update", "resource:read", "resource:update"],
+        UserRole.RESPONDER: ["incident:read", "resource:read", "alert:read"],
+        UserRole.PUBLIC_USER: ["incident:report"],
+    }
+
+    return default_permissions.get(current_user.role, [])
+
+
+# ==================== User-specific endpoints ====================
+
+
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: uuid.UUID,
@@ -238,6 +363,7 @@ async def create_user(
 ) -> UserResponse:
     """Create a new user."""
     user_service = UserService(db)
+    role_service = RoleService(db)
     audit_service = AuditService(db)
 
     # Agency admins can only create users in their agency
@@ -245,15 +371,23 @@ async def create_user(
     if current_user.role == UserRole.AGENCY_ADMIN and current_user.agency_id:
         agency_id = current_user.agency_id
 
+    # Resolve role_id from role name if provided
+    role_id = user_request.role_id
+    if not role_id and user_request.role:
+        role = await role_service.get_role_by_name(user_request.role)
+        if role:
+            role_id = role.id
+
     try:
         user = await user_service.create_user(
             email=user_request.email,
             password=user_request.password,
             full_name=user_request.full_name,
-            role_id=user_request.role_id,
+            role_id=role_id,
             agency_id=agency_id,
             badge_number=user_request.badge_number,
             phone=user_request.phone,
+            is_active=user_request.is_active,
             is_verified=user_request.is_verified,
         )
 
@@ -546,7 +680,7 @@ async def reset_password(
             metadata={"reset_by": current_user.email},
         )
 
-        return MessageResponse(message="Password reset successfully")
+        return MessageResponse(message="Password has been reset successfully")
     except UserError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -554,13 +688,13 @@ async def reset_password(
         )
 
 
-@router.delete("/{user_id}", response_model=MessageResponse)
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: uuid.UUID,
     db: DbSession,
     request: Request,
     current_user: Annotated[Any, Depends(require_role(UserRole.SYSTEM_ADMIN))],
-) -> MessageResponse:
+) -> None:
     """Soft delete a user (system admin only)."""
     user_service = UserService(db)
     audit_service = AuditService(db)
@@ -592,8 +726,67 @@ async def delete_user(
             request=request,
             old_values={"email": existing.email, "full_name": existing.full_name},
         )
+    except UserError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
 
-        return MessageResponse(message="User deleted successfully")
+
+@router.post("/{user_id}/role", response_model=ChangeRoleResponse)
+async def change_user_role(
+    user_id: uuid.UUID,
+    request_data: ChangeRoleRequest,
+    db: DbSession,
+    request: Request,
+    current_user: Annotated[Any, Depends(require_role(UserRole.SYSTEM_ADMIN))],
+) -> ChangeRoleResponse:
+    """Change a user's role (admin only)."""
+    user_service = UserService(db)
+    role_service = RoleService(db)
+    audit_service = AuditService(db)
+
+    # Get the user
+    user = await user_service.get_user(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    # Get the role by name
+    role = await role_service.get_role_by_name(request_data.role)
+    if not role:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid role: {request_data.role}",
+        )
+
+    # Update the user's role
+    old_role = user.role_name
+    try:
+        updated_user = await user_service.update_user(
+            user_id=user_id,
+            role_id=role.id,
+        )
+
+        # Log role change
+        await audit_service.log(
+            action=AuditAction.USER_UPDATED,
+            user=current_user,
+            entity_type="user",
+            entity_id=str(user_id),
+            description=f"Role changed for {user.email}: {old_role} -> {request_data.role}",
+            request=request,
+            old_values={"role": old_role},
+            new_values={"role": request_data.role},
+        )
+
+        return ChangeRoleResponse(
+            id=updated_user.id,
+            email=updated_user.email,
+            role=request_data.role,
+        )
     except UserError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

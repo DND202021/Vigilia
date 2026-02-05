@@ -1,6 +1,7 @@
 """Tests for building analytics service and API endpoints."""
 
 import pytest
+import pytest_asyncio
 import uuid
 from datetime import datetime, timezone, timedelta, date
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +18,7 @@ from app.models.agency import Agency
 # ==================== Fixtures ====================
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def analytics_building(db_session: AsyncSession, test_agency: Agency) -> Building:
     """Create a test building for analytics tests."""
     building = Building(
@@ -38,7 +39,7 @@ async def analytics_building(db_session: AsyncSession, test_agency: Agency) -> B
     return building
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def analytics_floor_plan(db_session: AsyncSession, analytics_building: Building) -> FloorPlan:
     """Create a test floor plan for analytics tests."""
     floor_plan = FloorPlan(
@@ -53,7 +54,7 @@ async def analytics_floor_plan(db_session: AsyncSession, analytics_building: Bui
     return floor_plan
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def devices_various_statuses(
     db_session: AsyncSession,
     analytics_building: Building,
@@ -129,7 +130,7 @@ async def devices_various_statuses(
     return devices
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def incidents_various(
     db_session: AsyncSession,
     analytics_building: Building,
@@ -233,7 +234,7 @@ async def incidents_various(
     return incidents
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def alerts_various(
     db_session: AsyncSession,
     analytics_building: Building,
@@ -321,7 +322,7 @@ async def alerts_various(
     return alerts
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def inspections_various(
     db_session: AsyncSession,
     analytics_building: Building,

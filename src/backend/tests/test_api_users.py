@@ -405,8 +405,8 @@ class TestUsersAPI:
 
         assert response.status_code == 200
         data = response.json()
-        # Responder should have incident:read permission
-        assert "incident:read" in data
+        # Responder should have incidents:read permission (from seeded roles)
+        assert "incidents:read" in data
 
     # ==================== Stats Tests ====================
 

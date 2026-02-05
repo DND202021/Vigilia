@@ -412,11 +412,11 @@ class BuildingAnalyticsService:
         total = total_result.scalar() or 0
 
         # Get completed count
-        # Cast enum to text for PostgreSQL comparison (bypasses SQLAlchemy enum handling)
+        # Cast enum to text - check both lowercase (PostgreSQL) and uppercase (SQLite stores enum names)
         completed_query = select(func.count(Inspection.id)).where(
             and_(
                 Inspection.building_id == building_id,
-                cast(Inspection.status, String) == "completed",
+                cast(Inspection.status, String).in_(["completed", "COMPLETED"]),
             )
         )
         completed_result = await self.db.execute(completed_query)
@@ -426,7 +426,7 @@ class BuildingAnalyticsService:
         scheduled_query = select(func.count(Inspection.id)).where(
             and_(
                 Inspection.building_id == building_id,
-                cast(Inspection.status, String) == "scheduled",
+                cast(Inspection.status, String).in_(["scheduled", "SCHEDULED"]),
                 Inspection.scheduled_date >= today,
             )
         )
@@ -437,7 +437,7 @@ class BuildingAnalyticsService:
         overdue_query = select(func.count(Inspection.id)).where(
             and_(
                 Inspection.building_id == building_id,
-                cast(Inspection.status, String).in_(["scheduled", "overdue"]),
+                cast(Inspection.status, String).in_(["scheduled", "overdue", "SCHEDULED", "OVERDUE"]),
                 Inspection.scheduled_date < today,
             )
         )
@@ -455,7 +455,7 @@ class BuildingAnalyticsService:
             .where(
                 and_(
                     Inspection.building_id == building_id,
-                    cast(Inspection.status, String) == "scheduled",
+                    cast(Inspection.status, String).in_(["scheduled", "SCHEDULED"]),
                     Inspection.scheduled_date >= today,
                 )
             )
@@ -480,7 +480,7 @@ class BuildingAnalyticsService:
             .where(
                 and_(
                     Inspection.building_id == building_id,
-                    cast(Inspection.status, String).in_(["scheduled", "overdue"]),
+                    cast(Inspection.status, String).in_(["scheduled", "overdue", "SCHEDULED", "OVERDUE"]),
                     Inspection.scheduled_date < today,
                 )
             )

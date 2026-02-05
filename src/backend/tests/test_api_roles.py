@@ -159,7 +159,7 @@ class TestRolesAPI:
         )
 
         assert response.status_code == 400
-        assert "invalid permissions" in response.json()["detail"].lower()
+        assert "invalid permission" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
     async def test_get_role(self, client: AsyncClient, admin_user: User):

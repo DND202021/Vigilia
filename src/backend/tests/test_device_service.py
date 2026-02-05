@@ -164,46 +164,37 @@ class TestDeviceService:
         assert device.status == DeviceStatus.OFFLINE.value
 
     @pytest.mark.asyncio
-    async def test_create_device_requires_both_coordinates(
+    async def test_create_device_allows_partial_coordinates(
         self,
         db_session: AsyncSession,
         test_building: Building,
         test_floor_plan: FloorPlan,
     ):
-        """Device creation with floor_plan_id requires both position coordinates."""
+        """Device creation with floor_plan_id allows partial coordinates (can be positioned later)."""
         service = DeviceService(db_session)
 
-        # Should fail with only position_x
-        with pytest.raises(DeviceError) as exc_info:
-            await service.create_device(
-                name="Incomplete Device",
-                device_type=DeviceType.SENSOR,
-                building_id=test_building.id,
-                floor_plan_id=test_floor_plan.id,
-                position_x=50.0,
-            )
-        assert "Both position_x and position_y are required" in str(exc_info.value)
+        # Should succeed with only position_x (can be positioned later)
+        device = await service.create_device(
+            name="Partial Pos Device",
+            device_type=DeviceType.SENSOR,
+            building_id=test_building.id,
+            floor_plan_id=test_floor_plan.id,
+            position_x=50.0,
+        )
+        assert device is not None
+        assert device.position_x == 50.0
+        assert device.position_y is None
 
-        # Should fail with only position_y
-        with pytest.raises(DeviceError) as exc_info:
-            await service.create_device(
-                name="Incomplete Device",
-                device_type=DeviceType.SENSOR,
-                building_id=test_building.id,
-                floor_plan_id=test_floor_plan.id,
-                position_y=50.0,
-            )
-        assert "Both position_x and position_y are required" in str(exc_info.value)
-
-        # Should fail with neither coordinate
-        with pytest.raises(DeviceError) as exc_info:
-            await service.create_device(
-                name="Incomplete Device",
-                device_type=DeviceType.SENSOR,
-                building_id=test_building.id,
-                floor_plan_id=test_floor_plan.id,
-            )
-        assert "Both position_x and position_y are required" in str(exc_info.value)
+        # Should also succeed with no coordinates at all (positioned later)
+        device2 = await service.create_device(
+            name="No Pos Device",
+            device_type=DeviceType.SENSOR,
+            building_id=test_building.id,
+            floor_plan_id=test_floor_plan.id,
+        )
+        assert device2 is not None
+        assert device2.position_x is None
+        assert device2.position_y is None
 
     @pytest.mark.asyncio
     async def test_get_device(self, db_session: AsyncSession, test_building: Building):

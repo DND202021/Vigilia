@@ -30,7 +30,14 @@ AVAILABLE_PERMISSIONS = [
     {"key": "roles:create", "name": "Create Roles", "description": "Create new roles"},
     {"key": "roles:update", "name": "Update Roles", "description": "Update roles"},
     {"key": "roles:delete", "name": "Delete Roles", "description": "Delete roles"},
-    # Incidents
+    # Incidents (both singular and plural forms accepted)
+    {"key": "incident:read", "name": "View Incidents", "description": "View incidents"},
+    {"key": "incident:create", "name": "Create Incidents", "description": "Create new incidents"},
+    {"key": "incident:update", "name": "Update Incidents", "description": "Update incidents"},
+    {"key": "incident:delete", "name": "Delete Incidents", "description": "Delete incidents"},
+    {"key": "incident:assign", "name": "Assign Incidents", "description": "Assign units to incidents"},
+    {"key": "incident:report", "name": "Report Incidents", "description": "Submit incident reports"},
+    {"key": "incident:*", "name": "All Incident Permissions", "description": "Full incident access"},
     {"key": "incidents:read", "name": "View Incidents", "description": "View incidents"},
     {"key": "incidents:create", "name": "Create Incidents", "description": "Create new incidents"},
     {"key": "incidents:update", "name": "Update Incidents", "description": "Update incidents"},
@@ -38,13 +45,22 @@ AVAILABLE_PERMISSIONS = [
     {"key": "incidents:assign", "name": "Assign Incidents", "description": "Assign units to incidents"},
     {"key": "incidents:report", "name": "Report Incidents", "description": "Submit incident reports"},
     {"key": "incidents:*", "name": "All Incident Permissions", "description": "Full incident access"},
-    # Resources
+    # Resources (both singular and plural forms accepted)
+    {"key": "resource:read", "name": "View Resources", "description": "View resources"},
+    {"key": "resource:create", "name": "Create Resources", "description": "Create new resources"},
+    {"key": "resource:update", "name": "Update Resources", "description": "Update resources"},
+    {"key": "resource:delete", "name": "Delete Resources", "description": "Delete resources"},
+    {"key": "resource:*", "name": "All Resource Permissions", "description": "Full resource access"},
     {"key": "resources:read", "name": "View Resources", "description": "View resources"},
     {"key": "resources:create", "name": "Create Resources", "description": "Create new resources"},
     {"key": "resources:update", "name": "Update Resources", "description": "Update resources"},
     {"key": "resources:delete", "name": "Delete Resources", "description": "Delete resources"},
     {"key": "resources:*", "name": "All Resource Permissions", "description": "Full resource access"},
-    # Alerts
+    # Alerts (both singular and plural forms accepted)
+    {"key": "alert:read", "name": "View Alerts", "description": "View alerts"},
+    {"key": "alert:acknowledge", "name": "Acknowledge Alerts", "description": "Acknowledge alerts"},
+    {"key": "alert:resolve", "name": "Resolve Alerts", "description": "Resolve alerts"},
+    {"key": "alert:*", "name": "All Alert Permissions", "description": "Full alert access"},
     {"key": "alerts:read", "name": "View Alerts", "description": "View alerts"},
     {"key": "alerts:acknowledge", "name": "Acknowledge Alerts", "description": "Acknowledge alerts"},
     {"key": "alerts:resolve", "name": "Resolve Alerts", "description": "Resolve alerts"},

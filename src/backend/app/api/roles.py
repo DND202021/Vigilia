@@ -36,6 +36,13 @@ class RoleUpdateRequest(BaseModel):
     is_active: bool | None = None
 
 
+class RoleDuplicateRequest(BaseModel):
+    """Request schema for duplicating a role."""
+
+    new_name: str = Field(min_length=1, max_length=50)
+    new_display_name: str = Field(min_length=1, max_length=100)
+
+
 class RoleResponse(BaseModel):
     """Response schema for role."""
 
@@ -73,12 +80,38 @@ class RoleResponse(BaseModel):
         )
 
 
-class PermissionResponse(BaseModel):
-    """Response schema for permission."""
+class RoleListResponse(BaseModel):
+    """Paginated response for role list."""
+
+    items: list[RoleResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class RoleStatsResponse(BaseModel):
+    """Response schema for role statistics."""
+
+    total: int
+    active: int
+    inactive: int
+    system_roles: int
+    custom_roles: int
+
+
+class PermissionItem(BaseModel):
+    """Single permission item."""
 
     key: str
     name: str
     description: str
+
+
+class PermissionCategory(BaseModel):
+    """Response schema for permission category."""
+
+    category: str
+    permissions: list[PermissionItem]
 
 
 class MessageResponse(BaseModel):
@@ -87,38 +120,132 @@ class MessageResponse(BaseModel):
     message: str
 
 
+async def _get_role_user_count(db: Any, role_id: uuid.UUID) -> int:
+    """Get the count of users assigned to a role."""
+    from sqlalchemy import select, func
+    from app.models.user import User
+
+    count_result = await db.execute(
+        select(func.count(User.id)).where(User.role_id == role_id, User.deleted_at == None)
+    )
+    return count_result.scalar() or 0
+
+
 # Endpoints
-@router.get("", response_model=list[RoleResponse])
+@router.get("", response_model=RoleListResponse)
 async def list_roles(
     db: DbSession,
     current_user: CurrentUser,
     include_inactive: bool = Query(False, description="Include inactive roles"),
-) -> list[RoleResponse]:
-    """List all roles."""
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(50, ge=1, le=100, description="Page size"),
+) -> RoleListResponse:
+    """List all roles with pagination."""
     role_service = RoleService(db)
     roles = await role_service.list_roles(include_inactive=include_inactive)
 
     # Get user counts for each role
-    from sqlalchemy import select, func
-    from app.models.user import User
-
     responses = []
     for role in roles:
-        count_result = await db.execute(
-            select(func.count(User.id)).where(User.role_id == role.id, User.deleted_at == None)
-        )
-        user_count = count_result.scalar() or 0
+        user_count = await _get_role_user_count(db, role.id)
         responses.append(RoleResponse.from_role(role, user_count))
 
-    return responses
+    # Apply pagination
+    total = len(responses)
+    start = (page - 1) * page_size
+    end = start + page_size
+    paginated_items = responses[start:end]
+
+    return RoleListResponse(
+        items=paginated_items,
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
-@router.get("/permissions", response_model=list[PermissionResponse])
+@router.get("/stats", response_model=RoleStatsResponse)
+async def get_role_stats(
+    db: DbSession,
+    current_user: Annotated[Any, Depends(require_role(UserRole.SYSTEM_ADMIN))],
+) -> RoleStatsResponse:
+    """Get role statistics (admin only)."""
+    role_service = RoleService(db)
+
+    # Get all roles including inactive
+    all_roles = await role_service.list_roles(include_inactive=True)
+
+    total = len(all_roles)
+    active = sum(1 for r in all_roles if r.is_active)
+    inactive = total - active
+    system_roles = sum(1 for r in all_roles if r.is_system_role)
+    custom_roles = total - system_roles
+
+    return RoleStatsResponse(
+        total=total,
+        active=active,
+        inactive=inactive,
+        system_roles=system_roles,
+        custom_roles=custom_roles,
+    )
+
+
+@router.get("/permissions", response_model=list[PermissionCategory])
 async def list_permissions(
     current_user: CurrentUser,
-) -> list[PermissionResponse]:
-    """List all available permissions."""
-    return [PermissionResponse(**p) for p in AVAILABLE_PERMISSIONS]
+) -> list[PermissionCategory]:
+    """List all available permissions grouped by category."""
+    # Group permissions by category (prefix before colon)
+    categories: dict[str, list[PermissionItem]] = {}
+
+    for p in AVAILABLE_PERMISSIONS:
+        key = p["key"]
+        category = key.split(":")[0].title()
+
+        if category not in categories:
+            categories[category] = []
+
+        categories[category].append(PermissionItem(
+            key=key,
+            name=p["name"],
+            description=p["description"],
+        ))
+
+    return [
+        PermissionCategory(category=cat, permissions=perms)
+        for cat, perms in categories.items()
+    ]
+
+
+@router.get("/by-name/{name}", response_model=RoleResponse)
+async def get_role_by_name(
+    name: str,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> RoleResponse:
+    """Get a role by its name."""
+    role_service = RoleService(db)
+    role = await role_service.get_role_by_name(name)
+
+    if not role:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Role not found",
+        )
+
+    user_count = await _get_role_user_count(db, role.id)
+    return RoleResponse.from_role(role, user_count)
+
+
+@router.post("/initialize", response_model=MessageResponse)
+async def initialize_default_roles(
+    db: DbSession,
+    current_user: Annotated[Any, Depends(require_role(UserRole.SYSTEM_ADMIN))],
+) -> MessageResponse:
+    """Initialize default system roles (admin only)."""
+    role_service = RoleService(db)
+    await role_service.seed_default_roles()
+    return MessageResponse(message="Default roles initialized successfully")
 
 
 @router.get("/{role_id}", response_model=RoleResponse)
@@ -137,15 +264,7 @@ async def get_role(
             detail="Role not found",
         )
 
-    # Get user count
-    from sqlalchemy import select, func
-    from app.models.user import User
-
-    count_result = await db.execute(
-        select(func.count(User.id)).where(User.role_id == role.id, User.deleted_at == None)
-    )
-    user_count = count_result.scalar() or 0
-
+    user_count = await _get_role_user_count(db, role.id)
     return RoleResponse.from_role(role, user_count)
 
 
@@ -156,6 +275,14 @@ async def create_role(
     current_user: Annotated[Any, Depends(require_role(UserRole.SYSTEM_ADMIN))],
 ) -> RoleResponse:
     """Create a new role (system admin only)."""
+    # Validate role name format (lowercase, underscores only)
+    import re
+    if not re.match(r'^[a-z][a-z0-9_]*$', request.name):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Role name must be lowercase with underscores only, starting with a letter",
+        )
+
     role_service = RoleService(db)
 
     try:
@@ -168,6 +295,43 @@ async def create_role(
             permissions=request.permissions,
         )
         return RoleResponse.from_role(role, 0)
+    except RoleError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.post("/{role_id}/duplicate", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)
+async def duplicate_role(
+    role_id: uuid.UUID,
+    request: RoleDuplicateRequest,
+    db: DbSession,
+    current_user: Annotated[Any, Depends(require_role(UserRole.SYSTEM_ADMIN))],
+) -> RoleResponse:
+    """Duplicate an existing role (admin only)."""
+    role_service = RoleService(db)
+
+    # Get the source role
+    source_role = await role_service.get_role(role_id)
+    if not source_role:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Source role not found",
+        )
+
+    try:
+        # Create new role with same permissions
+        new_role = await role_service.create_role(
+            name=request.new_name,
+            display_name=request.new_display_name,
+            description=source_role.description,
+            hierarchy_level=source_role.hierarchy_level,
+            color=source_role.color,
+            permissions=source_role.permissions.copy() if source_role.permissions else [],
+            is_system_role=False,
+        )
+        return RoleResponse.from_role(new_role, 0)
     except RoleError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -196,15 +360,7 @@ async def update_role(
             is_active=request.is_active,
         )
 
-        # Get user count
-        from sqlalchemy import select, func
-        from app.models.user import User
-
-        count_result = await db.execute(
-            select(func.count(User.id)).where(User.role_id == role.id, User.deleted_at == None)
-        )
-        user_count = count_result.scalar() or 0
-
+        user_count = await _get_role_user_count(db, role.id)
         return RoleResponse.from_role(role, user_count)
     except RoleError as e:
         raise HTTPException(
@@ -213,18 +369,17 @@ async def update_role(
         )
 
 
-@router.delete("/{role_id}", response_model=MessageResponse)
+@router.delete("/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_role(
     role_id: uuid.UUID,
     db: DbSession,
     current_user: Annotated[Any, Depends(require_role(UserRole.SYSTEM_ADMIN))],
-) -> MessageResponse:
+) -> None:
     """Delete a role (system admin only, cannot delete system roles)."""
     role_service = RoleService(db)
 
     try:
         await role_service.delete_role(role_id)
-        return MessageResponse(message="Role deleted successfully")
     except RoleError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

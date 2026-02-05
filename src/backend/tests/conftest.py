@@ -111,14 +111,29 @@ async def test_agency(db_session: AsyncSession) -> Agency:
 
 
 @pytest_asyncio.fixture
-async def test_user(db_session: AsyncSession, test_agency: Agency) -> User:
+async def seeded_roles(db_session: AsyncSession) -> dict[str, Role]:
+    """Seed default roles for tests."""
+    from app.services.role_service import RoleService
+
+    role_service = RoleService(db_session)
+    await role_service.seed_default_roles()
+
+    # Return a dict of role name -> Role for easy access
+    roles = await role_service.list_roles()
+    return {r.name: r for r in roles}
+
+
+@pytest_asyncio.fixture
+async def test_user(db_session: AsyncSession, test_agency: Agency, seeded_roles: dict[str, Role]) -> User:
     """Create a test user."""
+    responder_role = seeded_roles.get("responder")
     user = User(
         id=uuid.uuid4(),
         email="test@example.com",
         hashed_password=get_password_hash("TestPassword123!"),
         full_name="Test User",
         role=UserRole.RESPONDER,
+        role_id=responder_role.id if responder_role else None,
         agency_id=test_agency.id,
         is_active=True,
         is_verified=True,
@@ -130,14 +145,16 @@ async def test_user(db_session: AsyncSession, test_agency: Agency) -> User:
 
 
 @pytest_asyncio.fixture
-async def admin_user(db_session: AsyncSession, test_agency: Agency) -> User:
+async def admin_user(db_session: AsyncSession, test_agency: Agency, seeded_roles: dict[str, Role]) -> User:
     """Create a test admin user."""
+    admin_role = seeded_roles.get("system_admin")
     user = User(
         id=uuid.uuid4(),
         email="admin@example.com",
         hashed_password=get_password_hash("AdminPassword123!"),
         full_name="Admin User",
         role=UserRole.SYSTEM_ADMIN,
+        role_id=admin_role.id if admin_role else None,
         agency_id=test_agency.id,
         is_active=True,
         is_verified=True,
