@@ -148,7 +148,7 @@ services:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
       - '--storage.path=/alertmanager'
     volumes:
-      - ./infrastructure/monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./infrastructure/monitoring/alertmanager/alertmanager.local.yml:/etc/alertmanager/alertmanager.yml:ro
       - eriop_alertmanager:/alertmanager
     networks:
       - eriop-net
