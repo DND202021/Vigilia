@@ -28,6 +28,24 @@ export interface AuthTokens {
   token_type: string;
 }
 
+// MFA Types
+export interface MFASetupResponse {
+  secret: string;
+  qr_code: string;
+  manual_entry_key: string;
+}
+
+export interface MFALoginResponse extends AuthTokens {
+  mfa_required?: boolean;
+  mfa_temp_token?: string;
+}
+
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  full_name: string;
+}
+
 export interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
@@ -189,9 +207,12 @@ export interface IncidentCreateRequest {
 }
 
 export interface IncidentUpdateRequest {
-  status?: IncidentStatus;
-  priority?: IncidentPriority;
+  title?: string;
   description?: string;
+  incident_type?: IncidentType;
+  priority?: IncidentPriority;
+  status?: IncidentStatus;
+  address?: string;
   assigned_units?: string[];
 }
 

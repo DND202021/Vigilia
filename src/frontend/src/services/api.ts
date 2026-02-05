@@ -8,6 +8,8 @@ import type {
   AuthTokens,
   User,
   LoginCredentials,
+  RegisterRequest,
+  MFASetupResponse,
   Incident,
   IncidentCreateRequest,
   IncidentUpdateRequest,
@@ -205,6 +207,59 @@ export const authApi = {
       current_password: currentPassword,
       new_password: newPassword,
     });
+  },
+
+  /**
+   * Request password reset email
+   * Backend endpoint: POST /auth/forgot-password
+   * Sends email with reset link containing token
+   */
+  requestPasswordReset: async (email: string): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>('/auth/forgot-password', { email });
+    return response.data;
+  },
+
+  /**
+   * Reset password using token from email link
+   * Backend endpoint: POST /auth/reset-password
+   * Token comes from URL query param in email link
+   */
+  resetPassword: async (token: string, newPassword: string): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>('/auth/reset-password', {
+      token,
+      new_password: newPassword,
+    });
+    return response.data;
+  },
+
+  register: async (data: RegisterRequest): Promise<User> => {
+    const response = await api.post<User>('/auth/register', data);
+    return response.data;
+  },
+
+  // MFA Methods
+  mfaSetup: async (): Promise<MFASetupResponse> => {
+    const response = await api.post<MFASetupResponse>('/auth/mfa/setup');
+    return response.data;
+  },
+
+  mfaConfirm: async (secret: string, code: string): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>('/auth/mfa/confirm', { secret, code });
+    return response.data;
+  },
+
+  mfaDisable: async (code: string): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>('/auth/mfa/disable', { code });
+    return response.data;
+  },
+
+  mfaComplete: async (tempToken: string, code: string): Promise<AuthTokens> => {
+    const response = await api.post<AuthTokens>(
+      `/auth/mfa/complete?mfa_temp_token=${encodeURIComponent(tempToken)}`,
+      { code }
+    );
+    tokenStorage.setTokens(response.data);
+    return response.data;
   },
 };
 
