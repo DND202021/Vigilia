@@ -68,6 +68,18 @@ class Settings(BaseSettings):
     # Metrics
     metrics_enabled: bool = True
 
+    # Notification Services
+    sendgrid_api_key: str = ""          # Empty = email disabled
+    sendgrid_from_email: str = "alerts@eriop.com"
+
+    twilio_account_sid: str = ""        # Empty = SMS disabled
+    twilio_auth_token: str = ""
+    twilio_from_number: str = ""
+
+    vapid_private_key: str = ""         # Empty = push disabled
+    vapid_public_key: str = ""
+    vapid_mailto: str = "mailto:alerts@eriop.com"
+
 
 @lru_cache
 def get_settings() -> Settings:
