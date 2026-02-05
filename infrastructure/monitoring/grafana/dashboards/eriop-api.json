@@ -148,7 +148,7 @@
           "refId": "C"
         }
       ],
-      "title": "Response Time Percentiles",
+      "title": "Request Latency (p50/p95/p99)",
       "type": "timeseries"
     },
     {
