@@ -11,6 +11,7 @@ export interface User {
   role: UserRole;
   agency_id?: string;
   is_active: boolean;
+  mfa_enabled?: boolean;
   created_at: string;
   last_login?: string;
 }
@@ -290,6 +291,15 @@ export interface Agency {
 }
 
 export type AgencyType = 'police' | 'fire' | 'ems' | 'dispatch' | 'other';
+
+export interface AgencyUpdateRequest {
+  name?: string;
+  agency_type?: AgencyType;
+  jurisdiction?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  address?: string;
+}
 
 // API Response Types
 export interface PaginatedResponse<T> {
