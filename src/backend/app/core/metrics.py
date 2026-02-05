@@ -33,6 +33,20 @@ db_pool_available = Gauge(
     "Number of available database connections in the pool",
 )
 
+# WebSocket connections by transport type
+websocket_connections_total = Counter(
+    "eriop_websocket_connections_total",
+    "Total WebSocket connections by transport type",
+    ["transport"],  # 'websocket' or 'polling'
+)
+
+# WebSocket disconnections by reason
+websocket_disconnects_total = Counter(
+    "eriop_websocket_disconnects_total",
+    "Total WebSocket disconnections by reason",
+    ["reason"],  # 'normal', 'error', 'timeout'
+)
+
 # Redis connection gauge
 redis_connected = Gauge(
     "eriop_redis_connected",
@@ -104,3 +118,13 @@ def set_db_pool_available(count: int) -> None:
 def set_redis_connected(connected: bool) -> None:
     """Set Redis connection status."""
     redis_connected.set(1 if connected else 0)
+
+
+def record_websocket_connect(transport: str = "websocket") -> None:
+    """Record a WebSocket connection by transport type."""
+    websocket_connections_total.labels(transport=transport).inc()
+
+
+def record_websocket_disconnect(reason: str = "normal") -> None:
+    """Record a WebSocket disconnection with reason."""
+    websocket_disconnects_total.labels(reason=reason).inc()

@@ -6,6 +6,12 @@ from typing import Any
 import structlog
 
 from app.core.config import settings
+from app.core.metrics import (
+    increment_websocket_connections,
+    decrement_websocket_connections,
+    record_websocket_connect,
+    record_websocket_disconnect,
+)
 
 logger = structlog.get_logger()
 
@@ -67,7 +73,14 @@ async def connect(sid: str, environ: dict[str, Any], auth: dict[str, Any] | None
     await sio.enter_room(sid, "authenticated")
     connected_clients[sid]["rooms"].add("authenticated")
 
-    logger.info("Client connected", sid=sid)
+    # Track connection metrics
+    increment_websocket_connections()
+    # Detect transport type from environ
+    # Socket.IO sends HTTP_UPGRADE header for WebSocket, not for polling
+    transport = "websocket" if environ.get("HTTP_UPGRADE", "").lower() == "websocket" else "polling"
+    record_websocket_connect(transport)
+
+    logger.info("Client connected", sid=sid, transport=transport)
     return True
 
 
@@ -76,6 +89,9 @@ async def disconnect(sid: str) -> None:
     """Handle client disconnection."""
     if sid in connected_clients:
         del connected_clients[sid]
+    # Track disconnection metrics
+    decrement_websocket_connections()
+    record_websocket_disconnect("normal")
     logger.info("Client disconnected", sid=sid)
 
 
