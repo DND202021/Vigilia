@@ -1209,6 +1209,21 @@ export const emergencyPlanningApi = {
   },
 };
 
+// Agency API
+import type { Agency, AgencyUpdateRequest } from '../types';
+
+export const agencyApi = {
+  get: async (agencyId: string): Promise<Agency> => {
+    const response = await api.get<Agency>(`/agencies/${agencyId}`);
+    return response.data;
+  },
+
+  update: async (agencyId: string, data: AgencyUpdateRequest): Promise<Agency> => {
+    const response = await api.patch<Agency>(`/agencies/${agencyId}`, data);
+    return response.data;
+  },
+};
+
 // Audit Logs API
 import type { AuditLog, AuditLogListResponse, AuditLogFilters } from '../types';
 
