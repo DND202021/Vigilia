@@ -28,6 +28,7 @@ from app.models.evacuation_route import EvacuationRoute, RouteType
 from app.models.emergency_checkpoint import EmergencyCheckpoint, CheckpointType
 from app.models.channel import Channel, ChannelType, ChannelMember
 from app.models.message import Message, MessageType, MessagePriority, MessageReaction
+from app.models.notification_delivery import NotificationDelivery, DeliveryStatus, DeliveryChannel
 
 __all__ = [
     "Base",
@@ -84,4 +85,7 @@ __all__ = [
     "MessageType",
     "MessagePriority",
     "MessageReaction",
+    "NotificationDelivery",
+    "DeliveryStatus",
+    "DeliveryChannel",
 ]
