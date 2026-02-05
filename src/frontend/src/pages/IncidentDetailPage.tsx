@@ -7,8 +7,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useIncidentStore } from '../stores/incidentStore';
 import { useResourceStore } from '../stores/resourceStore';
 import { useWebSocket } from '../hooks/useWebSocket';
-import { buildingsApi } from '../services/api';
-import { BuildingInfoPanel } from '../components/incidents/BuildingInfoPanel';
+import { buildingsApi, incidentsApi } from '../services/api';
+import { BuildingInfoPanel, IncidentEditForm } from '../components/incidents';
+import type { IncidentUpdateRequest } from '../types';
 import {
   Card,
   CardHeader,
@@ -63,6 +64,7 @@ export function IncidentDetailPage() {
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [linkedBuilding, setLinkedBuilding] = useState<Building | null>(null);
   const [isBuildingLoading, setIsBuildingLoading] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -96,6 +98,19 @@ export function IncidentDetailPage() {
       return () => leaveBuilding(buildingId);
     }
   }, [incident?.building_id, joinBuilding, leaveBuilding]);
+
+  // Reset edit mode when incident changes
+  useEffect(() => {
+    setIsEditMode(false);
+  }, [id]);
+
+  // Handle incident update from edit form
+  const handleUpdate = async (updates: IncidentUpdateRequest) => {
+    if (!id) return;
+    await incidentsApi.update(id, updates);
+    await fetchIncident(id);
+    setIsEditMode(false);
+  };
 
   if (isLoading && !incident) {
     return (
@@ -171,6 +186,13 @@ export function IncidentDetailPage() {
           <p className="mt-2 text-xl text-gray-700">{incident.title}</p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => setIsEditMode(true)}
+            disabled={isEditMode}
+          >
+            Edit Incident
+          </Button>
           <Button variant="outline" onClick={() => setIsStatusModalOpen(true)}>
             Update Status
           </Button>
@@ -180,101 +202,111 @@ export function IncidentDetailPage() {
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - Details */}
+        {/* Left Column - Details or Edit Form */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Info Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Incident Details</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <dl className="grid grid-cols-2 gap-4">
-                <div>
-                  <dt className="text-sm font-medium text-gray-500">Type</dt>
-                  <dd className="mt-1">
-                    <Badge variant="secondary">
-                      {getIncidentTypeLabel(incident.incident_type)}
-                    </Badge>
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-gray-500">Reported</dt>
-                  <dd className="mt-1 text-gray-900">{formatDate(incident.reported_at)}</dd>
-                </div>
-                <div className="col-span-2">
-                  <dt className="text-sm font-medium text-gray-500">Address</dt>
-                  <dd className="mt-1 text-gray-900">{incident.address || 'Not specified'}</dd>
-                </div>
-                {incident.description && (
-                  <div className="col-span-2">
-                    <dt className="text-sm font-medium text-gray-500">Description</dt>
-                    <dd className="mt-1 text-gray-900 whitespace-pre-wrap">
-                      {incident.description}
-                    </dd>
-                  </div>
-                )}
-              </dl>
-            </CardContent>
-          </Card>
-
-          {/* Caller Info */}
-          {(incident.caller_name || incident.caller_phone) && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Caller Information</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <dl className="grid grid-cols-2 gap-4">
-                  {incident.caller_name && (
+          {isEditMode ? (
+            <IncidentEditForm
+              incident={incident}
+              onSave={handleUpdate}
+              onCancel={() => setIsEditMode(false)}
+            />
+          ) : (
+            <>
+              {/* Info Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Incident Details</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <dl className="grid grid-cols-2 gap-4">
                     <div>
-                      <dt className="text-sm font-medium text-gray-500">Name</dt>
-                      <dd className="mt-1 text-gray-900">{incident.caller_name}</dd>
+                      <dt className="text-sm font-medium text-gray-500">Type</dt>
+                      <dd className="mt-1">
+                        <Badge variant="secondary">
+                          {getIncidentTypeLabel(incident.incident_type)}
+                        </Badge>
+                      </dd>
                     </div>
-                  )}
-                  {incident.caller_phone && (
                     <div>
-                      <dt className="text-sm font-medium text-gray-500">Phone</dt>
-                      <dd className="mt-1 text-gray-900">{incident.caller_phone}</dd>
+                      <dt className="text-sm font-medium text-gray-500">Reported</dt>
+                      <dd className="mt-1 text-gray-900">{formatDate(incident.reported_at)}</dd>
                     </div>
-                  )}
-                </dl>
-              </CardContent>
-            </Card>
-          )}
+                    <div className="col-span-2">
+                      <dt className="text-sm font-medium text-gray-500">Address</dt>
+                      <dd className="mt-1 text-gray-900">{incident.address || 'Not specified'}</dd>
+                    </div>
+                    {incident.description && (
+                      <div className="col-span-2">
+                        <dt className="text-sm font-medium text-gray-500">Description</dt>
+                        <dd className="mt-1 text-gray-900 whitespace-pre-wrap">
+                          {incident.description}
+                        </dd>
+                      </div>
+                    )}
+                  </dl>
+                </CardContent>
+              </Card>
 
-          {/* Timeline */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Timeline</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {incident.timeline_events && incident.timeline_events.length > 0 ? (
-                <div className="space-y-4">
-                  {incident.timeline_events.map((event, index) => (
-                    <div key={index} className="flex gap-4">
-                      <div className="flex flex-col items-center">
-                        <div className="w-3 h-3 bg-blue-600 rounded-full" />
-                        {index < incident.timeline_events.length - 1 && (
-                          <div className="w-0.5 h-full bg-gray-200 mt-1" />
-                        )}
-                      </div>
-                      <div className="flex-1 pb-4">
-                        <p className="text-sm font-medium text-gray-900">
-                          {event.event_type}
-                        </p>
-                        <p className="text-sm text-gray-600">{event.description}</p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          {formatDate(event.timestamp)}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500 text-center py-4">No timeline events</p>
+              {/* Caller Info */}
+              {(incident.caller_name || incident.caller_phone) && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Caller Information</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <dl className="grid grid-cols-2 gap-4">
+                      {incident.caller_name && (
+                        <div>
+                          <dt className="text-sm font-medium text-gray-500">Name</dt>
+                          <dd className="mt-1 text-gray-900">{incident.caller_name}</dd>
+                        </div>
+                      )}
+                      {incident.caller_phone && (
+                        <div>
+                          <dt className="text-sm font-medium text-gray-500">Phone</dt>
+                          <dd className="mt-1 text-gray-900">{incident.caller_phone}</dd>
+                        </div>
+                      )}
+                    </dl>
+                  </CardContent>
+                </Card>
               )}
-            </CardContent>
-          </Card>
+
+              {/* Timeline */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Timeline</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {incident.timeline_events && incident.timeline_events.length > 0 ? (
+                    <div className="space-y-4">
+                      {incident.timeline_events.map((event, index) => (
+                        <div key={index} className="flex gap-4">
+                          <div className="flex flex-col items-center">
+                            <div className="w-3 h-3 bg-blue-600 rounded-full" />
+                            {index < incident.timeline_events.length - 1 && (
+                              <div className="w-0.5 h-full bg-gray-200 mt-1" />
+                            )}
+                          </div>
+                          <div className="flex-1 pb-4">
+                            <p className="text-sm font-medium text-gray-900">
+                              {event.event_type}
+                            </p>
+                            <p className="text-sm text-gray-600">{event.description}</p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              {formatDate(event.timestamp)}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-center py-4">No timeline events</p>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
 
         {/* Right Column - Sidebar */}

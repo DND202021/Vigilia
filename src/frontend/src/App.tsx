@@ -27,6 +27,9 @@ const BuildingDetailPage = lazy(() => import('./pages/BuildingDetailPage').then(
 const AuditLogsPage = lazy(() => import('./pages/AuditLogsPage').then(m => ({ default: m.AuditLogsPage })));
 const MessagesPage = lazy(() => import('./pages/MessagesPage').then(m => ({ default: m.MessagesPage })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
+const RegisterPage = lazy(() => import('./pages/RegisterPage').then(m => ({ default: m.RegisterPage })));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage').then(m => ({ default: m.ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage').then(m => ({ default: m.ResetPasswordPage })));
 
 // Loading fallback component
 function PageLoader() {
@@ -77,6 +80,24 @@ function App() {
             path="/login"
             element={
               isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />
+            }
+          />
+          <Route
+            path="/register"
+            element={
+              isAuthenticated ? <Navigate to="/" replace /> : <RegisterPage />
+            }
+          />
+          <Route
+            path="/forgot-password"
+            element={
+              isAuthenticated ? <Navigate to="/" replace /> : <ForgotPasswordPage />
+            }
+          />
+          <Route
+            path="/reset-password"
+            element={
+              isAuthenticated ? <Navigate to="/" replace /> : <ResetPasswordPage />
             }
           />
 
