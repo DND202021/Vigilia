@@ -10,6 +10,7 @@ import type {
   LoginCredentials,
   RegisterRequest,
   MFASetupResponse,
+  MFALoginResponse,
   Incident,
   IncidentCreateRequest,
   IncidentUpdateRequest,
@@ -171,12 +172,21 @@ api.interceptors.response.use(
 
 // Auth API
 export const authApi = {
-  login: async (credentials: LoginCredentials): Promise<AuthTokens> => {
-    const response = await api.post<AuthTokens>('/auth/login', {
+  login: async (credentials: LoginCredentials): Promise<MFALoginResponse> => {
+    const response = await api.post<MFALoginResponse>('/auth/login', {
       email: credentials.username,
       password: credentials.password,
     });
-    tokenStorage.setTokens(response.data);
+
+    // Only store tokens if MFA is not required
+    if (!response.data.mfa_required && response.data.access_token) {
+      tokenStorage.setTokens({
+        access_token: response.data.access_token,
+        refresh_token: response.data.refresh_token,
+        token_type: response.data.token_type,
+      });
+    }
+
     return response.data;
   },
 
