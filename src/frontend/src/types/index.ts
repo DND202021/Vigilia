@@ -287,7 +287,12 @@ export interface Agency {
   name: string;
   agency_type: AgencyType;
   jurisdiction?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  address?: string;
   is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export type AgencyType = 'police' | 'fire' | 'ems' | 'dispatch' | 'other';
