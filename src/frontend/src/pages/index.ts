@@ -9,6 +9,7 @@ export { AlertsPage } from './AlertsPage';
 export { ResourcesPage } from './ResourcesPage';
 export { MapPage } from './MapPage';
 export { LoginPage } from './LoginPage';
+export { RegisterPage } from './RegisterPage';
 export { AnalyticsPage } from './AnalyticsPage';
 export { BuildingsPage } from './BuildingsPage';
 export { UsersPage } from './UsersPage';
