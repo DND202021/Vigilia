@@ -18,8 +18,12 @@ from app.models.building import (
 )
 from app.models.inspection import Inspection, InspectionType, InspectionStatus
 from app.models.photo import BuildingPhoto
-from app.models.device import IoTDevice, DeviceType, DeviceStatus
+from app.models.device import IoTDevice, DeviceType, DeviceStatus, ProvisioningStatus
 from app.models.device_status_history import DeviceStatusHistory
+from app.models.device_profile import DeviceProfile
+from app.models.device_credentials import DeviceCredentials, CredentialType
+from app.models.device_twin import DeviceTwin
+from app.models.device_telemetry import DeviceTelemetry
 from app.models.audio_clip import AudioClip
 from app.models.notification_preference import NotificationPreference
 from app.models.document import BuildingDocument, DocumentCategory
@@ -67,7 +71,13 @@ __all__ = [
     "IoTDevice",
     "DeviceType",
     "DeviceStatus",
+    "ProvisioningStatus",
     "DeviceStatusHistory",
+    "DeviceProfile",
+    "DeviceCredentials",
+    "CredentialType",
+    "DeviceTwin",
+    "DeviceTelemetry",
     "AudioClip",
     "NotificationPreference",
     "BuildingDocument",

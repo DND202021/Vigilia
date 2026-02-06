@@ -14,6 +14,9 @@ from app.models.base import Base, TimestampMixin, SoftDeleteMixin
 
 if TYPE_CHECKING:
     from app.models.building import Building, FloorPlan
+    from app.models.device_profile import DeviceProfile
+    from app.models.device_credentials import DeviceCredentials
+    from app.models.device_twin import DeviceTwin
 
 
 class DeviceType(str, Enum):
@@ -96,6 +99,16 @@ class DeviceStatus(str, Enum):
     ERROR = "error"
 
 
+class ProvisioningStatus(str, Enum):
+    """Device provisioning status."""
+
+    UNPROVISIONED = "unprovisioned"
+    PENDING = "pending"
+    ACTIVE = "active"
+    SUSPENDED = "suspended"
+    DECOMMISSIONED = "decommissioned"
+
+
 class IoTDevice(Base, TimestampMixin, SoftDeleteMixin):
     """IoT Device model for building-associated monitoring devices."""
 
@@ -122,6 +135,19 @@ class IoTDevice(Base, TimestampMixin, SoftDeleteMixin):
     model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     firmware_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
     manufacturer: Mapped[str] = mapped_column(String(100), default="Axis", nullable=False)
+
+    # Device profile and provisioning
+    profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("device_profiles.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    provisioning_status: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+        server_default="unprovisioned",
+    )
 
     # Association with building and floor
     building_id: Mapped[uuid.UUID] = mapped_column(
@@ -173,6 +199,19 @@ class IoTDevice(Base, TimestampMixin, SoftDeleteMixin):
 
     # Additional metadata
     metadata_extra: Mapped[dict | None] = mapped_column(JSON, default=dict)
+
+    # Relationships to new IoT models
+    profile: Mapped["DeviceProfile | None"] = relationship("DeviceProfile", back_populates="devices")
+    credentials: Mapped["DeviceCredentials | None"] = relationship(
+        "DeviceCredentials",
+        back_populates="device",
+        uselist=False,
+    )
+    twin: Mapped["DeviceTwin | None"] = relationship(
+        "DeviceTwin",
+        back_populates="device",
+        uselist=False,
+    )
 
     def __repr__(self) -> str:
         return f"<IoTDevice(id={self.id}, name={self.name}, type={self.device_type})>"
