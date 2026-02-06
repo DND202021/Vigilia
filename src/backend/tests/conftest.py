@@ -20,6 +20,9 @@ from app.models import (
     ResourceType, ResourceStatus, Role,
     Building, BuildingType, FloorPlan,
 )
+# Import communication models
+from app.models.channel import Channel, ChannelMember, ChannelType
+from app.models.message import Message, MessageType, MessagePriority
 from app.core.deps import get_db
 from app.core.security import get_password_hash
 
