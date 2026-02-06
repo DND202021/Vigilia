@@ -1,0 +1,152 @@
+version: '3.8'
+
+services:
+  locust-master:
+    image: locustio/locust:2.17.0
+    container_name: eriop-locust-master
+    hostname: locust-master
+    ports:
+      - "8089:8089"  # Web UI
+      - "5557:5557"  # Master communication
+    volumes:
+      - ./loadtest:/mnt/locust
+    command: >
+      -f /mnt/locust/locustfile.py
+      --master
+      --expect-workers=4
+      --host=http://backend:8000
+      --web-host=0.0.0.0
+      --web-port=8089
+    networks:
+      - vigilia_default
+    depends_on:
+      - backend
+    environment:
+      - LOCUST_MODE=master
+    labels:
+      - "com.eriop.service=loadtest"
+      - "com.eriop.component=locust-master"
+
+  locust-worker-1:
+    image: locustio/locust:2.17.0
+    container_name: eriop-locust-worker-1
+    hostname: locust-worker-1
+    volumes:
+      - ./loadtest:/mnt/locust
+    command: >
+      -f /mnt/locust/locustfile.py
+      --worker
+      --master-host=locust-master
+      --master-port=5557
+    networks:
+      - vigilia_default
+    depends_on:
+      - locust-master
+    environment:
+      - LOCUST_MODE=worker
+    labels:
+      - "com.eriop.service=loadtest"
+      - "com.eriop.component=locust-worker"
+
+  locust-worker-2:
+    image: locustio/locust:2.17.0
+    container_name: eriop-locust-worker-2
+    hostname: locust-worker-2
+    volumes:
+      - ./loadtest:/mnt/locust
+    command: >
+      -f /mnt/locust/locustfile.py
+      --worker
+      --master-host=locust-master
+      --master-port=5557
+    networks:
+      - vigilia_default
+    depends_on:
+      - locust-master
+    environment:
+      - LOCUST_MODE=worker
+    labels:
+      - "com.eriop.service=loadtest"
+      - "com.eriop.component=locust-worker"
+
+  locust-worker-3:
+    image: locustio/locust:2.17.0
+    container_name: eriop-locust-worker-3
+    hostname: locust-worker-3
+    volumes:
+      - ./loadtest:/mnt/locust
+    command: >
+      -f /mnt/locust/locustfile.py
+      --worker
+      --master-host=locust-master
+      --master-port=5557
+    networks:
+      - vigilia_default
+    depends_on:
+      - locust-master
+    environment:
+      - LOCUST_MODE=worker
+    labels:
+      - "com.eriop.service=loadtest"
+      - "com.eriop.component=locust-worker"
+
+  locust-worker-4:
+    image: locustio/locust:2.17.0
+    container_name: eriop-locust-worker-4
+    hostname: locust-worker-4
+    volumes:
+      - ./loadtest:/mnt/locust
+    command: >
+      -f /mnt/locust/locustfile.py
+      --worker
+      --master-host=locust-master
+      --master-port=5557
+    networks:
+      - vigilia_default
+    depends_on:
+      - locust-master
+    environment:
+      - LOCUST_MODE=worker
+    labels:
+      - "com.eriop.service=loadtest"
+      - "com.eriop.component=locust-worker"
+
+networks:
+  vigilia_default:
+    external: true
+    name: vigilia_default
+
+# Usage Instructions:
+#
+# 1. Ensure the main Vigilia stack is running:
+#    docker compose up -d
+#
+# 2. Seed test data:
+#    docker compose exec backend python /app/../loadtest/seed_data.py
+#
+# 3. Start Locust cluster:
+#    docker compose -f docker-compose.loadtest.yml up -d
+#
+# 4. Access Locust Web UI:
+#    http://localhost:8089
+#
+# 5. Start test with:
+#    - Number of users: 10000 (for 10k concurrent requests)
+#    - Spawn rate: 100 (users per second)
+#    - Host: http://backend:8000
+#
+# 6. View results and stop test from Web UI
+#
+# 7. Stop Locust cluster:
+#    docker compose -f docker-compose.loadtest.yml down
+#
+# Headless mode (CI/CD):
+#    docker compose -f docker-compose.loadtest.yml run --rm locust-master \
+#      -f /mnt/locust/locustfile.py \
+#      --headless \
+#      --users 10000 \
+#      --spawn-rate 100 \
+#      --run-time 5m \
+#      --host http://backend:8000 \
+#      --html /mnt/locust/report.html \
+#      --csv /mnt/locust/results
