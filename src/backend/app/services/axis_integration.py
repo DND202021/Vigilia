@@ -433,9 +433,10 @@ class AxisEventSubscriber:
         Yields events as they occur.
         """
         self._running = True
+        # Long polling for event stream - 5 minute timeout
         self._client = httpx.AsyncClient(
             auth=httpx.DigestAuth(*self.device.get_auth()),
-            timeout=None,  # Long polling
+            timeout=httpx.Timeout(300.0, read=300.0),
         )
 
         try:

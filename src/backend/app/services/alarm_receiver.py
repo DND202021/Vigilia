@@ -560,11 +560,19 @@ class AlarmReceiverTCPServer:
 
     def __init__(
         self,
-        host: str = "0.0.0.0",
+        host: str = "0.0.0.0",  # nosec B104 - Intentional for alarm panel server
         port: int = 5000,
         receiver_service: AlarmReceiverService | None = None,
     ):
-        """Initialize TCP server."""
+        """Initialize TCP server.
+
+        Args:
+            host: Interface to bind to. Default "0.0.0.0" accepts connections from any interface,
+                  which is intentional for alarm panel connections. In production, restrict
+                  via firewall or set to specific interface IP.
+            port: TCP port to listen on.
+            receiver_service: AlarmReceiverService instance for processing.
+        """
         self.host = host
         self.port = port
         self.receiver_service = receiver_service

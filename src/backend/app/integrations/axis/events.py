@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Callable, Awaitable, Any
 import asyncio
 import logging
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 
 from app.integrations.axis.client import AxisDeviceClient, AxisDeviceInfo
 
