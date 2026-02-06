@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-05)
 
 **Core value:** Emergency responders receive critical alerts within 2 seconds of detection, with full building context to enable rapid, informed response.
-**Current focus:** Milestone 2.0 — Production Ready
+**Current focus:** v3.0 IoT Foundation — Phase 17 in progress
 
 ---
 
 ## Current Position
 
-**Milestone:** 2.0 — Production Ready
-**Phase:** 15 (Quality & Security)
-**Plan:** 4 of 4 complete
+**Milestone:** 3.0 — IoT Foundation
+**Phase:** 17 (Database Foundation & Device Profiles)
+**Plan:** 2 of 2 complete
 **Status:** Phase Complete
-**Last activity:** 2026-02-06 - Completed 15-06-PLAN.md (Load Testing with Locust)
+**Last activity:** 2026-02-06 - Completed 17-02-PLAN.md (Device Profile Service & API)
 
 ### Progress
 
@@ -23,19 +23,16 @@ See: .planning/PROJECT.md (updated 2026-02-05)
 |-----------|--------|--------|
 | 1.0 Core Platform | 11/11 | Complete |
 | 2.0 Production Ready | 5/5 | Complete |
+| 3.0 IoT Foundation | 1/10 | In Progress |
 
-Progress: [█████████████████████████████] 100% Milestone 2.0 Complete
+Progress: Phase 17: [██] 100% (2/2 plans complete)
 
-### Phase 15 Status
+### Phase 17 Status
 
 | Plan | Name | Status |
 |------|------|--------|
-| 15-01 | Backend test coverage baseline | Complete |
-| 15-02 | Frontend coverage baseline | Complete |
-| 15-03 | Security hardening | Complete |
-| 15-04 | API integration tests | Complete |
-| 15-05 | Security audit (Bandit + OWASP) | Complete |
-| 15-06 | Load testing with Locust | Complete |
+| 17-01 | IoT foundation models & migration | Complete |
+| 17-02 | Device profile service & API | Complete |
 
 ---
 
@@ -82,6 +79,10 @@ Progress: [███████████████████████
 | 2026-02-06 | FastHttpUser for high-performance load generation | geventhttplient backend critical for 10k concurrent users without test infrastructure bottleneck |
 | 2026-02-06 | 4 Locust workers for distributed load generation | Horizontal scalability prevents single-node bottleneck, workers coordinate via master |
 | 2026-02-06 | Load test environment requires Docker | Not executable in current environment, documented as PENDING EXECUTION with comprehensive instructions |
+| 2026-02-06 | Seed profiles are idempotent | seed_default_profiles checks if any is_default=True profiles exist before creating to allow safe re-execution |
+| 2026-02-06 | Device profile list endpoint uses manual pagination | Simple pagination instead of PaginatedResponse for simplicity |
+| 2026-02-06 | All device profile endpoints require authentication | No public access to device profiles, all operations require authenticated user |
+| 2026-02-06 | Soft delete pattern applied to device profiles | Profiles use deleted_at timestamp for soft deletion (consistent with other models) |
 
 ---
 
@@ -110,6 +111,9 @@ None - WebSocket blocker resolved in 13-01.
 
 | Date | Activity |
 |------|----------|
+| 2026-02-06 | **Phase 17 COMPLETE** - Database Foundation & Device Profiles (2/2 plans complete) |
+| 2026-02-06 | Completed 17-02 Device Profile Service & API - DeviceProfileService with CRUD + seed, REST API with 6 endpoints, 3 default profiles |
+| 2026-02-06 | Completed 17-01 IoT Foundation Models - DeviceProfile, DeviceCredentials, DeviceTwin, DeviceTelemetry models, migration 016 |
 | 2026-02-06 | **MILESTONE 2.0 COMPLETE** - Production Ready milestone achieved (5/5 phases complete) |
 | 2026-02-06 | **Phase 15 VERIFIED** - Security audit complete, OWASP Top 10 2021 (10/10 PASS), Bandit clean (0 HIGH/MEDIUM) |
 | 2026-02-06 | Completed 15-06 Load Testing - Locust suite ready (3 personas, 4 workers, 1000 alerts/sec + 10k concurrent targets) |
@@ -139,8 +143,8 @@ None - WebSocket blocker resolved in 13-01.
 
 ## Session Continuity
 
-Last session: 2026-02-06 02:16 UTC
-Stopped at: Completed 15-06-PLAN.md (Load Testing with Locust)
+Last session: 2026-02-06 23:16 UTC
+Stopped at: Completed 17-02-PLAN.md (Device Profile Service & API)
 Resume file: None
 
 ---
@@ -149,14 +153,14 @@ Resume file: None
 
 | Metric | Value |
 |--------|-------|
-| Backend API endpoints | 264 (26 API files) |
-| Database models | 48 |
-| Services | 30 |
+| Backend API endpoints | 270 (27 API files) |
+| Database models | 52 |
+| Services | 31 |
 | Backend tests | 199+ |
 | Backend coverage | 49.80% (baseline) |
 | Frontend tests | 173 (10 test files) |
 | Frontend coverage | 5.01% (baseline) |
-| Migrations | 15 |
+| Migrations | 16 |
 | Frontend pages | 21+ |
 | Frontend components | 101+ |
 | Security audit | OWASP Top 10 2021 (10/10 PASS) |
