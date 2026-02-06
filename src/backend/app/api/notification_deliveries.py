@@ -7,10 +7,9 @@ from uuid import UUID
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_db, get_current_active_user
+from app.core.deps import get_db, get_current_active_user, Permission, has_permission
 from app.models.user import User
 from app.models.notification_delivery import NotificationDelivery, DeliveryStatus
-from app.services.auth_service import Permission, has_permission
 
 router = APIRouter()
 
