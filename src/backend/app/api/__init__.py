@@ -22,6 +22,7 @@ from app.api import (
     users,
     roles,
     iot_devices,
+    device_profiles,
     audio_clips,
     notification_preferences,
     notification_deliveries,
@@ -51,6 +52,7 @@ router.include_router(gis.router, prefix="/gis", tags=["GIS Layers"])
 router.include_router(streaming.router, prefix="/streaming", tags=["Streaming & Recording"])
 router.include_router(analytics.router, prefix="/analytics", tags=["Analytics & Reporting"])
 router.include_router(iot_devices.router, prefix="/iot-devices", tags=["IoT Devices"])
+router.include_router(device_profiles.router, prefix="/device-profiles", tags=["Device Profiles"])
 router.include_router(audio_clips.router, prefix="/audio-clips", tags=["Audio Clips"])
 router.include_router(notification_preferences.router, tags=["Notification Preferences"])
 router.include_router(notification_deliveries.router, prefix="/notification-deliveries", tags=["Notification Deliveries"])
