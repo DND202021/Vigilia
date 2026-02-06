@@ -1,0 +1,188 @@
+
+ RUN  v1.6.1 /workspace/Vigilia/Vigilia/src/frontend
+      Coverage enabled with v8
+
+ ✓ src/__tests__/incidentStore.test.ts  (19 tests) 30ms
+ ✓ src/__tests__/deviceStore.test.ts  (19 tests) 21ms
+ ✓ src/__tests__/buildingDetailStore.test.ts  (16 tests) 28ms
+ ✓ src/__tests__/resourceStore.test.ts  (19 tests) 190ms
+ ✓ src/__tests__/authStore.test.ts  (15 tests) 36ms
+ ✓ src/__tests__/alertStore.test.ts  (18 tests) 44ms
+ ✓ src/__tests__/channelStore.test.ts  (19 tests) 27ms
+ ✓ src/__tests__/validation.test.ts  (34 tests) 124ms
+ ✓ src/__tests__/stores.test.ts  (8 tests) 26ms
+ ✓ src/__tests__/api.test.ts  (11 tests) 30ms
+ ✓ src/__tests__/toastStore.test.ts  (13 tests) 34ms
+ ✓ src/__tests__/utils.test.ts  (14 tests) 37ms
+
+ Test Files  12 passed (12)
+      Tests  205 passed (205)
+   Start at  02:20:08
+   Duration  18.50s (transform 1.87s, setup 4.35s, collect 2.93s, tests 627ms, environment 30.60s, prepare 5.83s)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    5.58 |    58.45 |    28.9 |    5.58 |                   
+ public            |       0 |        0 |       0 |       0 |                   
+  sw.js            |       0 |        0 |       0 |       0 | 1-245             
+ src               |       0 |        0 |       0 |       0 |                   
+  App.tsx          |       0 |        0 |       0 |       0 | 1-238             
+ ...ponents/alerts |       0 |        0 |       0 |       0 |                   
+  ...toryChart.tsx |       0 |        0 |       0 |       0 | 1-178             
+  ...loorTable.tsx |       0 |        0 |       0 |       0 | 1-152             
+  index.ts         |       0 |        0 |       0 |       0 | 1-2               
+ ...ents/analytics |       0 |        0 |       0 |       0 |                   
+  ...rityChart.tsx |       0 |        0 |       0 |       0 | 1-296             
+  ...Dashboard.tsx |       0 |        0 |       0 |       0 | 1-349             
+  ...tatsCards.tsx |       0 |        0 |       0 |       0 | 1-386             
+  ...althChart.tsx |       0 |        0 |       0 |       0 | 1-430             
+  ...rendChart.tsx |       0 |        0 |       0 |       0 | 1-328             
+  ...nceWidget.tsx |       0 |        0 |       0 |       0 | 1-307             
+  index.ts         |       0 |        0 |       0 |       0 | 1-25              
+ ...mponents/audio |       0 |        0 |       0 |       0 |                   
+  AudioPlayer.tsx  |       0 |        0 |       0 |       0 | 1-154             
+  index.ts         |       0 |        0 |       0 |       0 | 1                 
+ ...omponents/auth |       0 |        0 |       0 |       0 |                   
+  ...ableModal.tsx |       0 |        0 |       0 |       0 | 1-81              
+  ...etupModal.tsx |       0 |        0 |       0 |       0 | 1-117             
+  index.ts         |       0 |        0 |       0 |       0 | 1-2               
+ ...ents/buildings |       0 |        0 |       0 |       0 |                   
+  ...ataViewer.tsx |       0 |        0 |       0 |       0 | 1-478             
+  BIMImport.tsx    |       0 |        0 |       0 |       0 | 1-539             
+  ...EditModal.tsx |       0 |        0 |       0 |       0 | 1-751             
+  ...InfoPanel.tsx |       0 |        0 |       0 |       0 | 1-134             
+  ...itSidebar.tsx |       0 |        0 |       0 |       0 | 1-287             
+  ...usOverlay.tsx |       0 |        0 |       0 |       0 | 1-378             
+  ...ntManager.tsx |       0 |        0 |       0 |       0 | 1-408             
+  ...lanEditor.tsx |       0 |        0 |       0 |       0 | 1-1156            
+  ...nageModal.tsx |       0 |        0 |       0 |       0 | 1-345             
+  ...PlanPrint.tsx |       0 |        0 |       0 |       0 | 1-484             
+  ...lanUpload.tsx |       0 |        0 |       0 |       0 | 1-399             
+  ...lanViewer.tsx |       0 |        0 |       0 |       0 | 1-506             
+  ...rSelector.tsx |       0 |        0 |       0 |       0 | 1-51              
+  ...onTracker.tsx |       0 |        0 |       0 |       0 | 1-467             
+  ...ionMarker.tsx |       0 |        0 |       0 |       0 | 1-301             
+  ...tiesModal.tsx |       0 |        0 |       0 |       0 | 1-323             
+  PhotoCapture.tsx |       0 |        0 |       0 |       0 | 1-356             
+  PhotoGallery.tsx |       0 |        0 |       0 |       0 | 1-433             
+  ...Indicator.tsx |       0 |        0 |       0 |       0 | 1-110             
+  ...lanViewer.tsx |       0 |        0 |       0 |       0 | 1-618             
+  index.ts         |       0 |        0 |       0 |       0 | 1-24              
+ ...omponents/chat |       0 |        0 |       0 |       0 |                   
+  ChannelList.tsx  |       0 |        0 |       0 |       0 | 1-228             
+  ChatPanel.tsx    |       0 |        0 |       0 |       0 | 1-230             
+  MessageInput.tsx |       0 |        0 |       0 |       0 | 1-200             
+  MessageList.tsx  |       0 |        0 |       0 |       0 | 1-300             
+  index.ts         |       0 |        0 |       0 |       0 | 1-9               
+ ...onents/devices |       0 |        0 |       0 |       0 |                   
+  ...figEditor.tsx |       0 |        0 |       0 |       0 | 1-710             
+  ...tailPanel.tsx |       0 |        0 |       0 |       0 | 1-344             
+  ...storyList.tsx |       0 |        0 |       0 |       0 | 1-362             
+  ...nSelector.tsx |       0 |        0 |       0 |       0 | 1-248             
+  ...ringPanel.tsx |       0 |        0 |       0 |       0 | 1-113             
+  ...entEditor.tsx |       0 |        0 |       0 |       0 | 1-234             
+  ...FloorPlan.tsx |       0 |        0 |       0 |       0 | 1-228             
+  index.ts         |       0 |        0 |       0 |       0 | 1-3               
+ ...ents/emergency |       0 |        0 |       0 |       0 |                   
+  ...ntManager.tsx |       0 |        0 |       0 |       0 | 1-892             
+  ...lanViewer.tsx |       0 |        0 |       0 |       0 | 1-1360            
+  ...ureEditor.tsx |       0 |        0 |       0 |       0 | 1-737             
+  ...uteDrawer.tsx |       0 |        0 |       0 |       0 | 1-1054            
+  index.ts         |       0 |        0 |       0 |       0 | 1-5               
+ ...ents/incidents |       0 |        0 |       0 |       0 |                   
+  ...InfoPanel.tsx |       0 |        0 |       0 |       0 | 1-408             
+  ...gSelector.tsx |       0 |        0 |       0 |       0 | 1-652             
+  ...tEditForm.tsx |       0 |        0 |       0 |       0 | 1-156             
+  index.ts         |       0 |        0 |       0 |       0 | 1-7               
+ ...ponents/layout |       0 |        0 |       0 |       0 |                   
+  Layout.tsx       |       0 |        0 |       0 |       0 | 1-21              
+  Navbar.tsx       |       0 |        0 |       0 |       0 | 1-154             
+  ...Indicator.tsx |       0 |        0 |       0 |       0 | 1-151             
+  ...ctedRoute.tsx |       0 |        0 |       0 |       0 | 1-44              
+  index.ts         |       0 |        0 |       0 |       0 | 1-7               
+ ...components/map |       0 |        0 |       0 |       0 |                   
+  ...dingLayer.tsx |       0 |        0 |       0 |       0 | 1-302             
+  ...dingPopup.tsx |       0 |        0 |       0 |       0 | 1-169             
+  ...ingSearch.tsx |       0 |        0 |       0 |       0 | 1-417             
+  ...ingsPanel.tsx |       0 |        0 |       0 |       0 | 1-385             
+  index.ts         |       0 |        0 |       0 |       0 | 1-5               
+ .../notifications |       0 |        0 |       0 |       0 |                   
+  ...eferences.tsx |       0 |        0 |       0 |       0 | 1-269             
+  index.ts         |       0 |        0 |       0 |       0 | 1                 
+ ...nents/settings |       0 |        0 |       0 |       0 |                   
+  ...ySettings.tsx |       0 |        0 |       0 |       0 | 1-207             
+  ...ySettings.tsx |       0 |        0 |       0 |       0 | 1-125             
+  index.ts         |       0 |        0 |       0 |       0 | 1-2               
+ src/components/ui |       0 |        0 |       0 |       0 |                   
+  Badge.tsx        |       0 |        0 |       0 |       0 | 1-47              
+  Button.tsx       |       0 |        0 |       0 |       0 | 1-84              
+  Card.tsx         |       0 |        0 |       0 |       0 | 1-62              
+  Input.tsx        |       0 |        0 |       0 |       0 | 1-59              
+  Modal.tsx        |       0 |        0 |       0 |       0 | 1-103             
+  Select.tsx       |       0 |        0 |       0 |       0 | 1-68              
+  Spinner.tsx      |       0 |        0 |       0 |       0 | 1-55              
+  Toast.tsx        |       0 |        0 |       0 |       0 | 1-72              
+  index.ts         |       0 |        0 |       0 |       0 | 1-11              
+ src/hooks         |       0 |        0 |       0 |       0 |                   
+  ...orPlanSync.ts |       0 |        0 |       0 |       0 | 1-419             
+  useInterval.ts   |       0 |        0 |       0 |       0 | 1-48              
+  useOffline.ts    |       0 |        0 |       0 |       0 | 1-130             
+  useWebSocket.ts  |       0 |        0 |       0 |       0 | 1-397             
+ src/pages         |       0 |        0 |       0 |       0 |                   
+  AlertsPage.tsx   |       0 |        0 |       0 |       0 | 1-563             
+  ...yticsPage.tsx |       0 |        0 |       0 |       0 | 1-417             
+  ...tLogsPage.tsx |       0 |        0 |       0 |       0 | 1-485             
+  ...etailPage.tsx |       0 |        0 |       0 |       0 | 1-1907            
+  ...dingsPage.tsx |       0 |        0 |       0 |       0 | 1-476             
+  ...boardPage.tsx |       0 |        0 |       0 |       0 | 1-302             
+  ...ementPage.tsx |       0 |        0 |       0 |       0 | 1-422             
+  ...swordPage.tsx |       0 |        0 |       0 |       0 | 1-138             
+  ...etailPage.tsx |       0 |        0 |       0 |       0 | 1-560             
+  ...dentsPage.tsx |       0 |        0 |       0 |       0 | 1-444             
+  LoginPage.tsx    |       0 |        0 |       0 |       0 | 1-228             
+  MapPage.tsx      |       0 |        0 |       0 |       0 | 1-830             
+  MessagesPage.tsx |       0 |        0 |       0 |       0 | 1-16              
+  RegisterPage.tsx |       0 |        0 |       0 |       0 | 1-248             
+  ...swordPage.tsx |       0 |        0 |       0 |       0 | 1-211             
+  ...urcesPage.tsx |       0 |        0 |       0 |       0 | 1-480             
+  RolesPage.tsx    |       0 |        0 |       0 |       0 | 1-609             
+  SettingsPage.tsx |       0 |        0 |       0 |       0 | 1-131             
+  UsersPage.tsx    |       0 |        0 |       0 |       0 | 1-679             
+  index.ts         |       0 |        0 |       0 |       0 | 1-21              
+ src/services      |   29.05 |     87.5 |    8.05 |   29.05 |                   
+  api.ts           |   43.87 |      100 |    8.16 |   43.87 | ...1239,1242-1246 
+  offlineDb.ts     |       0 |        0 |       0 |       0 | 1-336             
+  syncService.ts   |       0 |        0 |       0 |       0 | 1-301             
+ src/stores        |   35.48 |    70.98 |   83.69 |   35.48 |                   
+  alertStore.ts    |   99.36 |    71.69 |     100 |   99.36 | 151               
+  audioStore.ts    |       0 |        0 |       0 |       0 | 1-165             
+  authStore.ts     |   97.94 |    94.11 |      90 |   97.94 | 60-62             
+  ...etailStore.ts |   94.94 |    75.67 |   84.61 |   94.94 | 98-99,141,149-155 
+  ...ngMapStore.ts |       0 |        0 |       0 |       0 | 1-170             
+  channelStore.ts  |   89.17 |    70.58 |   92.85 |   89.17 | ...29,233-239,261 
+  ...itionStore.ts |       0 |        0 |       0 |       0 | 1-260             
+  deviceStore.ts   |   96.51 |       76 |     100 |   96.51 | 138-142,160       
+  documentStore.ts |       0 |        0 |       0 |       0 | 1-123             
+  incidentStore.ts |   99.44 |    65.62 |     100 |   99.44 | 171               
+  ...ctionStore.ts |       0 |        0 |       0 |       0 | 1-166             
+  markerStore.ts   |       0 |        0 |       0 |       0 | 1-499             
+  messageStore.ts  |       0 |        0 |       0 |       0 | 1-309             
+  photoStore.ts    |       0 |        0 |       0 |       0 | 1-139             
+  presenceStore.ts |       0 |        0 |       0 |       0 | 1-116             
+  resourceStore.ts |   98.77 |    68.42 |     100 |   98.77 | 107,155           
+  roleStore.ts     |       0 |        0 |       0 |       0 | 1-133             
+  toastStore.ts    |     100 |      100 |     100 |     100 |                   
+  userStore.ts     |       0 |        0 |       0 |       0 | 1-230             
+ src/types         |       0 |        0 |       0 |       0 |                   
+  index.ts         |       0 |        0 |       0 |       0 | 1-1532            
+ src/utils         |   57.52 |    77.63 |   58.53 |   57.52 |                   
+  index.ts         |   77.58 |    78.57 |   34.78 |   77.58 | ...18-224,227-232 
+  security.ts      |       0 |        0 |       0 |       0 | 1-268             
+  validation.ts    |   95.42 |    78.68 |   94.11 |   95.42 | ...94-195,217,224 
+-------------------|---------|----------|---------|---------|-------------------
+ERROR: Coverage for lines (5.58%) does not meet global threshold (70%)
+ERROR: Coverage for functions (28.9%) does not meet global threshold (70%)
+ERROR: Coverage for statements (5.58%) does not meet global threshold (70%)
+ERROR: Coverage for branches (58.45%) does not meet global threshold (70%)
