@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -73,6 +73,35 @@ class DeviceStatusResponse(BaseModel):
     last_seen: str | None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CredentialStatusResponse(BaseModel):
+    """Response for credential revocation/reactivation."""
+    device_id: str
+    credential_type: str
+    is_active: bool
+    last_used_at: str | None
+    message: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BulkProvisionResultItem(BaseModel):
+    """Result for a single row in bulk provisioning."""
+    row: int = Field(..., description="CSV row number (starting at 2)")
+    status: str = Field(..., description="Result status: success or error")
+    device_id: str | None = Field(None, description="Device UUID if provisioned successfully")
+    name: str | None = Field(None, description="Device name if provisioned successfully")
+    credential_type: str | None = Field(None, description="Credential type if provisioned successfully")
+    error: str | None = Field(None, description="Error message if provisioning failed")
+
+
+class BulkProvisionResponse(BaseModel):
+    """Response after bulk provisioning operation."""
+    total_rows: int = Field(..., description="Total rows processed from CSV")
+    successful: int = Field(..., description="Number of successfully provisioned devices")
+    failed: int = Field(..., description="Number of failed rows")
+    results: list[BulkProvisionResultItem] = Field(..., description="Per-row results")
 
 
 # ==================== Endpoints ====================
@@ -207,4 +236,101 @@ async def get_device_provisioning_status(
         provisioning_status=device.provisioning_status or "unprovisioned",
         status=device.status,
         last_seen=device.last_seen.isoformat() if device.last_seen else None,
+    )
+
+
+@router.post("/bulk", response_model=BulkProvisionResponse, status_code=status.HTTP_200_OK)
+async def bulk_provision_devices(
+    file: UploadFile,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> BulkProvisionResponse:
+    """Bulk provision devices from CSV file.
+
+    Accepts CSV file with columns: name, device_type, building_id, profile_id, credential_type
+    Validates each row and provisions valid devices. Invalid rows produce error results.
+
+    **CSV Format:**
+    ```csv
+    name,device_type,building_id,profile_id,credential_type
+    "Lobby Camera 1",camera,550e8400-e29b-41d4-a716-446655440000,,access_token
+    "Entrance Mic",microphone,550e8400-e29b-41d4-a716-446655440000,,x509
+    ```
+
+    **Security Notes:**
+    - Credentials are NOT returned in bulk results (use single-device provisioning for credential retrieval)
+    - Each device gets unique credentials stored securely
+    - Maximum 1000 rows per CSV
+    - Invalid rows do not halt processing of valid rows
+
+    **Returns:**
+    - 200 OK with per-row results (even if some rows fail)
+    - 400 Bad Request if file is not CSV, has missing headers, or exceeds row limit
+    """
+    # Validate file extension
+    if not file.filename or not file.filename.endswith(".csv"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be a CSV (filename must end with .csv)"
+        )
+
+    # Read file content
+    try:
+        content = await file.read()
+        csv_content = content.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be UTF-8 encoded CSV"
+        )
+
+    # Check content is not empty
+    if not csv_content.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CSV file is empty"
+        )
+
+    # Provision devices via service
+    service = DeviceProvisioningService(db)
+    try:
+        results = await service.bulk_provision_devices(
+            csv_content=csv_content,
+            agency_id=current_user.agency_id,
+        )
+    except DeviceProvisioningError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+    # Count successful and failed results
+    successful = sum(1 for r in results if r["status"] == "success")
+    failed = len(results) - successful
+
+    return BulkProvisionResponse(
+        total_rows=len(results),
+        successful=successful,
+        failed=failed,
+        results=[BulkProvisionResultItem(**r) for r in results],
+    )
+
+
+@router.get("/bulk/template")
+async def get_bulk_provision_template() -> Response:
+    """Download CSV template for bulk provisioning.
+
+    Returns a CSV file with correct headers and example rows.
+    """
+    csv_template = '''name,device_type,building_id,profile_id,credential_type
+"Lobby Camera 1",camera,<building-uuid-here>,,access_token
+"Entrance Mic",microphone,<building-uuid-here>,,x509
+'''
+
+    return Response(
+        content=csv_template,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="device_provision_template.csv"'
+        }
     )

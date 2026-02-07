@@ -1,11 +1,14 @@
 """Device provisioning service for generating credentials and registering devices."""
 
 import base64
+import csv
 import secrets
 import uuid
 from datetime import datetime, timezone
+from io import StringIO
 
 from passlib.context import CryptContext
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -25,6 +28,44 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 class DeviceProvisioningError(Exception):
     """Device provisioning related errors."""
     pass
+
+
+class DeviceProvisionRow(BaseModel):
+    """CSV row validation schema for bulk provisioning."""
+    name: str = Field(..., min_length=1, max_length=200, description="Device name")
+    device_type: str = Field(
+        ...,
+        pattern="^(microphone|camera|sensor|gateway)$",
+        description="Device type"
+    )
+    building_id: str = Field(..., description="Building UUID")
+    profile_id: str | None = Field(None, description="Optional device profile UUID")
+    credential_type: str = Field(
+        default="access_token",
+        pattern="^(access_token|x509)$",
+        description="Credential type"
+    )
+
+    @field_validator("building_id")
+    @classmethod
+    def validate_building_id(cls, v: str) -> str:
+        """Validate building_id is valid UUID format."""
+        try:
+            uuid.UUID(v)
+        except ValueError:
+            raise ValueError(f"Invalid UUID format: {v}")
+        return v
+
+    @field_validator("profile_id")
+    @classmethod
+    def validate_profile_id(cls, v: str | None) -> str | None:
+        """Validate profile_id is valid UUID format if provided."""
+        if v is not None:
+            try:
+                uuid.UUID(v)
+            except ValueError:
+                raise ValueError(f"Invalid UUID format: {v}")
+        return v
 
 
 class DeviceProvisioningService:
@@ -197,3 +238,180 @@ class DeviceProvisioningService:
         await self.db.refresh(credentials)
 
         return device, credentials_dict
+
+    async def revoke_credentials(
+        self,
+        device_id: uuid.UUID,
+        agency_id: uuid.UUID,
+    ) -> DeviceCredentials:
+        """Revoke device credentials and suspend device.
+
+        Sets DeviceCredentials.is_active=False and device.provisioning_status=suspended.
+        Revoked devices will be rejected on next MQTT auth attempt (within 2h session expiry).
+
+        Args:
+            device_id: UUID of device to revoke
+            agency_id: UUID of agency (for authorization check)
+
+        Returns:
+            Updated DeviceCredentials record
+
+        Raises:
+            DeviceProvisioningError: If device not found, wrong agency, or already revoked
+        """
+        # Query device credentials with joins
+        result = await self.db.execute(
+            select(DeviceCredentials, IoTDevice, Building)
+            .join(IoTDevice, DeviceCredentials.device_id == IoTDevice.id)
+            .join(Building, IoTDevice.building_id == Building.id)
+            .where(DeviceCredentials.device_id == device_id)
+        )
+        row = result.one_or_none()
+
+        if not row:
+            raise DeviceProvisioningError(f"Device {device_id} not found or not provisioned")
+
+        credentials, device, building = row
+
+        # Verify agency ownership
+        if building.agency_id != agency_id:
+            raise DeviceProvisioningError(f"Device {device_id} does not belong to agency {agency_id}")
+
+        # Check if already revoked
+        if not credentials.is_active:
+            raise DeviceProvisioningError(f"Credentials for device {device_id} are already revoked")
+
+        # Revoke credentials
+        credentials.is_active = False
+        device.provisioning_status = "suspended"
+
+        await self.db.commit()
+        await self.db.refresh(credentials)
+
+        return credentials
+
+    async def reactivate_credentials(
+        self,
+        device_id: uuid.UUID,
+        agency_id: uuid.UUID,
+    ) -> DeviceCredentials:
+        """Reactivate previously revoked device credentials.
+
+        Sets DeviceCredentials.is_active=True and device.provisioning_status=active.
+        Note: Sets status to "active" not "pending" since device was previously activated.
+
+        Args:
+            device_id: UUID of device to reactivate
+            agency_id: UUID of agency (for authorization check)
+
+        Returns:
+            Updated DeviceCredentials record
+
+        Raises:
+            DeviceProvisioningError: If device not found, wrong agency, or already active
+        """
+        # Query device credentials with joins
+        result = await self.db.execute(
+            select(DeviceCredentials, IoTDevice, Building)
+            .join(IoTDevice, DeviceCredentials.device_id == IoTDevice.id)
+            .join(Building, IoTDevice.building_id == Building.id)
+            .where(DeviceCredentials.device_id == device_id)
+        )
+        row = result.one_or_none()
+
+        if not row:
+            raise DeviceProvisioningError(f"Device {device_id} not found or not provisioned")
+
+        credentials, device, building = row
+
+        # Verify agency ownership
+        if building.agency_id != agency_id:
+            raise DeviceProvisioningError(f"Device {device_id} does not belong to agency {agency_id}")
+
+        # Check if already active
+        if credentials.is_active:
+            raise DeviceProvisioningError(f"Credentials for device {device_id} are already active")
+
+        # Reactivate credentials
+        credentials.is_active = True
+        device.provisioning_status = "active"  # Not "pending" - device was previously activated
+
+        await self.db.commit()
+        await self.db.refresh(credentials)
+
+        return credentials
+
+    async def bulk_provision_devices(
+        self,
+        csv_content: str,
+        agency_id: uuid.UUID,
+    ) -> list[dict]:
+        """Provision multiple devices from CSV content.
+
+        Args:
+            csv_content: CSV file content as string
+            agency_id: UUID of agency owning the devices
+
+        Returns:
+            List of per-row results with status (success/error), device_id, or error message
+
+        Raises:
+            DeviceProvisioningError: If CSV has missing required headers or exceeds row limit
+        """
+        # Parse CSV
+        reader = csv.DictReader(StringIO(csv_content))
+
+        # Validate required headers
+        required_headers = {"name", "device_type", "building_id"}
+        if reader.fieldnames is None:
+            raise DeviceProvisioningError("CSV file is empty or has no headers")
+
+        actual_headers = set(reader.fieldnames)
+        missing_headers = required_headers - actual_headers
+        if missing_headers:
+            raise DeviceProvisioningError(
+                f"Missing required CSV headers: {', '.join(sorted(missing_headers))}"
+            )
+
+        # Collect all rows first to check row count limit
+        rows = list(reader)
+        if len(rows) > 1000:
+            raise DeviceProvisioningError(
+                f"CSV exceeds maximum of 1000 rows (found {len(rows)} rows)"
+            )
+
+        # Process each row
+        results = []
+        for row_num, row in enumerate(rows, start=2):  # Start at 2 to account for header
+            try:
+                # Validate row with Pydantic
+                validated_row = DeviceProvisionRow(**row)
+
+                # Provision device
+                device, credentials = await self.provision_device(
+                    name=validated_row.name,
+                    device_type=validated_row.device_type,
+                    building_id=uuid.UUID(validated_row.building_id),
+                    agency_id=agency_id,
+                    credential_type=validated_row.credential_type,
+                    profile_id=uuid.UUID(validated_row.profile_id) if validated_row.profile_id else None,
+                )
+
+                # Append success result (no credentials for security)
+                results.append({
+                    "row": row_num,
+                    "status": "success",
+                    "device_id": str(device.id),
+                    "name": validated_row.name,
+                    "credential_type": validated_row.credential_type,
+                })
+
+            except Exception as e:
+                # Append error result and continue to next row
+                results.append({
+                    "row": row_num,
+                    "status": "error",
+                    "error": str(e),
+                })
+
+        return results
