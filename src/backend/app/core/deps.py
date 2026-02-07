@@ -7,6 +7,8 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 
+import redis.asyncio as aioredis
+
 from app.core.config import settings
 from app.models.user import User, UserRole
 from app.services.auth_service import AuthService, AuthenticationError
@@ -137,6 +139,18 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
 # Database engine and session factory
 engine = create_async_engine(settings.database_url, echo=settings.debug)
 async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+# Redis client singleton
+_redis_client: aioredis.Redis | None = None
+
+
+async def get_redis() -> aioredis.Redis:
+    """Get Redis client singleton. Callable from any context (MQTT handlers, workers, FastAPI)."""
+    global _redis_client
+    if _redis_client is None:
+        _redis_client = aioredis.from_url(settings.redis_url, decode_responses=False)
+    return _redis_client
+
 
 # Security scheme
 security = HTTPBearer(auto_error=False)

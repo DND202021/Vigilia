@@ -13,6 +13,7 @@ import aiomqtt
 import structlog
 
 from app.services.mqtt_handlers.registration_handler import handle_device_registration
+from app.services.mqtt_handlers.telemetry_handler import handle_device_telemetry
 
 logger = structlog.get_logger()
 
@@ -73,6 +74,7 @@ class VigiliaMQTTService:
         - Registration handler: Auto-activates devices on first MQTT connection
         """
         self.register_handler("agency/+/device/+/register", handle_device_registration)
+        self.register_handler("agency/+/device/+/telemetry", handle_device_telemetry)
 
     def add_subscription(self, topic: str) -> None:
         if topic not in self._additional_subscriptions:
