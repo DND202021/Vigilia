@@ -12,6 +12,8 @@ from typing import Any, Callable, Awaitable
 import aiomqtt
 import structlog
 
+from app.services.mqtt_handlers.registration_handler import handle_device_registration
+
 logger = structlog.get_logger()
 
 # Type for async message handlers
@@ -53,6 +55,9 @@ class VigiliaMQTTService:
         self._connected: bool = False
         self._additional_subscriptions: list[str] = []
 
+        # Register default handlers
+        self.register_default_handlers()
+
     @property
     def is_connected(self) -> bool:
         return self._connected
@@ -60,6 +65,14 @@ class VigiliaMQTTService:
     def register_handler(self, topic_pattern: str, handler: MessageHandler) -> None:
         self._message_handlers[topic_pattern] = handler
         logger.info("Registered MQTT handler", topic_pattern=topic_pattern)
+
+    def register_default_handlers(self) -> None:
+        """Register built-in MQTT message handlers.
+
+        Default handlers:
+        - Registration handler: Auto-activates devices on first MQTT connection
+        """
+        self.register_handler("agency/+/device/+/register", handle_device_registration)
 
     def add_subscription(self, topic: str) -> None:
         if topic not in self._additional_subscriptions:
