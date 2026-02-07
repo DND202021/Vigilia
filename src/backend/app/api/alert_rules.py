@@ -176,8 +176,7 @@ async def get_recent_alert_evaluations(
     response = []
     for alert in alerts:
         raw = alert.raw_payload or {}
-        rule_info = raw.get("rule", {})
-        device_name = alert.device.name if alert.device else "Unknown"
+        device_name = raw.get("device_name") or (alert.device.name if alert.device else "Unknown")
 
         response.append(
             AlertRuleEvaluationResponse(
@@ -185,10 +184,10 @@ async def get_recent_alert_evaluations(
                 alert_id=str(alert.id),
                 device_id=str(alert.device_id) if alert.device_id else "",
                 device_name=device_name,
-                rule_name=rule_info.get("name", alert.title),
-                metric=rule_info.get("metric", ""),
-                condition=rule_info.get("condition", ""),
-                threshold=rule_info.get("threshold"),
+                rule_name=raw.get("rule_name", alert.title),
+                metric=raw.get("metric", ""),
+                condition=raw.get("condition", ""),
+                threshold=raw.get("threshold"),
                 actual_value=raw.get("actual_value"),
                 severity=alert.severity.value if hasattr(alert.severity, "value") else str(alert.severity),
                 created_at=alert.received_at.isoformat() if alert.received_at else "",
