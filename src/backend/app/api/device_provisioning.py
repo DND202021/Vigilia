@@ -239,6 +239,105 @@ async def get_device_provisioning_status(
     )
 
 
+@router.post("/{device_id}/revoke", response_model=CredentialStatusResponse)
+async def revoke_device_credentials(
+    device_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> CredentialStatusResponse:
+    """Revoke device credentials to prevent further MQTT connections.
+
+    Sets DeviceCredentials.is_active=False and device.provisioning_status=suspended.
+    The revoked device will be rejected on its next MQTT auth attempt (within 2h session expiry).
+
+    The existing MQTT auth webhook in mqtt_auth.py checks the is_active flag,
+    so revocation is effective immediately for new connections.
+
+    Args:
+        device_id: UUID of device to revoke
+        db: Database session
+        current_user: Authenticated user
+
+    Returns:
+        CredentialStatusResponse with updated status and informative message
+    """
+    # Validate UUID format
+    try:
+        device_uuid = uuid.UUID(device_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid device_id format: {device_id}"
+        )
+
+    # Revoke credentials
+    service = DeviceProvisioningService(db)
+    try:
+        credentials = await service.revoke_credentials(device_uuid, current_user.agency_id)
+    except DeviceProvisioningError as e:
+        error_msg = str(e)
+        if "not found" in error_msg:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_msg)
+        else:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
+
+    return CredentialStatusResponse(
+        device_id=str(credentials.device_id),
+        credential_type=credentials.credential_type,
+        is_active=credentials.is_active,
+        last_used_at=credentials.last_used_at.isoformat() if credentials.last_used_at else None,
+        message="Credentials revoked. Device will be disconnected within 2 hours or on next connection attempt.",
+    )
+
+
+@router.post("/{device_id}/reactivate", response_model=CredentialStatusResponse)
+async def reactivate_device_credentials(
+    device_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> CredentialStatusResponse:
+    """Reactivate previously revoked device credentials.
+
+    Sets DeviceCredentials.is_active=True and device.provisioning_status=active.
+    The device can immediately reconnect to MQTT.
+
+    Args:
+        device_id: UUID of device to reactivate
+        db: Database session
+        current_user: Authenticated user
+
+    Returns:
+        CredentialStatusResponse with updated status and informative message
+    """
+    # Validate UUID format
+    try:
+        device_uuid = uuid.UUID(device_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid device_id format: {device_id}"
+        )
+
+    # Reactivate credentials
+    service = DeviceProvisioningService(db)
+    try:
+        credentials = await service.reactivate_credentials(device_uuid, current_user.agency_id)
+    except DeviceProvisioningError as e:
+        error_msg = str(e)
+        if "not found" in error_msg:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_msg)
+        else:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
+
+    return CredentialStatusResponse(
+        device_id=str(credentials.device_id),
+        credential_type=credentials.credential_type,
+        is_active=credentials.is_active,
+        last_used_at=credentials.last_used_at.isoformat() if credentials.last_used_at else None,
+        message="Credentials reactivated. Device can reconnect.",
+    )
+
+
 @router.post("/bulk", response_model=BulkProvisionResponse, status_code=status.HTTP_200_OK)
 async def bulk_provision_devices(
     file: UploadFile,
