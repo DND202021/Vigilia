@@ -714,10 +714,11 @@ export const usersApi = {
 // Roles API
 export const rolesApi = {
   list: async (includeInactive?: boolean): Promise<Role[]> => {
-    const response = await api.get<Role[]>('/roles', {
+    const response = await api.get<{ items: Role[]; total: number; page: number; page_size: number }>('/roles', {
       params: includeInactive ? { include_inactive: true } : undefined,
     });
-    return response.data;
+    // Backend returns paginated response, extract items array
+    return response.data.items;
   },
 
   get: async (id: string): Promise<Role> => {

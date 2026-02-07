@@ -68,17 +68,15 @@ export function getPriorityBgColor(priority: IncidentPriority): string {
   return priorityConfig[priority]?.bgColor || 'bg-gray-100';
 }
 
-// Status helpers
+// Status helpers - matches backend IncidentStatus enum
 export const statusConfig: Record<IncidentStatus, { label: string; color: string; bgColor: string }> =
   {
     new: { label: 'New', color: 'text-blue-700', bgColor: 'bg-blue-100' },
     assigned: { label: 'Assigned', color: 'text-purple-700', bgColor: 'bg-purple-100' },
-    dispatched: { label: 'Dispatched', color: 'text-indigo-700', bgColor: 'bg-indigo-100' },
-    en_route: { label: 'En Route', color: 'text-cyan-700', bgColor: 'bg-cyan-100' },
+    en_route: { label: 'En Route / Dispatched', color: 'text-cyan-700', bgColor: 'bg-cyan-100' },
     on_scene: { label: 'On Scene', color: 'text-green-700', bgColor: 'bg-green-100' },
     resolved: { label: 'Resolved', color: 'text-teal-700', bgColor: 'bg-teal-100' },
     closed: { label: 'Closed', color: 'text-gray-700', bgColor: 'bg-gray-100' },
-    cancelled: { label: 'Cancelled', color: 'text-red-700', bgColor: 'bg-red-100' },
   };
 
 export function getStatusLabel(status: IncidentStatus): string {

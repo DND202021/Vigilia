@@ -119,7 +119,7 @@ export const useIncidentStore = create<IncidentStore>((set) => ({
       set((state) => ({
         incidents: state.incidents.map((i) => (i.id === id ? updated : i)),
         activeIncidents:
-          status === 'closed' || status === 'cancelled'
+          status === 'closed' || status === 'resolved'
             ? state.activeIncidents.filter((i) => i.id !== id)
             : state.activeIncidents.map((i) => (i.id === id ? updated : i)),
         selectedIncident: state.selectedIncident?.id === id ? updated : state.selectedIncident,
@@ -160,7 +160,7 @@ export const useIncidentStore = create<IncidentStore>((set) => ({
 
   handleIncidentUpdate: (incident) => {
     set((state) => {
-      const isActive = !['closed', 'cancelled', 'resolved'].includes(incident.status);
+      const isActive = !['closed', 'resolved'].includes(incident.status);
 
       return {
         incidents: state.incidents.some((i) => i.id === incident.id)

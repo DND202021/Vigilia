@@ -56,6 +56,7 @@ export function DeviceManagementPage() {
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingDevice, setEditingDevice] = useState<IoTDevice | null>(null);
+  const [deletingDevice, setDeletingDevice] = useState<IoTDevice | null>(null);
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [floorPlans, setFloorPlans] = useState<FloorPlan[]>([]);
   const [filterBuilding, setFilterBuilding] = useState<string>('');
@@ -188,7 +189,7 @@ export function DeviceManagementPage() {
                       Edit
                     </button>
                     <button
-                      onClick={() => { if (confirm('Delete this device?')) deleteDevice(device.id); }}
+                      onClick={() => setDeletingDevice(device)}
                       className="text-red-600 hover:text-red-800"
                     >
                       Delete
@@ -218,6 +219,18 @@ export function DeviceManagementPage() {
             setEditingDevice(null);
           }}
           onClose={() => { setShowCreateDialog(false); setEditingDevice(null); }}
+        />
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {deletingDevice && (
+        <DeleteConfirmDialog
+          deviceName={deletingDevice.name}
+          onConfirm={async () => {
+            await deleteDevice(deletingDevice.id);
+            setDeletingDevice(null);
+          }}
+          onCancel={() => setDeletingDevice(null)}
         />
       )}
     </div>
@@ -416,6 +429,66 @@ function DeviceDialog({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function DeleteConfirmDialog({
+  deviceName,
+  onConfirm,
+  onCancel,
+}: {
+  deviceName: string;
+  onConfirm: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [deleting, setDeleting] = useState(false);
+
+  const handleConfirm = async () => {
+    setDeleting(true);
+    try {
+      await onConfirm();
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+            <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-gray-900">Delete Device</h2>
+        </div>
+
+        <p className="text-gray-600 mb-6">
+          Are you sure you want to delete <strong className="text-gray-900">{deviceName}</strong>?
+          This action cannot be undone and all associated data will be permanently removed.
+        </p>
+
+        <div className="flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={deleting}
+            className="px-4 py-2 border rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={deleting}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+          >
+            {deleting ? 'Deleting...' : 'Delete Device'}
+          </button>
+        </div>
       </div>
     </div>
   );

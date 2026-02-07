@@ -185,7 +185,8 @@ export interface Incident {
 
 export type IncidentType = 'fire' | 'medical' | 'police' | 'traffic' | 'hazmat' | 'rescue' | 'other';
 export type IncidentPriority = 1 | 2 | 3 | 4 | 5;
-export type IncidentStatus = 'new' | 'assigned' | 'dispatched' | 'en_route' | 'on_scene' | 'resolved' | 'closed' | 'cancelled';
+// Must match backend IncidentStatus enum values exactly
+export type IncidentStatus = 'new' | 'assigned' | 'en_route' | 'on_scene' | 'resolved' | 'closed';
 
 export interface TimelineEvent {
   timestamp: string;

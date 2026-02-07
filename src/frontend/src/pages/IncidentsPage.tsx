@@ -50,12 +50,12 @@ const priorityOptions = [
   { value: '5', label: 'P5 - Info' },
 ];
 
+// Status filter options must match backend IncidentStatus enum
 const statusFilterOptions = [
   { value: '', label: 'All Statuses' },
   { value: 'new', label: 'New' },
   { value: 'assigned', label: 'Assigned' },
-  { value: 'dispatched', label: 'Dispatched' },
-  { value: 'en_route', label: 'En Route' },
+  { value: 'en_route', label: 'En Route / Dispatched' },
   { value: 'on_scene', label: 'On Scene' },
   { value: 'resolved', label: 'Resolved' },
   { value: 'closed', label: 'Closed' },
