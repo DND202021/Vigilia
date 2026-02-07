@@ -15,6 +15,7 @@ const navLinks = [
   { to: '/map', label: 'Map' },
   { to: '/messages', label: 'Messages' },
   { to: '/devices', label: 'Devices' },
+  { to: '/telemetry', label: 'Telemetry' },
   { to: '/analytics', label: 'Analytics' },
 ];
 

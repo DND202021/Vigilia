@@ -22,6 +22,7 @@ import { useBuildingMapStore } from '../stores/buildingMapStore';
 import { useMarkerStore, initializeMarkersFromFloorPlan } from '../stores/markerStore';
 import { usePresenceStore } from '../stores/presenceStore';
 import { useDevicePositionStore } from '../stores/devicePositionStore';
+import { useTelemetryStore } from '../stores/telemetryStore';
 import { tokenStorage } from '../services/api';
 import type { Incident, Alert, Resource, SoundAlert, Building, FloorPlan } from '../types';
 
@@ -45,6 +46,9 @@ interface WebSocketHookResult {
   sendMarkerUpdate: (floorPlanId: string, markerId: string, updates: any, clientId: string) => void;
   sendMarkerDelete: (floorPlanId: string, markerId: string) => void;
   sendPresenceHeartbeat: (floorPlanId: string, isEditing: boolean) => void;
+  // Telemetry methods
+  joinDeviceTelemetry: (deviceId: string) => void;
+  leaveDeviceTelemetry: (deviceId: string) => void;
 }
 
 export function useWebSocket(): WebSocketHookResult {
@@ -310,6 +314,14 @@ export function useWebSocket(): WebSocketHookResult {
       );
     });
 
+    // Telemetry events
+    socket.on('telemetry:data', (data: { device_id: string; metric_name: string; time: string; value: any }) => {
+      useTelemetryStore.getState().addDataPoint(data.device_id, data.metric_name, {
+        time: data.time,
+        value: data.value,
+      });
+    });
+
     socketRef.current = socket;
   }, [handleIncidentUpdate, handleAlertUpdate, handleResourceUpdate, handleDeviceStatusUpdate, handleNewSoundAlert, fetchMapBuildings, currentBuilding, addFloorPlan, fetchFloorPlans, currentFloorPlanId, isEditing]);
 
@@ -373,6 +385,18 @@ export function useWebSocket(): WebSocketHookResult {
     }
   }, []);
 
+  const joinDeviceTelemetry = useCallback((deviceId: string) => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('join_device_telemetry', { device_id: deviceId });
+    }
+  }, []);
+
+  const leaveDeviceTelemetry = useCallback((deviceId: string) => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('leave_device_telemetry', { device_id: deviceId });
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
       disconnect();
@@ -393,5 +417,8 @@ export function useWebSocket(): WebSocketHookResult {
     sendMarkerUpdate,
     sendMarkerDelete,
     sendPresenceHeartbeat,
+    // Telemetry methods
+    joinDeviceTelemetry,
+    leaveDeviceTelemetry,
   };
 }

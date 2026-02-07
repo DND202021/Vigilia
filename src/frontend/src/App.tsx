@@ -23,6 +23,7 @@ const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage').then(m => ({ de
 const UsersPage = lazy(() => import('./pages/UsersPage').then(m => ({ default: m.UsersPage })));
 const RolesPage = lazy(() => import('./pages/RolesPage').then(m => ({ default: m.RolesPage })));
 const DeviceManagementPage = lazy(() => import('./pages/DeviceManagementPage').then(m => ({ default: m.DeviceManagementPage })));
+const DeviceTelemetryPage = lazy(() => import('./pages/DeviceTelemetryPage').then(m => ({ default: m.DeviceTelemetryPage })));
 const BuildingDetailPage = lazy(() => import('./pages/BuildingDetailPage').then(m => ({ default: m.BuildingDetailPage })));
 const AuditLogsPage = lazy(() => import('./pages/AuditLogsPage').then(m => ({ default: m.AuditLogsPage })));
 const MessagesPage = lazy(() => import('./pages/MessagesPage').then(m => ({ default: m.MessagesPage })));
@@ -196,6 +197,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <DeviceManagementPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/telemetry"
+            element={
+              <ProtectedRoute>
+                <DeviceTelemetryPage />
               </ProtectedRoute>
             }
           />
