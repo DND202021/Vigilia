@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     mqtt_vigilia_reconnect_interval: int = 5        # Initial reconnect delay in seconds
     mqtt_vigilia_max_reconnect_interval: int = 60   # Max reconnect delay in seconds
 
+    # Certificate Authority (for device X.509 certificate generation)
+    ca_cert_path: str = "/mosquitto/certs/ca.crt"   # CA certificate (reuse Phase 18 CA)
+    ca_key_path: str = "/mosquitto/certs/ca.key"    # CA private key for signing
+
     # CORS - accepts comma-separated string or JSON array
     cors_origins_str: str = "http://localhost:3000,http://localhost:5173"
 
