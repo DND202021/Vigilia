@@ -61,6 +61,13 @@ class Settings(BaseSettings):
     mqtt_vigilia_reconnect_interval: int = 5        # Initial reconnect delay in seconds
     mqtt_vigilia_max_reconnect_interval: int = 60   # Max reconnect delay in seconds
 
+    # Telemetry Worker
+    telemetry_worker_enabled: bool = True
+    telemetry_worker_batch_size: int = 1000
+    telemetry_worker_batch_timeout: float = 5.0
+    telemetry_worker_num_workers: int = 2
+    telemetry_worker_stream_maxlen: int = 100000
+
     # Certificate Authority (for device X.509 certificate generation)
     ca_cert_path: str = "/mosquitto/certs/ca.crt"   # CA certificate (reuse Phase 18 CA)
     ca_key_path: str = "/mosquitto/certs/ca.key"    # CA private key for signing

@@ -19,6 +19,8 @@ from app.services.device_monitor_service import DeviceMonitorService
 from app.services.sound_alert_pipeline import SoundAlertPipeline
 from app.services.notification_service import NotificationService
 from app.services.health_service import health_service
+from app.services.telemetry_worker_service import TelemetryWorkerService
+from app.core.deps import get_redis
 
 logger = structlog.get_logger()
 
@@ -27,6 +29,7 @@ _mqtt_service: VigiliaMQTTService | None = None
 _device_monitor: DeviceMonitorService | None = None
 _sound_pipeline: SoundAlertPipeline | None = None
 _metrics_task: asyncio.Task | None = None
+_telemetry_worker: TelemetryWorkerService | None = None
 
 
 async def _update_health_metrics() -> None:
@@ -43,7 +46,7 @@ async def _update_health_metrics() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler for startup/shutdown events."""
-    global _mqtt_service, _device_monitor, _sound_pipeline, _metrics_task
+    global _mqtt_service, _device_monitor, _sound_pipeline, _metrics_task, _telemetry_worker
 
     # Startup
     logger.info("Starting ERIOP application", environment=settings.environment)
@@ -87,6 +90,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as e:
             logger.warning("Failed to start Vigilia MQTT service", error=str(e))
 
+    # Initialize Telemetry Worker Service (Redis Stream -> TimescaleDB batch insert)
+    if settings.telemetry_worker_enabled:
+        try:
+            redis_client = await get_redis()
+            _telemetry_worker = TelemetryWorkerService(
+                redis_client=redis_client,
+                session_factory=async_session_factory,
+                batch_size=settings.telemetry_worker_batch_size,
+                batch_timeout=settings.telemetry_worker_batch_timeout,
+                num_workers=settings.telemetry_worker_num_workers,
+            )
+            await _telemetry_worker.start()
+            logger.info(
+                "Telemetry worker service started",
+                num_workers=settings.telemetry_worker_num_workers,
+                batch_size=settings.telemetry_worker_batch_size,
+            )
+        except Exception as e:
+            logger.warning("Failed to start telemetry worker service", error=str(e))
+
     # Initialize Device Monitor Service (background polling)
     try:
         _device_monitor = DeviceMonitorService(
@@ -115,6 +138,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Shutdown
     logger.info("Shutting down ERIOP application")
+
+    # Stop telemetry worker first (flush remaining batch before MQTT disconnects)
+    if _telemetry_worker:
+        await _telemetry_worker.stop()
+        logger.info("Telemetry worker service stopped")
 
     if _metrics_task:
         _metrics_task.cancel()
