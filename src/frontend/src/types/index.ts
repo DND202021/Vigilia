@@ -1530,3 +1530,58 @@ export interface AuditLogFilters {
   page?: number;
   page_size?: number;
 }
+
+// === Telemetry Dashboard Types (Phase 23) ===
+
+export interface TelemetryDataPoint {
+  time: string;
+  value: number | string | boolean | null;
+}
+
+export interface TelemetryAggregatePoint {
+  time: string;
+  metric_name: string;
+  avg: number | null;
+  min: number | null;
+  max: number | null;
+  count?: number | null;
+}
+
+export interface TelemetryQueryResponse {
+  device_id: string;
+  aggregation: string;
+  count: number;
+  data: TelemetryDataPoint[] | TelemetryAggregatePoint[];
+}
+
+export interface AvailableMetricsResponse {
+  device_id: string;
+  metrics: string[];
+}
+
+export interface TelemetryChartProps {
+  deviceId: string;
+  metricName: string;
+  color?: string;
+  height?: number;
+}
+
+export interface TelemetryEvent {
+  device_id: string;
+  metric_name: string;
+  time: string;
+  value: number | string | boolean | null;
+}
+
+export type DeviceSyncStatus = 'synced' | 'pending' | 'unknown';
+
+export interface DeviceStatusInfo {
+  status: DeviceStatus;
+  lastSeen: string | null;
+  isSynced: boolean;
+}
+
+export interface TimeRangePreset {
+  label: string;
+  value: () => [Date, Date];
+}
