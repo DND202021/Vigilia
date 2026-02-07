@@ -209,6 +209,9 @@ class TelemetryWorkerService:
             if message_ids:
                 await self.redis.xack(STREAM_NAME, GROUP_NAME, *message_ids)
 
+            # Emit real-time telemetry events via Socket.IO
+            await self._emit_telemetry_events(batch)
+
             logger.info(
                 "Batch flushed",
                 worker_id=worker_id,
@@ -225,3 +228,20 @@ class TelemetryWorkerService:
                 rows=len(rows),
                 error=str(e),
             )
+
+    async def _emit_telemetry_events(self, batch: list[tuple]) -> None:
+        """Emit telemetry data points to Socket.IO clients subscribed to device rooms."""
+        try:
+            from app.services.socketio import emit_telemetry_data
+
+            for _, payload in batch:
+                device_id = payload["device_id"]
+                timestamp = payload["server_timestamp"]
+                metrics = payload.get("metrics", {})
+
+                for metric_name, value in metrics.items():
+                    await emit_telemetry_data(device_id, metric_name, value, timestamp)
+
+        except Exception as e:
+            # Don't fail the batch if Socket.IO emit fails
+            logger.warning("Failed to emit telemetry events", error=str(e))

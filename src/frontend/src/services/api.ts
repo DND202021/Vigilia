@@ -1246,4 +1246,30 @@ export const auditApi = {
   },
 };
 
+// Telemetry API
+export const telemetryApi = {
+  queryTelemetry: async (
+    deviceId: string,
+    params?: {
+      metric_name?: string;
+      start_time?: string;
+      end_time?: string;
+      aggregation?: string;
+    }
+  ) => {
+    const response = await api.get(`/devices/${deviceId}/telemetry`, { params });
+    return response.data;
+  },
+
+  getAvailableMetrics: async (deviceId: string) => {
+    const response = await api.get(`/devices/${deviceId}/telemetry/metrics`);
+    return response.data;
+  },
+
+  getDeviceTwin: async (deviceId: string) => {
+    const response = await api.get(`/devices/${deviceId}/twin`);
+    return response.data;
+  },
+};
+
 export default api;

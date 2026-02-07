@@ -678,3 +678,59 @@ async def emit_device_config_synced(
         "Emitted device:config:synced",
         device_id=device_id,
     )
+
+
+# Telemetry - Room Handlers
+
+@sio.event
+async def join_device_telemetry(sid: str, data: dict) -> dict:
+    """Join a device telemetry room for real-time updates."""
+    device_id = data.get("device_id")
+    if not device_id:
+        return {"error": "device_id required"}
+    room = f"device:{device_id}"
+    await sio.enter_room(sid, room)
+    if sid in connected_clients:
+        connected_clients[sid]["rooms"].add(room)
+    logger.info("Client joined device telemetry room", sid=sid, device_id=device_id)
+    return {"status": "joined", "device_id": device_id}
+
+
+@sio.event
+async def leave_device_telemetry(sid: str, data: dict) -> dict:
+    """Leave a device telemetry room."""
+    device_id = data.get("device_id")
+    if not device_id:
+        return {"error": "device_id required"}
+    room = f"device:{device_id}"
+    await sio.leave_room(sid, room)
+    if sid in connected_clients:
+        connected_clients[sid]["rooms"].discard(room)
+    logger.info("Client left device telemetry room", sid=sid, device_id=device_id)
+    return {"status": "left", "device_id": device_id}
+
+
+# Telemetry - Emit Functions
+
+async def emit_telemetry_data(
+    device_id: str,
+    metric_name: str,
+    value: float | int | str | bool | None,
+    timestamp: str,
+) -> None:
+    """Emit telemetry data point to clients subscribed to device room."""
+    payload = {
+        "device_id": device_id,
+        "metric_name": metric_name,
+        "value": value,
+        "time": timestamp,
+    }
+
+    # Emit to device-specific room (clients viewing this device's telemetry)
+    await sio.emit("telemetry:data", payload, room=f"device:{device_id}")
+
+    logger.debug(
+        "Emitted telemetry:data",
+        device_id=device_id,
+        metric_name=metric_name,
+    )
