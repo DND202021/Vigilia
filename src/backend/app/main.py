@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.deps import async_session_factory, get_db, engine
 from app.services.socketio import sio, create_combined_app
 from app.services.fundamentum_mqtt import init_mqtt_client, shutdown_mqtt_client
+from app.services.mqtt_service import VigiliaMQTTService
 from app.services.device_monitor_service import DeviceMonitorService
 from app.services.sound_alert_pipeline import SoundAlertPipeline
 from app.services.notification_service import NotificationService
@@ -22,6 +23,7 @@ from app.services.health_service import health_service
 logger = structlog.get_logger()
 
 # Module-level references for services that need lifecycle management
+_mqtt_service: VigiliaMQTTService | None = None
 _device_monitor: DeviceMonitorService | None = None
 _sound_pipeline: SoundAlertPipeline | None = None
 _metrics_task: asyncio.Task | None = None
@@ -41,7 +43,7 @@ async def _update_health_metrics() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler for startup/shutdown events."""
-    global _device_monitor, _sound_pipeline, _metrics_task
+    global _mqtt_service, _device_monitor, _sound_pipeline, _metrics_task
 
     # Startup
     logger.info("Starting ERIOP application", environment=settings.environment)
@@ -66,6 +68,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 )
         except Exception as e:
             logger.warning("Failed to initialize MQTT client", error=str(e))
+
+    # Initialize Vigilia MQTT service (async, separate from Fundamentum)
+    if settings.mqtt_enabled:
+        try:
+            _mqtt_service = VigiliaMQTTService(
+                broker_host=settings.mqtt_vigilia_broker_host,
+                broker_port=settings.mqtt_vigilia_broker_port,
+                ca_cert_path=settings.mqtt_vigilia_ca_cert,
+                client_cert_path=settings.mqtt_vigilia_client_cert,
+                client_key_path=settings.mqtt_vigilia_client_key,
+                client_id=settings.mqtt_vigilia_client_id,
+                reconnect_interval=settings.mqtt_vigilia_reconnect_interval,
+                max_reconnect_interval=settings.mqtt_vigilia_max_reconnect_interval,
+            )
+            await _mqtt_service.start()
+            logger.info("Vigilia MQTT service started", broker=settings.mqtt_vigilia_broker_host)
+        except Exception as e:
+            logger.warning("Failed to start Vigilia MQTT service", error=str(e))
 
     # Initialize Device Monitor Service (background polling)
     try:
@@ -103,6 +123,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except asyncio.CancelledError:
             pass
         logger.info("Health metrics background task stopped")
+
+    if _mqtt_service:
+        await _mqtt_service.stop()
+        logger.info("Vigilia MQTT service stopped")
 
     if _device_monitor:
         await _device_monitor.stop()
@@ -185,6 +209,13 @@ async def readiness_check(db: AsyncSession = Depends(get_db)) -> dict:
     """Readiness probe - checks if application can serve traffic."""
     result = await health_service.get_readiness(db, engine)
     return result.to_dict()
+
+
+async def get_mqtt_service() -> VigiliaMQTTService:
+    """Dependency for accessing MQTT service in route handlers."""
+    if not _mqtt_service:
+        raise RuntimeError("MQTT service not initialized")
+    return _mqtt_service
 
 
 # Create combined ASGI app with Socket.IO wrapping FastAPI
