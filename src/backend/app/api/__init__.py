@@ -29,6 +29,7 @@ from app.api import (
     emergency_planning,
     channels,
     messages,
+    mqtt_auth,
 )
 
 router = APIRouter()
@@ -59,3 +60,4 @@ router.include_router(notification_deliveries.router, prefix="/notification-deli
 router.include_router(emergency_planning.router, prefix="/emergency-planning", tags=["Emergency Planning"])
 router.include_router(channels.router, tags=["Communication Hub"])
 router.include_router(messages.router, tags=["Communication Hub"])
+router.include_router(mqtt_auth.router, tags=["MQTT Authentication"])
