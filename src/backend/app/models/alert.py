@@ -48,6 +48,7 @@ class AlertSource(str, Enum):
     SECURITY_SYSTEM = "security_system"
     MANUAL = "manual"
     EXTERNAL_API = "external_api"
+    IOT_TELEMETRY = "iot_telemetry"
 
 
 class Alert(Base, TimestampMixin):

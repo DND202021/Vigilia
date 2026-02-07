@@ -68,6 +68,11 @@ class Settings(BaseSettings):
     telemetry_worker_num_workers: int = 2
     telemetry_worker_stream_maxlen: int = 100000
 
+    # Alert Rule Evaluation
+    alert_evaluation_enabled: bool = True
+    alert_auto_create_incidents: bool = True
+    alert_default_cooldown_seconds: int = 300
+
     # Certificate Authority (for device X.509 certificate generation)
     ca_cert_path: str = "/mosquitto/certs/ca.crt"   # CA certificate (reuse Phase 18 CA)
     ca_key_path: str = "/mosquitto/certs/ca.key"    # CA private key for signing

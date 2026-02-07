@@ -33,6 +33,14 @@ ALERT_TO_INCIDENT_CATEGORY: dict[str, IncidentCategory] = {
     "hazmat": IncidentCategory.HAZMAT,
     "traffic_accident": IncidentCategory.TRAFFIC,
     "weather_emergency": IncidentCategory.WEATHER,
+    # IoT telemetry alert types
+    "iot_temperature_high": IncidentCategory.FIRE,
+    "iot_gunshot": IncidentCategory.POLICE,
+    "iot_intrusion": IncidentCategory.INTRUSION,
+    "iot_tamper": IncidentCategory.INTRUSION,
+    "iot_gas_detected": IncidentCategory.HAZMAT,
+    "iot_sound_anomaly": IncidentCategory.POLICE,
+    "iot_threshold_violation": IncidentCategory.OTHER,
 }
 
 # Mapping from alert severity to incident priority
