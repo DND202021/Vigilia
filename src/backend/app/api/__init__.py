@@ -34,6 +34,7 @@ from app.api import (
     telemetry,
     telemetry_query,
     device_twin,
+    alert_rules,
 )
 
 router = APIRouter()
@@ -69,3 +70,5 @@ router.include_router(mqtt_auth.router, tags=["MQTT Authentication"])
 router.include_router(telemetry.router, prefix="/devices", tags=["Telemetry"])
 router.include_router(telemetry_query.router, prefix="/devices", tags=["Telemetry"])
 router.include_router(device_twin.router, prefix="/devices", tags=["Device Twin"])
+router.include_router(alert_rules.device_alert_rules_router, prefix="/devices", tags=["Alert Rules"])
+router.include_router(alert_rules.alert_rules_router, prefix="/alert-rules", tags=["Alert Rules"])
