@@ -19,7 +19,7 @@ interface ProvisioningFormData {
   model: string;
 }
 
-interface ProvisioningCredentials {
+export interface ProvisioningCredentials {
   deviceId: string | null;
   accessToken: string | null;
   certificatePem: string | null;
@@ -28,7 +28,7 @@ interface ProvisioningCredentials {
   certificateExpiry: string | null;
 }
 
-type ActivationStatus = 'idle' | 'pending' | 'active' | 'timeout';
+export type ActivationStatus = 'idle' | 'pending' | 'active' | 'timeout';
 
 interface ProvisioningStore {
   // Wizard navigation
@@ -40,6 +40,9 @@ interface ProvisioningStore {
 
   // Generated credentials (one-time, cleared after download)
   credentials: ProvisioningCredentials | null;
+
+  // Device ID (persists even after credentials cleared, needed for activation step)
+  provisionedDeviceId: string | null;
 
   // Activation status
   activationStatus: ActivationStatus;
@@ -86,6 +89,7 @@ export const useProvisioningStore = create<ProvisioningStore>((set, get) => ({
   maxStepReached: 0,
   formData: initialFormData,
   credentials: null,
+  provisionedDeviceId: null,
   activationStatus: 'idle',
   isProvisioning: false,
   error: null,
@@ -155,7 +159,7 @@ export const useProvisioningStore = create<ProvisioningStore>((set, get) => ({
         model: formData.model || undefined,
       });
 
-      // Store credentials (one-time)
+      // Store credentials (one-time) and device ID (persists)
       set({
         credentials: {
           deviceId: response.device_id,
@@ -165,6 +169,7 @@ export const useProvisioningStore = create<ProvisioningStore>((set, get) => ({
           certificateCn: response.certificate_cn || null,
           certificateExpiry: response.certificate_expiry || null,
         },
+        provisionedDeviceId: response.device_id,
         activationStatus: 'pending',
         isProvisioning: false,
       });
@@ -179,13 +184,14 @@ export const useProvisioningStore = create<ProvisioningStore>((set, get) => ({
 
   setActivationStatus: (status) => set({ activationStatus: status }),
 
-  clearCredentials: () => set({ credentials: null }),
+  clearCredentials: () => set({ credentials: null }), // Note: provisionedDeviceId is preserved
 
   resetWizard: () => set({
     currentStep: 0,
     maxStepReached: 0,
     formData: initialFormData,
     credentials: null,
+    provisionedDeviceId: null,
     activationStatus: 'idle',
     error: null,
   }),
