@@ -597,3 +597,84 @@ async def emit_member_left(channel_id: str, user_id: str) -> None:
         "timestamp": datetime.utcnow().isoformat(),
     }, room=room)
     logger.debug(f"Emitted member:left to room {room}")
+
+
+# Device Twin - Room Handlers
+
+@sio.event
+async def join_device(sid: str, device_id: str) -> dict:
+    """Join a device room for real-time config updates."""
+    room = f"device:{device_id}"
+    await sio.enter_room(sid, room)
+    if sid in connected_clients:
+        connected_clients[sid]["rooms"].add(room)
+    logger.info("Client joined device room", sid=sid, device_id=device_id)
+    return {"status": "joined", "device_id": device_id}
+
+
+@sio.event
+async def leave_device(sid: str, device_id: str) -> dict:
+    """Leave a device room."""
+    room = f"device:{device_id}"
+    await sio.leave_room(sid, room)
+    if sid in connected_clients:
+        connected_clients[sid]["rooms"].discard(room)
+    logger.info("Client left device room", sid=sid, device_id=device_id)
+    return {"status": "left", "device_id": device_id}
+
+
+# Device Twin - Emit Functions
+
+async def emit_device_config_updated(
+    device_id: str,
+    desired_config: dict | None = None,
+    reported_config: dict | None = None,
+    desired_version: int | None = None,
+    reported_version: int | None = None,
+    is_synced: bool = False,
+) -> None:
+    """Emit device config updated event to authenticated users and device room."""
+    payload = {
+        "device_id": device_id,
+        "is_synced": is_synced,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+    if desired_config is not None:
+        payload["desired_config"] = desired_config
+        payload["desired_version"] = desired_version
+
+    if reported_config is not None:
+        payload["reported_config"] = reported_config
+        payload["reported_version"] = reported_version
+
+    await sio.emit("device:config:updated", payload, room="authenticated")
+    await sio.emit("device:config:updated", payload, room=f"device:{device_id}")
+
+    logger.debug(
+        "Emitted device:config:updated",
+        device_id=device_id,
+        is_synced=is_synced,
+    )
+
+
+async def emit_device_config_synced(
+    device_id: str,
+    config: dict,
+    synced_at: str,
+) -> None:
+    """Emit device config synced event when device transitions to synced state."""
+    payload = {
+        "device_id": device_id,
+        "config": config,
+        "synced_at": synced_at,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+    await sio.emit("device:config:synced", payload, room="authenticated")
+    await sio.emit("device:config:synced", payload, room=f"device:{device_id}")
+
+    logger.info(
+        "Emitted device:config:synced",
+        device_id=device_id,
+    )

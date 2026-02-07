@@ -33,6 +33,7 @@ from app.api import (
     mqtt_auth,
     telemetry,
     telemetry_query,
+    device_twin,
 )
 
 router = APIRouter()
@@ -67,3 +68,4 @@ router.include_router(messages.router, tags=["Communication Hub"])
 router.include_router(mqtt_auth.router, tags=["MQTT Authentication"])
 router.include_router(telemetry.router, prefix="/devices", tags=["Telemetry"])
 router.include_router(telemetry_query.router, prefix="/devices", tags=["Telemetry"])
+router.include_router(device_twin.router, prefix="/devices", tags=["Device Twin"])

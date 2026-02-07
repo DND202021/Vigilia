@@ -14,6 +14,7 @@ import structlog
 
 from app.services.mqtt_handlers.registration_handler import handle_device_registration
 from app.services.mqtt_handlers.telemetry_handler import handle_device_telemetry
+from app.services.mqtt_handlers.config_reported_handler import handle_device_config_reported
 
 logger = structlog.get_logger()
 
@@ -75,6 +76,7 @@ class VigiliaMQTTService:
         """
         self.register_handler("agency/+/device/+/register", handle_device_registration)
         self.register_handler("agency/+/device/+/telemetry", handle_device_telemetry)
+        self.register_handler("agency/+/device/+/config/reported", handle_device_config_reported)
 
     def add_subscription(self, topic: str) -> None:
         if topic not in self._additional_subscriptions:

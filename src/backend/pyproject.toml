@@ -32,6 +32,7 @@ dependencies = [
     "twilio>=9.0.0",
     "pywebpush>=2.2.0",
     "backoff>=2.0.0",
+    "deepdiff>=8.0.0",
 ]
 
 [project.optional-dependencies]
