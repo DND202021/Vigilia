@@ -16,6 +16,7 @@ export { UsersPage } from './UsersPage';
 export { RolesPage } from './RolesPage';
 export { DeviceManagementPage } from './DeviceManagementPage';
 export { DeviceTelemetryPage } from './DeviceTelemetryPage';
+export { DeviceProvisioningPage } from './DeviceProvisioningPage';
 export { BuildingDetailPage } from './BuildingDetailPage';
 export { AuditLogsPage } from './AuditLogsPage';
 export { MessagesPage } from './MessagesPage';
