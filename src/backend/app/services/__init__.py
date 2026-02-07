@@ -34,6 +34,7 @@ from app.services.bim_parser import (
 from app.services.building_analytics_service import BuildingAnalyticsService, BuildingAnalyticsError
 from app.services.channel_service import ChannelService
 from app.services.message_service import MessageService
+from app.services.alert_rule_evaluation_service import AlertRuleEvaluationService
 
 __all__ = [
     "AuthService",
@@ -78,4 +79,5 @@ __all__ = [
     "BuildingAnalyticsError",
     "ChannelService",
     "MessageService",
+    "AlertRuleEvaluationService",
 ]
