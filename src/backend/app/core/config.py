@@ -50,6 +50,17 @@ class Settings(BaseSettings):
     mqtt_password: str = ""
     mqtt_topic_prefix: str = "fundamentum/alerts"
 
+    # MQTT (Vigilia IoT Broker)
+    mqtt_enabled: bool = False                      # Master switch for Vigilia MQTT service
+    mqtt_vigilia_broker_host: str = "mosquitto"     # Docker service name
+    mqtt_vigilia_broker_port: int = 8883            # TLS port
+    mqtt_vigilia_ca_cert: str = "/mosquitto/certs/ca.crt"
+    mqtt_vigilia_client_cert: str = "/mosquitto/certs/internal-client.crt"
+    mqtt_vigilia_client_key: str = "/mosquitto/certs/internal-client.key"
+    mqtt_vigilia_client_id: str = "vigilia-backend"
+    mqtt_vigilia_reconnect_interval: int = 5        # Initial reconnect delay in seconds
+    mqtt_vigilia_max_reconnect_interval: int = 60   # Max reconnect delay in seconds
+
     # CORS - accepts comma-separated string or JSON array
     cors_origins_str: str = "http://localhost:3000,http://localhost:5173"
 
