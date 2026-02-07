@@ -1585,3 +1585,67 @@ export interface TimeRangePreset {
   label: string;
   value: () => [Date, Date];
 }
+
+// ============================================================================
+// Device Provisioning Types (Phase 24)
+// ============================================================================
+
+export interface DeviceProvisionRequest {
+  name: string;
+  device_type: 'microphone' | 'camera' | 'sensor' | 'gateway';
+  building_id: string;
+  profile_id?: string;
+  credential_type: 'access_token' | 'x509';
+  serial_number?: string;
+  manufacturer?: string;
+  model?: string;
+}
+
+export interface DeviceProvisionResponse {
+  device_id: string;
+  name: string;
+  device_type: string;
+  building_id: string;
+  provisioning_status: string;
+  credential_type: string;
+  access_token?: string;
+  certificate_pem?: string;
+  private_key_pem?: string;
+  certificate_cn?: string;
+  certificate_expiry?: string;
+}
+
+export interface DeviceStatusResponse {
+  id: string;
+  name: string;
+  device_type: string;
+  provisioning_status: string;
+  status: string;
+  last_seen: string | null;
+}
+
+export interface BulkProvisionResultItem {
+  row: number;
+  status: 'success' | 'error';
+  device_id?: string;
+  name?: string;
+  credential_type?: string;
+  error?: string;
+}
+
+export interface BulkProvisionResponse {
+  total_rows: number;
+  successful: number;
+  failed: number;
+  results: BulkProvisionResultItem[];
+}
+
+export interface DeviceProfile {
+  id: string;
+  name: string;
+  device_type: string;
+  description?: string;
+  telemetry_keys?: string[];
+  attributes?: Record<string, unknown>;
+  alert_rules?: Record<string, unknown>;
+}

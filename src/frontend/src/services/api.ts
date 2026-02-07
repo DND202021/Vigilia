@@ -59,6 +59,11 @@ import type {
   EvacuationRoute,
   EmergencyCheckpoint,
   EmergencyPlanOverview,
+  DeviceProvisionRequest,
+  DeviceProvisionResponse,
+  DeviceStatusResponse,
+  BulkProvisionResponse,
+  DeviceProfile,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
@@ -1270,6 +1275,33 @@ export const telemetryApi = {
     const response = await api.get(`/devices/${deviceId}/twin`);
     return response.data;
   },
+};
+
+// Device Provisioning API
+export const provisioningApi = {
+  provision: (data: DeviceProvisionRequest) =>
+    api.post<DeviceProvisionResponse>('/devices/provision', data).then(r => r.data),
+  getStatus: (deviceId: string) =>
+    api.get<DeviceStatusResponse>(`/devices/provision/${deviceId}`).then(r => r.data),
+  revoke: (deviceId: string) =>
+    api.post(`/devices/provision/${deviceId}/revoke`).then(r => r.data),
+  reactivate: (deviceId: string) =>
+    api.post(`/devices/provision/${deviceId}/reactivate`).then(r => r.data),
+  bulkProvision: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post<BulkProvisionResponse>('/devices/provision/bulk', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data);
+  },
+  downloadTemplate: () =>
+    api.get('/devices/provision/bulk/template', { responseType: 'blob' }).then(r => r.data),
+};
+
+// Device Profiles API
+export const deviceProfilesApi = {
+  list: (params?: { page?: number; page_size?: number }) =>
+    api.get<PaginatedResponse<DeviceProfile>>('/device-profiles', { params }).then(r => r.data),
 };
 
 export default api;
