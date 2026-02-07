@@ -5,15 +5,21 @@ accumulates into batches, expands metrics into narrow-schema rows, and batch-ins
 into the device_telemetry hypertable.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 import structlog
 import redis.asyncio as aioredis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
+
+if TYPE_CHECKING:
+    from app.services.alert_rule_evaluation_service import AlertRuleEvaluationService
 
 logger = structlog.get_logger()
 
@@ -31,12 +37,14 @@ class TelemetryWorkerService:
         batch_size: int = 1000,
         batch_timeout: float = 5.0,
         num_workers: int = 2,
+        alert_evaluator: AlertRuleEvaluationService | None = None,
     ):
         self.redis = redis_client
         self.session_factory = session_factory
         self.batch_size = batch_size
         self.batch_timeout = batch_timeout
         self.num_workers = num_workers
+        self.alert_evaluator = alert_evaluator
         self._running = False
         self._worker_tasks: list[asyncio.Task] = []
 
@@ -165,6 +173,15 @@ class TelemetryWorkerService:
                     "value_string": value_string,
                     "value_bool": value_bool,
                 })
+
+        # Evaluate alert rules (non-blocking, must not fail the batch insert)
+        if self.alert_evaluator:
+            try:
+                items = [payload for _, payload in batch]
+                await self.alert_evaluator.evaluate_batch(items)
+            except Exception as e:
+                logger.error("Alert evaluation failed", error=str(e))
+                # Don't fail the batch insert due to alert eval failure
 
         if not rows:
             # Acknowledge messages with no metrics

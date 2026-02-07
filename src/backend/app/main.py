@@ -20,6 +20,7 @@ from app.services.sound_alert_pipeline import SoundAlertPipeline
 from app.services.notification_service import NotificationService
 from app.services.health_service import health_service
 from app.services.telemetry_worker_service import TelemetryWorkerService
+from app.services.alert_rule_evaluation_service import AlertRuleEvaluationService
 from app.core.deps import get_redis
 
 logger = structlog.get_logger()
@@ -30,6 +31,7 @@ _device_monitor: DeviceMonitorService | None = None
 _sound_pipeline: SoundAlertPipeline | None = None
 _metrics_task: asyncio.Task | None = None
 _telemetry_worker: TelemetryWorkerService | None = None
+_alert_evaluator: AlertRuleEvaluationService | None = None
 
 
 async def _update_health_metrics() -> None:
@@ -46,7 +48,7 @@ async def _update_health_metrics() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler for startup/shutdown events."""
-    global _mqtt_service, _device_monitor, _sound_pipeline, _metrics_task, _telemetry_worker
+    global _mqtt_service, _device_monitor, _sound_pipeline, _metrics_task, _telemetry_worker, _alert_evaluator
 
     # Startup
     logger.info("Starting ERIOP application", environment=settings.environment)
@@ -94,18 +96,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if settings.telemetry_worker_enabled:
         try:
             redis_client = await get_redis()
+
+            # Create alert evaluator if enabled
+            if settings.alert_evaluation_enabled:
+                _alert_evaluator = AlertRuleEvaluationService(
+                    redis_client=redis_client,
+                    session_factory=async_session_factory,
+                )
+                logger.info("Alert rule evaluation service initialized")
+
             _telemetry_worker = TelemetryWorkerService(
                 redis_client=redis_client,
                 session_factory=async_session_factory,
                 batch_size=settings.telemetry_worker_batch_size,
                 batch_timeout=settings.telemetry_worker_batch_timeout,
                 num_workers=settings.telemetry_worker_num_workers,
+                alert_evaluator=_alert_evaluator,
             )
             await _telemetry_worker.start()
             logger.info(
                 "Telemetry worker service started",
                 num_workers=settings.telemetry_worker_num_workers,
                 batch_size=settings.telemetry_worker_batch_size,
+                alert_evaluation=settings.alert_evaluation_enabled,
             )
         except Exception as e:
             logger.warning("Failed to start telemetry worker service", error=str(e))
