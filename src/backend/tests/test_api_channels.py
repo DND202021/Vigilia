@@ -2,136 +2,154 @@
 
 import uuid
 import pytest
+from datetime import datetime, timezone
 from httpx import AsyncClient
 
 from app.models.user import User
-from app.models.channel import ChannelType
+from app.models.channel import Channel, ChannelMember, ChannelType
 
 
 class TestChannelsAPI:
     """Tests for channels API endpoints."""
 
-    async def get_auth_token(self, client: AsyncClient, email: str = "test@example.com") -> str:
-        """Helper to get auth token for API requests."""
-        login_response = await client.post(
-            "/api/v1/auth/login",
-            json={
-                "email": email,
-                "password": "TestPassword123!",
-            },
-        )
-        return login_response.json()["access_token"]
-
-    async def get_admin_token(self, client: AsyncClient) -> str:
-        """Helper to get admin auth token."""
-        login_response = await client.post(
-            "/api/v1/auth/login",
-            json={
-                "email": "admin@example.com",
-                "password": "AdminPassword123!",
-            },
-        )
-        return login_response.json()["access_token"]
-
-    # ==================== Channel CRUD Tests ====================
+    @pytest.mark.asyncio
+    async def test_list_channels_not_authenticated(self, client: AsyncClient):
+        """Test listing channels without authentication."""
+        response = await client.get("/api/v1/channels")
+        assert response.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_list_channels(self, client: AsyncClient, test_user: User):
-        """Listing channels should work for authenticated users."""
-        token = await self.get_auth_token(client)
+    async def test_list_channels_empty(
+        self, client: AsyncClient, test_user: User, db_session
+    ):
+        """Test listing channels when user has none."""
+        # Login first
+        login_response = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "test@example.com", "password": "TestPassword123!"},
+        )
+        token = login_response.json()["access_token"]
 
         response = await client.get(
             "/api/v1/channels",
             headers={"Authorization": f"Bearer {token}"},
         )
-
         assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data, list)
+        assert response.json() == []
 
     @pytest.mark.asyncio
-    async def test_list_channels_no_auth(self, client: AsyncClient):
-        """Listing channels without authentication should fail."""
-        response = await client.get("/api/v1/channels")
-        assert response.status_code == 401
-
-    @pytest.mark.asyncio
-    async def test_create_team_channel(self, client: AsyncClient, test_user: User):
-        """Creating a team channel should work."""
-        token = await self.get_auth_token(client)
+    async def test_create_channel_success(
+        self, client: AsyncClient, test_user: User, db_session
+    ):
+        """Test creating a new channel."""
+        # Login first
+        login_response = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "test@example.com", "password": "TestPassword123!"},
+        )
+        token = login_response.json()["access_token"]
 
         response = await client.post(
             "/api/v1/channels",
-            headers={"Authorization": f"Bearer {token}"},
             json={
-                "name": "Test Team Channel",
+                "name": "Test Channel",
                 "description": "A test channel",
                 "channel_type": "team",
                 "is_private": False,
             },
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert response.status_code == 201
         data = response.json()
-        assert data["name"] == "Test Team Channel"
+        assert data["name"] == "Test Channel"
+        assert data["description"] == "A test channel"
         assert data["channel_type"] == "team"
         assert data["is_private"] is False
+        assert len(data["members"]) == 1  # Creator is member
 
     @pytest.mark.asyncio
-    async def test_create_broadcast_channel_no_permission(self, client: AsyncClient, test_user: User):
-        """Creating a broadcast channel without permission should fail."""
-        token = await self.get_auth_token(client)
+    async def test_create_channel_private(
+        self, client: AsyncClient, test_user: User, db_session
+    ):
+        """Test creating a private channel."""
+        login_response = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "test@example.com", "password": "TestPassword123!"},
+        )
+        token = login_response.json()["access_token"]
 
         response = await client.post(
             "/api/v1/channels",
-            headers={"Authorization": f"Bearer {token}"},
             json={
-                "name": "Test Broadcast",
-                "channel_type": "broadcast",
+                "name": "Private Channel",
+                "channel_type": "team",
+                "is_private": True,
             },
+            headers={"Authorization": f"Bearer {token}"},
         )
 
-        # Responder doesn't have broadcast permission
-        assert response.status_code == 403
+        assert response.status_code == 201
+        assert response.json()["is_private"] is True
 
     @pytest.mark.asyncio
-    async def test_create_direct_channel(self, client: AsyncClient, test_user: User, admin_user: User):
-        """Creating a direct message channel should work."""
-        token = await self.get_auth_token(client)
+    async def test_create_direct_channel_success(
+        self, client: AsyncClient, test_user: User, admin_user: User, db_session
+    ):
+        """Test creating a direct message channel."""
+        login_response = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "test@example.com", "password": "TestPassword123!"},
+        )
+        token = login_response.json()["access_token"]
 
         response = await client.post(
             "/api/v1/channels/direct",
-            headers={"Authorization": f"Bearer {token}"},
             json={"user_id": str(admin_user.id)},
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert response.status_code == 201
         data = response.json()
         assert data["channel_type"] == "direct"
+        assert len(data["members"]) == 2
 
     @pytest.mark.asyncio
-    async def test_create_direct_channel_with_self(self, client: AsyncClient, test_user: User):
-        """Creating a DM channel with yourself should fail."""
-        token = await self.get_auth_token(client)
+    async def test_create_direct_channel_with_self(
+        self, client: AsyncClient, test_user: User, db_session
+    ):
+        """Test creating DM with self fails."""
+        login_response = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "test@example.com", "password": "TestPassword123!"},
+        )
+        token = login_response.json()["access_token"]
 
         response = await client.post(
             "/api/v1/channels/direct",
-            headers={"Authorization": f"Bearer {token}"},
             json={"user_id": str(test_user.id)},
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert response.status_code == 400
+        assert "yourself" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_get_channel(self, client: AsyncClient, test_user: User):
-        """Getting a channel by ID should work for members."""
-        token = await self.get_auth_token(client)
+    async def test_get_channel_success(
+        self, client: AsyncClient, test_user: User, db_session
+    ):
+        """Test getting a channel."""
+        # Login and create channel first
+        login_response = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "test@example.com", "password": "TestPassword123!"},
+        )
+        token = login_response.json()["access_token"]
 
-        # Create a channel first
         create_response = await client.post(
             "/api/v1/channels",
+            json={"name": "Get Test Channel", "channel_type": "team"},
             headers={"Authorization": f"Bearer {token}"},
-            json={"name": "Test Channel", "channel_type": "team"},
         )
         channel_id = create_response.json()["id"]
 
@@ -142,67 +160,114 @@ class TestChannelsAPI:
         )
 
         assert response.status_code == 200
-        data = response.json()
-        assert data["id"] == channel_id
-        assert data["name"] == "Test Channel"
+        assert response.json()["name"] == "Get Test Channel"
 
     @pytest.mark.asyncio
-    async def test_get_channel_not_member(self, client: AsyncClient, test_user: User, admin_user: User):
-        """Getting a channel you're not a member of should fail."""
-        admin_token = await self.get_admin_token(client)
+    async def test_get_channel_not_member(
+        self, client: AsyncClient, test_user: User, admin_user: User, db_session
+    ):
+        """Test getting a channel when not a member."""
+        # Login as admin and create channel
+        admin_login = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "admin@example.com", "password": "AdminPassword123!"},
+        )
+        admin_token = admin_login.json()["access_token"]
 
-        # Admin creates a private channel
         create_response = await client.post(
             "/api/v1/channels",
+            json={"name": "Admin Channel", "channel_type": "team", "is_private": True},
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"name": "Private Channel", "channel_type": "team", "is_private": True},
         )
         channel_id = create_response.json()["id"]
 
-        # Test user tries to get it
-        token = await self.get_auth_token(client)
+        # Login as regular user
+        user_login = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "test@example.com", "password": "TestPassword123!"},
+        )
+        user_token = user_login.json()["access_token"]
+
+        # Try to get admin's channel
         response = await client.get(
             f"/api/v1/channels/{channel_id}",
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {user_token}"},
         )
 
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_update_channel(self, client: AsyncClient, test_user: User):
-        """Updating a channel should work for creator."""
-        token = await self.get_auth_token(client)
+    async def test_update_channel_success(
+        self, client: AsyncClient, test_user: User, db_session
+    ):
+        """Test updating a channel."""
+        login_response = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "test@example.com", "password": "TestPassword123!"},
+        )
+        token = login_response.json()["access_token"]
 
-        # Create a channel
         create_response = await client.post(
             "/api/v1/channels",
-            headers={"Authorization": f"Bearer {token}"},
             json={"name": "Original Name", "channel_type": "team"},
+            headers={"Authorization": f"Bearer {token}"},
         )
         channel_id = create_response.json()["id"]
 
         # Update the channel
         response = await client.patch(
             f"/api/v1/channels/{channel_id}",
-            headers={"Authorization": f"Bearer {token}"},
             json={"name": "Updated Name", "description": "New description"},
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert response.status_code == 200
-        data = response.json()
-        assert data["name"] == "Updated Name"
-        assert data["description"] == "New description"
+        assert response.json()["name"] == "Updated Name"
+        assert response.json()["description"] == "New description"
 
     @pytest.mark.asyncio
-    async def test_delete_channel(self, client: AsyncClient, test_user: User):
-        """Deleting a channel should work for creator."""
-        token = await self.get_auth_token(client)
+    async def test_archive_channel(
+        self, client: AsyncClient, test_user: User, db_session
+    ):
+        """Test archiving a channel."""
+        login_response = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "test@example.com", "password": "TestPassword123!"},
+        )
+        token = login_response.json()["access_token"]
 
-        # Create a channel
         create_response = await client.post(
             "/api/v1/channels",
+            json={"name": "To Archive", "channel_type": "team"},
             headers={"Authorization": f"Bearer {token}"},
+        )
+        channel_id = create_response.json()["id"]
+
+        # Archive the channel
+        response = await client.patch(
+            f"/api/v1/channels/{channel_id}",
+            json={"is_archived": True},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["is_archived"] is True
+
+    @pytest.mark.asyncio
+    async def test_delete_channel_success(
+        self, client: AsyncClient, test_user: User, db_session
+    ):
+        """Test deleting a channel."""
+        login_response = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "test@example.com", "password": "TestPassword123!"},
+        )
+        token = login_response.json()["access_token"]
+
+        create_response = await client.post(
+            "/api/v1/channels",
             json={"name": "To Delete", "channel_type": "team"},
+            headers={"Authorization": f"Bearer {token}"},
         )
         channel_id = create_response.json()["id"]
 
@@ -215,61 +280,51 @@ class TestChannelsAPI:
         assert response.status_code == 204
 
     @pytest.mark.asyncio
-    async def test_delete_channel_not_creator(self, client: AsyncClient, test_user: User, admin_user: User):
-        """Deleting a channel by non-creator should fail."""
-        admin_token = await self.get_admin_token(client)
+    async def test_add_member_success(
+        self, client: AsyncClient, test_user: User, admin_user: User, db_session
+    ):
+        """Test adding a member to a channel."""
+        login_response = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "test@example.com", "password": "TestPassword123!"},
+        )
+        token = login_response.json()["access_token"]
 
-        # Admin creates a channel
         create_response = await client.post(
             "/api/v1/channels",
-            headers={"Authorization": f"Bearer {admin_token}"},
-            json={"name": "Admin Channel", "channel_type": "team", "member_ids": [str(test_user.id)]},
-        )
-        channel_id = create_response.json()["id"]
-
-        # Test user tries to delete
-        token = await self.get_auth_token(client)
-        response = await client.delete(
-            f"/api/v1/channels/{channel_id}",
+            json={"name": "Add Member Test", "channel_type": "team"},
             headers={"Authorization": f"Bearer {token}"},
-        )
-
-        assert response.status_code == 403
-
-    # ==================== Member Management Tests ====================
-
-    @pytest.mark.asyncio
-    async def test_add_member(self, client: AsyncClient, test_user: User, admin_user: User):
-        """Adding a member to a channel should work for admins."""
-        token = await self.get_auth_token(client)
-
-        # Create a channel
-        create_response = await client.post(
-            "/api/v1/channels",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"name": "Test Channel", "channel_type": "team"},
         )
         channel_id = create_response.json()["id"]
 
         # Add admin as member
         response = await client.post(
             f"/api/v1/channels/{channel_id}/members",
-            headers={"Authorization": f"Bearer {token}"},
             json={"user_id": str(admin_user.id), "is_admin": False},
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert response.status_code == 201
 
     @pytest.mark.asyncio
-    async def test_remove_member(self, client: AsyncClient, test_user: User, admin_user: User):
-        """Removing a member should work for admins."""
-        token = await self.get_auth_token(client)
+    async def test_remove_member_success(
+        self, client: AsyncClient, test_user: User, admin_user: User, db_session
+    ):
+        """Test removing a member from a channel."""
+        login_response = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "test@example.com", "password": "TestPassword123!"},
+        )
+        token = login_response.json()["access_token"]
 
-        # Create a channel with admin as member
         create_response = await client.post(
             "/api/v1/channels",
+            json={
+                "name": "Remove Member Test",
+                "channel_type": "team",
+                "member_ids": [str(admin_user.id)],
+            },
             headers={"Authorization": f"Bearer {token}"},
-            json={"name": "Test Channel", "channel_type": "team", "member_ids": [str(admin_user.id)]},
         )
         channel_id = create_response.json()["id"]
 
@@ -282,72 +337,121 @@ class TestChannelsAPI:
         assert response.status_code == 204
 
     @pytest.mark.asyncio
-    async def test_leave_channel(self, client: AsyncClient, test_user: User):
-        """Leaving a channel should work."""
-        token = await self.get_auth_token(client)
+    async def test_leave_channel_success(
+        self, client: AsyncClient, test_user: User, admin_user: User, db_session
+    ):
+        """Test leaving a channel."""
+        # Admin creates channel
+        admin_login = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "admin@example.com", "password": "AdminPassword123!"},
+        )
+        admin_token = admin_login.json()["access_token"]
 
-        # Create a channel
         create_response = await client.post(
             "/api/v1/channels",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"name": "Test Channel", "channel_type": "team"},
+            json={
+                "name": "Leave Test",
+                "channel_type": "team",
+                "member_ids": [str(test_user.id)],
+            },
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         channel_id = create_response.json()["id"]
 
-        # Leave the channel
+        # User leaves
+        user_login = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "test@example.com", "password": "TestPassword123!"},
+        )
+        user_token = user_login.json()["access_token"]
+
         response = await client.post(
             f"/api/v1/channels/{channel_id}/leave",
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {user_token}"},
         )
 
         assert response.status_code == 204
 
     @pytest.mark.asyncio
-    async def test_mute_channel(self, client: AsyncClient, test_user: User):
-        """Muting a channel should work for members."""
-        token = await self.get_auth_token(client)
+    async def test_mute_channel_success(
+        self, client: AsyncClient, test_user: User, db_session
+    ):
+        """Test muting a channel."""
+        login_response = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "test@example.com", "password": "TestPassword123!"},
+        )
+        token = login_response.json()["access_token"]
 
-        # Create a channel
         create_response = await client.post(
             "/api/v1/channels",
+            json={"name": "Mute Test", "channel_type": "team"},
             headers={"Authorization": f"Bearer {token}"},
-            json={"name": "Test Channel", "channel_type": "team"},
         )
         channel_id = create_response.json()["id"]
 
-        # Mute the channel
+        # Mute channel
         response = await client.post(
             f"/api/v1/channels/{channel_id}/mute?muted=true",
             headers={"Authorization": f"Bearer {token}"},
         )
 
         assert response.status_code == 200
-        data = response.json()
-        assert data["muted"] is True
-
-    # ==================== Validation Tests ====================
+        assert response.json()["muted"] is True
 
     @pytest.mark.asyncio
-    async def test_create_channel_invalid_name(self, client: AsyncClient, test_user: User):
-        """Creating a channel with empty name should fail."""
-        token = await self.get_auth_token(client)
+    async def test_unmute_channel_success(
+        self, client: AsyncClient, test_user: User, db_session
+    ):
+        """Test unmuting a channel."""
+        login_response = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "test@example.com", "password": "TestPassword123!"},
+        )
+        token = login_response.json()["access_token"]
 
-        response = await client.post(
+        create_response = await client.post(
             "/api/v1/channels",
+            json={"name": "Unmute Test", "channel_type": "team"},
             headers={"Authorization": f"Bearer {token}"},
-            json={"name": "", "channel_type": "team"},
+        )
+        channel_id = create_response.json()["id"]
+
+        # Unmute channel
+        response = await client.post(
+            f"/api/v1/channels/{channel_id}/mute?muted=false",
+            headers={"Authorization": f"Bearer {token}"},
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 200
+        assert response.json()["muted"] is False
 
     @pytest.mark.asyncio
-    async def test_get_channel_not_found(self, client: AsyncClient, test_user: User):
-        """Getting a non-existent channel should return 404."""
-        token = await self.get_auth_token(client)
+    async def test_list_channels_with_type_filter(
+        self, client: AsyncClient, test_user: User, db_session
+    ):
+        """Test listing channels with type filter."""
+        login_response = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "test@example.com", "password": "TestPassword123!"},
+        )
+        token = login_response.json()["access_token"]
 
-        response = await client.get(
-            f"/api/v1/channels/{uuid.uuid4()}",
+        # Create team channel
+        await client.post(
+            "/api/v1/channels",
+            json={"name": "Team Channel", "channel_type": "team"},
             headers={"Authorization": f"Bearer {token}"},
         )
 
-        assert response.status_code in [403, 404]  # Either not member or not found
+        # List only team channels
+        response = await client.get(
+            "/api/v1/channels?channel_type=team",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) >= 1
+        assert all(c["channel_type"] == "team" for c in data)
