@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mosquitto
+  namespace: eriop
+  labels:
+    app: mosquitto
+    component: mqtt-broker
+    app.kubernetes.io/name: mosquitto
+    app.kubernetes.io/part-of: eriop-platform
+spec:
+  serviceName: mosquitto
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mosquitto
+  template:
+    metadata:
+      labels:
+        app: mosquitto
+        component: mqtt-broker
+    spec:
+      containers:
+        - name: mosquitto
+          image: vigilia-mosquitto:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8883
+              name: mqtt-tls
+              protocol: TCP
+            - containerPort: 1883
+              name: mqtt-internal
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /mosquitto/config
+            - name: certs
+              mountPath: /mosquitto/certs
+              readOnly: true
+            - name: data
+              mountPath: /mosquitto/data
+            - name: log
+              mountPath: /mosquitto/log
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          livenessProbe:
+            exec:
+              command: ["mosquitto_sub", "-t", "$SYS/#", "-C", "1", "-W", "5", "-p", "1883"]
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["mosquitto_sub", "-t", "$SYS/#", "-C", "1", "-W", "5", "-p", "1883"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 3
+      volumes:
+        - name: config
+          configMap:
+            name: mosquitto-config
+        - name: certs
+          secret:
+            secretName: mosquitto-certs
+        - name: log
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
